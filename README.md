@@ -12,6 +12,7 @@
 * **Real-Time Debug Logs:** Integrated console that pipes `stdout` and `stderr` directly from `yt-dlp`, allowing you to monitor progress and identify network errors (like HTTP 403) immediately.
 * **Anti-Freeze Architecture:** Powered by `threading` and `queue` modules to keep the UI responsive during heavy tasks.
 * **Linux-Optimized:** Designed to prevent common memory issues like `Segmentation Faults` by avoiding unstable external image libraries.
+* **Dual Display Mode:** Toggle between a clean "Normal Mode" for everyday use and an expanded "Debug Mode" to monitor real-time backend communication and logs.
 
 ## 📋 Prerequisites
 
