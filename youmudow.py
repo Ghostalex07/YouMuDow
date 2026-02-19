@@ -6,21 +6,22 @@ import queue
 import os
 import webbrowser
 
-class SpartanDualMode:
+class YouMuDow:
     def __init__(self, root):
         self.root = root
-        self.root.title("Spartan Downloader v4.0")
-        self.root.geometry("900x500") # Altura inicial compacta
+        self.root.title("YouMuDow v1.0 - Stable Edition")
+        self.root.geometry("900x550")
         
         self.cola_descargas = queue.Queue()
         self.esta_descargando = False
         self.resultados = []
-        self.debug_visible = False # Estado inicial
+        self.debug_visible = False
+        self.default_path = "" # Memoria de carpeta por sesión
 
         self.setup_ui()
 
     def setup_ui(self):
-        # --- PANEL SUPERIOR: BÚSQUEDA ---
+        # --- BUSCADOR ---
         f_bus = ttk.Frame(self.root, padding=10)
         f_bus.pack(fill="x")
         
@@ -31,43 +32,38 @@ class SpartanDualMode:
         self.btn_bus = ttk.Button(f_bus, text="SEARCH", command=self.buscar)
         self.btn_bus.pack(side="left")
 
-        # --- PANEL CENTRAL: TABLA ---
-        self.tree = ttk.Treeview(self.root, columns=("T", "C", "U"), show="headings", height=8)
+        # --- TABLA ---
+        self.tree = ttk.Treeview(self.root, columns=("T", "C", "S"), show="headings", height=10)
         self.tree.heading("T", text="TITLE")
         self.tree.heading("C", text="CHANNEL")
-        self.tree.heading("U", text="URL")
+        self.tree.heading("S", text="STATUS") # Columna de estado añadida
+        self.tree.column("S", width=120, anchor="center")
         self.tree.pack(fill="both", expand=True, padx=10, pady=5)
 
-        # --- PANEL DE CONTROL ---
+        # --- CONTROLES ---
         f_ctrl = ttk.Frame(self.root, padding=10)
         f_ctrl.pack(fill="x")
         
         self.fmt = tk.StringVar(value="mp3")
-        ttk.Radiobutton(f_ctrl, text="MP3", variable=self.fmt, value="mp3").pack(side="left", padx=5)
-        ttk.Radiobutton(f_ctrl, text="MP4", variable=self.fmt, value="mp4").pack(side="left", padx=5)
+        ttk.Radiobutton(f_ctrl, text="MP3", variable=self.fmt, value="mp3").pack(side="left")
+        ttk.Radiobutton(f_ctrl, text="MP4", variable=self.fmt, value="mp4").pack(side="left", padx=10)
         
         ttk.Button(f_ctrl, text="📥 ADD TO QUEUE", command=self.encolar).pack(side="left", padx=10)
-        
-        # INTERRUPTOR DEBUG
-        self.btn_debug = ttk.Button(f_ctrl, text="🛠️ SHOW DEBUG", command=self.toggle_debug)
-        self.btn_debug.pack(side="right")
+        ttk.Button(f_ctrl, text="🛠️ DEBUG LOGS", command=self.toggle_debug).pack(side="right")
 
-        # --- CONSOLA DE LOGS (OCULTA POR DEFECTO) ---
-        self.f_debug = ttk.LabelFrame(self.root, text=" LIVE TERMINAL LOGS ")
+        # --- LOGS ---
+        self.f_debug = ttk.LabelFrame(self.root, text=" REAL-TIME TERMINAL LOGS ")
         self.log = tk.Text(self.f_debug, height=12, bg="#000", fg="#0F0", font=("Monospace", 9))
         self.log.pack(fill="both", expand=True, padx=5, pady=5)
         
     def toggle_debug(self):
-        """Alterna la visibilidad de la consola de logs."""
         if not self.debug_visible:
             self.f_debug.pack(fill="both", expand=True, padx=10, pady=5)
-            self.root.geometry("900x800") # Agrandar ventana
-            self.btn_debug.config(text="🛠️ HIDE DEBUG")
+            self.root.geometry("900x850")
             self.debug_visible = True
         else:
             self.f_debug.pack_forget()
-            self.root.geometry("900x500") # Volver a tamaño normal
-            self.btn_debug.config(text="🛠️ SHOW DEBUG")
+            self.root.geometry("900x550")
             self.debug_visible = False
 
     def write_log(self, txt):
@@ -78,11 +74,12 @@ class SpartanDualMode:
         query = self.ent_bus.get().strip()
         if not query: return
         self.btn_bus.config(state="disabled")
-        self.write_log(f"[INFO] Searching for: {query}")
+        self.write_log(f"[INFO] Looking for: {query}")
         threading.Thread(target=self._search_process, args=(query,), daemon=True).start()
 
     def _search_process(self, q):
         target = q if q.startswith("http") else f"ytsearch10:{q}"
+        # Buscamos título, canal y URL (la URL la guardamos internamente)
         cmd = ["yt-dlp", "--print", "%(title)s || %(uploader)s || %(webpage_url)s", "--flat-playlist", target]
         
         try:
@@ -99,11 +96,8 @@ class SpartanDualMode:
                         p = line.split(" || ")
                         res = {"title": p[0], "uploader": p[1], "url": p[2]}
                         self.resultados.append(res)
-                        self.root.after(0, lambda r=res: self.tree.insert("", "end", values=(r['title'], r['uploader'], r['url'])))
-            
-            err = process.stderr.read()
-            if err: self.root.after(0, lambda: self.write_log(f"[ERROR] {err}"))
-
+                        # Agregamos a la tabla con estado "Ready"
+                        self.root.after(0, lambda r=res: self.tree.insert("", "end", values=(r['title'], r['uploader'], "Ready")))
         except Exception as e:
             self.root.after(0, lambda: self.write_log(f"[EXCEPTION] {e}"))
         finally:
@@ -112,14 +106,21 @@ class SpartanDualMode:
     def encolar(self):
         sel = self.tree.selection()
         if not sel: return
-        path = filedialog.askdirectory()
-        if not path: return
+        
+        # Pedir carpeta solo la primera vez o si se quiere cambiar
+        if not self.default_path or not os.path.exists(self.default_path):
+            self.default_path = filedialog.askdirectory(title="Select Session Download Folder")
+            if not self.default_path: return
 
-        idx = self.tree.index(sel[0])
-        video = self.resultados[idx]
-        tarea = {**video, 'path': path, 'fmt': self.fmt.get()}
-        self.cola_descargas.put(tarea)
-        self.write_log(f"[QUEUE] Added: {tarea['title']}")
+        for item in sel:
+            idx = self.tree.index(item)
+            video = self.resultados[idx]
+            # Marcamos en la tabla como "Queued"
+            self.tree.item(item, values=(video['title'], video['uploader'], "Queued"))
+            
+            tarea = {**video, 'path': self.default_path, 'fmt': self.fmt.get(), 'tree_id': item}
+            self.cola_descargas.put(tarea)
+            self.write_log(f"[QUEUE] Queued: {tarea['title']}")
         
         if not self.esta_descargando:
             self.esta_descargando = True
@@ -128,23 +129,30 @@ class SpartanDualMode:
     def _worker(self):
         while not self.cola_descargas.empty():
             t = self.cola_descargas.get()
-            cmd = ["yt-dlp", "--newline", "-o", f"{t['path']}/%(title)s.%(ext)s"]
+            # Actualizar estado a "Downloading"
+            self.root.after(0, lambda: self.tree.item(t['tree_id'], values=(t['title'], t['uploader'], "Downloading...")))
+            
+            cmd = ["yt-dlp", "--newline", "--no-warnings", "-o", f"{t['path']}/%(title)s.%(ext)s"]
             if t['fmt'] == "mp3":
-                cmd += ["-x", "--audio-format", "mp3"]
+                cmd += ["-x", "--audio-format", "mp3", "--audio-quality", "0"]
             cmd.append(t['url'])
 
             try:
                 proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
                 for line in proc.stdout:
-                    # Solo escribimos al log, si el usuario quiere verlo, activa el Modo Debug
                     self.root.after(0, lambda l=line: self.write_log(f"[DL] {l.strip()}"))
                 proc.wait()
+                
+                status = "Done" if proc.returncode == 0 else "Error"
+                self.root.after(0, lambda s=status: self.tree.item(t['tree_id'], values=(t['title'], t['uploader'], s)))
             except Exception as e:
                 self.root.after(0, lambda: self.write_log(f"[DL ERROR] {e}"))
+                self.root.after(0, lambda: self.tree.item(t['tree_id'], values=(t['title'], t['uploader'], "Error")))
+            
             self.cola_descargas.task_done()
         self.esta_descargando = False
 
 if __name__ == "__main__":
     root = tk.Tk()
-    app = SpartanDualMode(root)
+    app = YouMuDow(root)
     root.mainloop()
