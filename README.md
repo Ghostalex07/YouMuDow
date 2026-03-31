@@ -1,26 +1,163 @@
 # YouMuDow
 
-A modern YouTube Music Downloader desktop application.
+A modern YouTube music downloader with real-time progress, embedded metadata, and a clean desktop interface.
+
+![Python](https://img.shields.io/badge/python-3.10+-blue.svg)
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
 ## Features
 
-- Download YouTube music and videos
-- Extract audio with metadata
-- Customizable output formats
-- Modern and intuitive interface
+- **Multi-format downloads**: MP3, MP4, WAV, M4A
+- **Embedded metadata**: Title, artist, thumbnails automatically added to files
+- **Real-time terminal**: View download progress and logs as they happen
+- **Queue system**: Download multiple videos sequentially
+- **Clean GUI**: Simple and intuitive interface built with Tkinter
+- **Cross-platform**: Works on Linux, Windows, and macOS
+
+## Screenshots
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ YouMuDow                                    [Debug Mode] │
+├─────────────────────────────────────────────────────────┤
+│ [Search...                              ] [Search]       │
+├───────────────────────────────────┬─────────────────────┤
+│ Title        │ Uploader  │ Dur.  │ Details             │
+│──────────────┼───────────┼───────│────────────────────│
+│ Song 1       │ Artist    │ 3:45  │ Title: Song 1      │
+│ Song 2       │ Artist    │ 4:12  │ Uploader: Artist   │
+│                                 │ Format: [MP3 ▼]    │
+│                                 │ [Add to Queue]     │
+├─────────────────────────────────────────────────────────┤
+│ Output Log                                               │
+│─────────────────────────────────────────────────────────│
+│ [12:00:00] [DOWNLOAD] Starting: Song 1                 │
+│ [12:00:05] [download] 45.5% at 1.2MiB/s ETA 00:30   │
+│ [12:00:30] [DONE] Song 1                              │
+├─────────────────────────────────────────────────────────┤
+│ Downloading: 45.5%                          ███████░░░ │
+└─────────────────────────────────────────────────────────┘
+```
+
+## Requirements
+
+- Python 3.10+
+- yt-dlp
+- ffmpeg
+- tkinter (usually included with Python)
+
+### Linux (Debian/Ubuntu)
+
+```bash
+sudo apt update
+sudo apt install python3-tk ffmpeg
+pip install yt-dlp
+```
+
+### Windows
+
+1. Install Python 3.10+ from [python.org](https://python.org)
+2. Install ffmpeg and add to PATH
+3. Run: `pip install yt-dlp`
 
 ## Installation
 
+### Option 1: Clone and install
+
 ```bash
+git clone https://github.com/YourUsername/YouMuDow.git
+cd YouMuDow
 pip install -e .
+```
+
+### Option 2: Run directly
+
+```bash
+git clone https://github.com/YourUsername/YouMuDow.git
+cd YouMuDow
+PYTHONPATH=src python3 -m youmudow.main
+```
+
+## Usage
+
+1. **Search**: Enter a song name or paste a YouTube URL
+2. **Select**: Click on a result
+3. **Choose format**: Select MP3, MP4, WAV, or M4A
+4. **Download**: Click "Download Now" or add to queue
+5. **Debug Mode**: Enable via View → Debug Mode to see real-time logs
+
+## Project Structure
+
+```
+youmudow/
+├── src/youmudow/
+│   ├── main.py              # Entry point
+│   ├── domain/              # Data models
+│   │   ├── models.py       # Video model
+│   │   ├── enums.py        # DownloadStatus
+│   │   └── validators.py   # URL validation
+│   ├── adapters/           # External tools
+│   │   └── ytdlp_adapter.py
+│   ├── services/           # Business logic
+│   │   ├── search_service.py
+│   │   ├── download_service.py
+│   │   ├── metadata_service.py
+│   │   └── thumbnail_service.py
+│   ├── app/                # Application layer
+│   │   ├── controller.py   # Main controller
+│   │   ├── state.py       # State management
+│   │   └── events.py      # Event system
+│   └── ui/                # Interface layer
+│       ├── window.py       # Main window
+│       ├── styles/         # Theme system
+│       └── widgets/       # Reusable widgets
+├── tests/
+│   └── unit/              # Unit tests
+├── docs/                  # Documentation
+└── scripts/               # Build scripts
 ```
 
 ## Development
 
 ```bash
+# Install with dev dependencies
 pip install -e ".[dev]"
+
+# Run tests
+pytest tests/ -v
+
+# Format code
+ruff check src/
+```
+
+## Architecture
+
+```
+┌──────────────────────────────────────────────────────┐
+│                    UI Layer (Tkinter)               │
+│  MainWindow → Controllers → Widgets                │
+└─────────────────────────┬────────────────────────────┘
+                          │
+┌─────────────────────────▼────────────────────────────┐
+│              App Layer (Controller)                  │
+│  State Management ← Events ← Business Logic         │
+└─────────────────────────┬────────────────────────────┘
+                          │
+┌─────────────────────────▼────────────────────────────┐
+│              Services Layer                           │
+│  SearchService → DownloadService → MetadataService    │
+└─────────────────────────┬────────────────────────────┘
+                          │
+┌─────────────────────────▼────────────────────────────┐
+│              Adapter Layer (yt-dlp)                  │
+│  YtdlpAdapter → subprocess → yt-dlp binary          │
+└──────────────────────────────────────────────────────┘
 ```
 
 ## License
 
-MIT
+MIT License - See [LICENSE](LICENSE) for details.
+
+## Contributing
+
+See [docs/contributing.md](docs/contributing.md) for development guidelines.
