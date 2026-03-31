@@ -137,6 +137,7 @@ class LogTerminal(ttk.Frame):
         self._text.tag_configure("debug", foreground=TERMINAL_COLORS["debug"])
         self._text.tag_configure("separator", foreground=TERMINAL_COLORS["separator"])
         self._text.tag_configure("download", foreground=TERMINAL_COLORS["download"])
+        self._text.tag_configure("metadata", foreground=TERMINAL_COLORS["download"])
 
     def append(self, message: str, level: str = "info", timestamp: str | None = None) -> None:
         """Append a log message to the terminal (thread-safe)."""
@@ -202,6 +203,8 @@ class LogTerminal(ttk.Frame):
             return "debug"
         if "[DONE]" in message:
             return "success"
+        if "[METADATA]" in message:
+            return "metadata"
         if "warning" in message.lower():
             return "warning"
         if "info" in message.lower():

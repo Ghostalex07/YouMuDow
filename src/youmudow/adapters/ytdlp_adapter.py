@@ -36,6 +36,8 @@ class YtdlpConfig:
     embed_thumbnail: bool = True
     add_chapters: bool = False
     embed_subs: bool = False
+    parse_metadata: str | None = None
+    metadata_from_title: str | None = None
 
 
 @dataclass
@@ -98,7 +100,7 @@ class YtdlpAdapter:
             ])
         
         if self._config.embed_metadata:
-            args.append("--embed-metadata")
+            args.append("--add-metadata")
         
         if self._config.embed_thumbnail and video.format in ("mp3", "m4a", "opus"):
             args.append("--embed-thumbnail")
@@ -108,6 +110,12 @@ class YtdlpAdapter:
         
         if self._config.embed_subs:
             args.append("--embed-subs")
+        
+        if self._config.parse_metadata:
+            args.extend(["--parse-metadata", self._config.parse_metadata])
+        
+        if self._config.metadata_from_title:
+            args.extend(["--metadata-from-title", self._config.metadata_from_title])
         
         args.append(video.url)
         
@@ -227,6 +235,18 @@ class YtdlpAdapter:
         self._log(f"[DOWNLOAD] Starting: {video.title}")
         self._log(f"[DOWNLOAD] Format: {video.format}")
         self._log(f"[DOWNLOAD] Output: {output_path}")
+        
+        metadata_parts = []
+        if self._config.embed_metadata:
+            metadata_parts.append("metadata")
+        if self._config.embed_thumbnail and video.format in ("mp3", "m4a", "opus"):
+            metadata_parts.append("thumbnail")
+        if self._config.add_chapters:
+            metadata_parts.append("chapters")
+        
+        if metadata_parts:
+            self._log(f"[METADATA] Embedding: {', '.join(metadata_parts)}")
+        
         self._log("-" * 50)
 
         try:
@@ -259,6 +279,10 @@ class YtdlpAdapter:
                 video.status = DownloadStatus.DONE
                 self._log("-" * 50)
                 self._log(f"[DONE] {video.title}")
+                if self._config.embed_metadata:
+                    self._log(f"[METADATA] {video.title} tags applied")
+                if self._config.embed_thumbnail and video.format in ("mp3", "m4a", "opus"):
+                    self._log(f"[METADATA] {video.title} artwork embedded")
             else:
                 video.status = DownloadStatus.ERROR
                 video.error_message = "Download failed"
