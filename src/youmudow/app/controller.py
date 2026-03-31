@@ -190,14 +190,21 @@ class AppController:
         def on_progress(progress: DownloadProgress) -> None:
             if progress.video:
                 self._state_manager.update_progress(progress.video, progress.progress)
+            if self._debug_mode and progress.video:
+                emit_log(f"[download] {progress.progress:.1f}% - {progress.video.title}", level="debug")
 
         def on_complete(video: Video) -> None:
             self._state_manager.finish_download(video)
+            emit_log(f"[DONE] {video.title} - Download completed", level="success")
             if self._download_complete_callback:
                 self._download_complete_callback(video)
 
+        def on_started(video: Video) -> None:
+            emit_log(f"[DOWNLOAD] Starting: {video.title}", level="info")
+
         self._download_service.on_progress(on_progress)
         self._download_service.on_complete(on_complete)
+        self._download_service.on_event(lambda e: on_started(e.video) if e.type.name == "STARTED" else None)
 
     def _setup_log_callback(self) -> None:
         def on_log_message(message: str) -> None:

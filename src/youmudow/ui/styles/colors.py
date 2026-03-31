@@ -1,60 +1,71 @@
-"""Color definitions for YouMuDow themes."""
+"""Color definitions for YouMuDow themes.
+
+Modern dark theme with accent colors for a polished look.
+"""
 
 from dataclasses import dataclass
-from typing import Literal
 
 
 @dataclass(frozen=True)
 class Colors:
-    """Color palette for YouMuDow."""
+    """Modern color palette for YouMuDow."""
 
     PRIMARY: str
     SECONDARY: str
     ACCENT: str
     BACKGROUND: str
-    FOREGROUND: str
+    SURFACE: str
     TEXT: str
     TEXT_SECONDARY: str
     BORDER: str
     SUCCESS: str
     WARNING: str
     ERROR: str
+    DOWNLOADING: str
+    QUEUED: str
+    DONE: str
     SELECTION: str
     HOVER: str
     DISABLED: str
 
 
-LIGHT_COLORS = Colors(
-    PRIMARY="#2196F3",
-    SECONDARY="#64B5F6",
-    ACCENT="#FF5722",
-    BACKGROUND="#FFFFFF",
-    FOREGROUND="#F5F5F5",
-    TEXT="#212121",
-    TEXT_SECONDARY="#757575",
-    BORDER="#E0E0E0",
-    SUCCESS="#4CAF50",
-    WARNING="#FFC107",
-    ERROR="#F44336",
-    SELECTION="#BBDEFB",
-    HOVER="#E3F2FD",
-    DISABLED="#BDBDBD",
+DARK_COLORS = Colors(
+    PRIMARY="#6366F1",
+    SECONDARY="#818CF8",
+    ACCENT="#F472B6",
+    BACKGROUND="#0F0F0F",
+    SURFACE="#1A1A2E",
+    TEXT="#E4E4E7",
+    TEXT_SECONDARY="#71717A",
+    BORDER="#27272A",
+    SUCCESS="#22C55E",
+    WARNING="#EAB308",
+    ERROR="#EF4444",
+    DOWNLOADING="#3B82F6",
+    QUEUED="#F59E0B",
+    DONE="#22C55E",
+    SELECTION="#3730A3",
+    HOVER="#27272A",
+    DISABLED="#3F3F46",
 )
 
 
-DARK_COLORS = Colors(
-    PRIMARY="#1976D2",
-    SECONDARY="#42A5F5",
-    ACCENT="#FF7043",
-    BACKGROUND="#212121",
-    FOREGROUND="#303030",
-    TEXT="#FFFFFF",
-    TEXT_SECONDARY="#B0B0B0",
-    BORDER="#424242",
-    SUCCESS="#66BB6A",
-    WARNING="#FFD54F",
-    ERROR="#EF5350",
-    SELECTION="#1565C0",
-    HOVER="#303030",
-    DISABLED="#616161",
+LIGHT_COLORS = Colors(
+    PRIMARY="#6366F1",
+    SECONDARY="#818CF8",
+    ACCENT="#EC4899",
+    BACKGROUND="#FAFAFA",
+    SURFACE="#FFFFFF",
+    TEXT="#18181B",
+    TEXT_SECONDARY="#71717A",
+    BORDER="#E4E4E7",
+    SUCCESS="#22C55E",
+    WARNING="#EAB308",
+    ERROR="#EF4444",
+    DOWNLOADING="#3B82F6",
+    QUEUED="#F59E0B",
+    DONE="#22C55E",
+    SELECTION="#EEF2FF",
+    HOVER="#F4F4F5",
+    DISABLED="#D4D4D8",
 )

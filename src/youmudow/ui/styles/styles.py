@@ -1,4 +1,7 @@
-"""TTK style definitions for YouMuDow."""
+"""TTK style definitions for YouMuDow.
+
+Modern dark theme with smooth visuals and consistent styling.
+"""
 
 import tkinter as tk
 from tkinter import ttk
@@ -18,121 +21,172 @@ class StyleManager:
         self._colors = colors
         self._apply_base_styles()
         self._apply_widget_styles()
+        self._apply_custom_widgets()
 
     def _apply_base_styles(self) -> None:
         if self._colors is None:
             return
 
-        self._style.configure(".", background=self._colors.BACKGROUND)
+        c = self._colors
+
+        self._style.theme_use("clam")
+
+        self._style.configure(".", background=c.BACKGROUND)
+
+        self._style.configure("TFrame", background=c.BACKGROUND)
+        self._style.configure("TLabel", background=c.BACKGROUND, foreground=c.TEXT)
+        self._style.configure("TLabelframe", background=c.BACKGROUND, foreground=c.TEXT)
+        self._style.configure("TLabelframe.Label", background=c.BACKGROUND, foreground=c.TEXT)
 
         self._style.configure(
-            "TFrame",
-            background=self._colors.BACKGROUND,
-        )
-        self._style.configure(
-            "TLabel",
-            background=self._colors.BACKGROUND,
-            foreground=self._colors.TEXT,
-        )
-        self._style.configure(
-            "TButton",
-            background=self._colors.PRIMARY,
-            foreground="#FFFFFF",
-        )
-        self._style.configure(
             "TEntry",
-            fieldbackground=self._colors.BACKGROUND,
-            foreground=self._colors.TEXT,
-            bordercolor=self._colors.BORDER,
+            fieldbackground=c.SURFACE,
+            foreground=c.TEXT,
+            borderwidth=0,
+            relief="flat",
         )
+        self._style.configure("TEntry", insertcolor=c.TEXT)
+
         self._style.configure(
             "TCombobox",
-            fieldbackground=self._colors.BACKGROUND,
-            background=self._colors.PRIMARY,
-            foreground=self._colors.TEXT,
+            fieldbackground=c.SURFACE,
+            foreground=c.TEXT,
+            background=c.SURFACE,
+            borderwidth=0,
+            relief="flat",
         )
 
     def _apply_widget_styles(self) -> None:
         if self._colors is None:
             return
 
+        c = self._colors
+
         self._style.configure(
-            "SearchBar.TFrame",
-            background=self._colors.BACKGROUND,
-        )
-        self._style.configure(
-            "SearchButton.TButton",
-            background=self._colors.PRIMARY,
+            "TButton",
+            background=c.PRIMARY,
             foreground="#FFFFFF",
-            padding=(10, 5),
+            borderwidth=0,
+            padding=(16, 10),
+            font=("Segoe UI", 10),
         )
         self._style.map(
-            "SearchButton.TButton",
-            background=[("active", self._colors.SECONDARY)],
+            "TButton",
+            background=[
+                ("active", c.SECONDARY),
+                ("pressed", c.PRIMARY),
+                ("disabled", c.DISABLED),
+            ],
+            foreground=[("disabled", c.TEXT_SECONDARY)],
         )
 
         self._style.configure(
-            "Results.Treeview",
-            background=self._colors.BACKGROUND,
-            foreground=self._colors.TEXT,
-            fieldbackground=self._colors.BACKGROUND,
-            rowheight=28,
+            "Primary.TButton",
+            background=c.PRIMARY,
+            foreground="#FFFFFF",
+            borderwidth=0,
+            padding=(16, 10),
+            font=("Segoe UI", 10, "bold"),
         )
         self._style.map(
-            "Results.Treeview",
-            background=[("selected", self._colors.SELECTION)],
-            foreground=[("selected", self._colors.TEXT)],
+            "Primary.TButton",
+            background=[
+                ("active", c.SECONDARY),
+                ("pressed", c.PRIMARY),
+                ("disabled", c.DISABLED),
+            ],
+        )
+
+        self._style.configure(
+            "Secondary.TButton",
+            background=c.SURFACE,
+            foreground=c.TEXT,
+            borderwidth=1,
+            bordercolor=c.BORDER,
+            padding=(16, 10),
+            font=("Segoe UI", 10),
+        )
+        self._style.map(
+            "Secondary.TButton",
+            background=[
+                ("active", c.HOVER),
+                ("pressed", c.SURFACE),
+                ("disabled", c.DISABLED),
+            ],
+        )
+
+        self._style.configure(
+            "Success.TButton",
+            background=c.SUCCESS,
+            foreground="#FFFFFF",
+            borderwidth=0,
+            padding=(16, 10),
+            font=("Segoe UI", 10),
+        )
+        self._style.map(
+            "Success.TButton",
+            background=[
+                ("active", "#16A34A"),
+                ("pressed", c.SUCCESS),
+                ("disabled", c.DISABLED),
+            ],
+        )
+
+        self._style.configure(
+            "Treeview",
+            background=c.SURFACE,
+            foreground=c.TEXT,
+            fieldbackground=c.SURFACE,
+            borderwidth=0,
+            rowheight=36,
+            font=("Segoe UI", 10),
         )
         self._style.configure(
-            "Results.Treeview.Heading",
-            background=self._colors.FOREGROUND,
-            foreground=self._colors.TEXT,
+            "Treeview.Heading",
+            background=c.SURFACE,
+            foreground=c.TEXT_SECONDARY,
+            borderwidth=0,
+            padding=8,
+            font=("Segoe UI", 9, "bold"),
+        )
+        self._style.map(
+            "Treeview",
+            background=[("selected", c.SELECTION)],
+            foreground=[("selected", c.TEXT)],
+        )
+
+        self._style.configure(
+            "Horizontal.TProgressbar",
+            background=c.PRIMARY,
+            borderwidth=0,
+            thickness=6,
+        )
+        self._style.configure(
+            "Success.Horizontal.TProgressbar",
+            background=c.SUCCESS,
+            borderwidth=0,
+            thickness=6,
+        )
+
+    def _apply_custom_widgets(self) -> None:
+        if self._colors is None:
+            return
+
+        c = self._colors
+
+        self._style.configure(
+            "Search.TEntry",
+            fieldbackground=c.SURFACE,
+            foreground=c.TEXT,
+            borderwidth=0,
+            padding=10,
+            font=("Segoe UI", 11),
+        )
+
+        self._style.configure(
+            "Card.TFrame",
+            background=c.SURFACE,
             relief="flat",
-        )
-
-        self._style.configure(
-            "Detail.TLabelframe",
-            background=self._colors.BACKGROUND,
-            foreground=self._colors.TEXT,
-        )
-        self._style.configure(
-            "Detail.TLabelframe.Label",
-            background=self._colors.BACKGROUND,
-            foreground=self._colors.TEXT,
-            font=("TkDefaultFont", 10, "bold"),
-        )
-
-        self._style.configure(
-            "ActionButton.TButton",
-            padding=(15, 8),
-        )
-        self._style.map(
-            "ActionButton.TButton",
-            background=[
-                ("active", self._colors.SECONDARY),
-                ("disabled", self._colors.DISABLED),
-            ],
-        )
-
-        self._style.configure(
-            "StatusBar.TLabel",
-            background=self._colors.FOREGROUND,
-            foreground=self._colors.TEXT_SECONDARY,
-            font=("TkDefaultFont", 9),
-        )
-
-        self._style.configure(
-            "Primary.TButton",
-            background=self._colors.PRIMARY,
-            foreground="#FFFFFF",
-            padding=(15, 8),
-        )
-        self._style.map(
-            "Primary.TButton",
-            background=[
-                ("active", self._colors.SECONDARY),
-                ("disabled", self._colors.DISABLED),
-            ],
         )
 
 
