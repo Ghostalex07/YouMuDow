@@ -311,3 +311,18 @@ def is_valid_format(fmt: str) -> bool:
         return False
     valid_formats = {"mp3", "mp4", "wav", "flac", "aac", "m4a", "ogg"}
     return fmt.lower() in valid_formats
+
+
+def is_valid_rate_limit(rate: str) -> bool:
+    """Check if rate limit is valid (e.g., '1M', '500K', '1G').
+    
+    Valid formats: number followed by K (kilobytes), M (megabytes), G (gigabytes)
+    """
+    if not isinstance(rate, str):
+        return False
+    rate = rate.strip()
+    if not rate:
+        return True  # Empty is valid (no limit)
+    import re
+    pattern = r'^\d+[KMG]?$'
+    return bool(re.match(pattern, rate, re.IGNORECASE)) and len(rate) > 0

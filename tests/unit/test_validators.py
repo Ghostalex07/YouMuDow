@@ -157,3 +157,28 @@ class TestBrowserSupport:
         assert profile.name == "Default"
         assert profile.path == "/path/to/profile"
         assert profile.browser == "chrome"
+
+
+class TestRateLimit:
+    """Tests for rate limit validation."""
+
+    def test_valid_rate_limits(self):
+        from youmudow.domain.validators import is_valid_rate_limit
+        valid_rates = ["1M", "500K", "1G", "1024K", "10M", "1M", "100K", "500"]
+        for rate in valid_rates:
+            assert is_valid_rate_limit(rate), f"Expected {rate} to be valid"
+
+    def test_invalid_rate_limits(self):
+        from youmudow.domain.validators import is_valid_rate_limit
+        invalid_rates = ["-1M", "abc", "10MB", "10MB/s", "abc123"]
+        for rate in invalid_rates:
+            assert not is_valid_rate_limit(rate), f"Expected {rate} to be invalid"
+
+    def test_empty_rate_is_valid(self):
+        from youmudow.domain.validators import is_valid_rate_limit
+        assert is_valid_rate_limit("")
+        assert is_valid_rate_limit("   ")
+
+    def test_none_rate_is_invalid(self):
+        from youmudow.domain.validators import is_valid_rate_limit
+        assert not is_valid_rate_limit(None)

@@ -9,7 +9,7 @@ from tkinter import ttk
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from youmudow.domain.validators import get_all_browser_profiles, get_available_browsers, get_available_browsers
+from youmudow.domain.validators import get_all_browser_profiles, get_available_browsers
 
 from youmudow.domain.models import Video
 from youmudow.domain.validators import is_valid_youtube_url, is_playlist_url
@@ -448,11 +448,13 @@ class MainWindow:
         )
         cookies_check.pack(side="left")
 
-        self._browser_var = tk.StringVar(value="chrome")
+        installed_browsers = get_available_browsers()
+        default_browser = installed_browsers[0] if installed_browsers else "chrome"
+        self._browser_var = tk.StringVar(value=default_browser)
         browser_combo = ttk.Combobox(
             row6,
             textvariable=self._browser_var,
-            values=["chrome"],
+            values=installed_browsers if installed_browsers else ["chrome"],
             state="readonly",
             width=8,
             font=("Segoe UI", 9),
