@@ -5,6 +5,7 @@ from youmudow.domain.validators import (
     is_valid_youtube_url,
     sanitize_filename,
     is_valid_format,
+    is_playlist_url,
 )
 
 
@@ -182,3 +183,28 @@ class TestRateLimit:
     def test_none_rate_is_invalid(self):
         from youmudow.domain.validators import is_valid_rate_limit
         assert not is_valid_rate_limit(None)
+
+
+class TestPlaylistURL:
+    """Tests for playlist URL detection."""
+
+    def test_playlist_url_with_www(self):
+        assert is_playlist_url("https://www.youtube.com/playlist?list=PL123456")
+
+    def test_playlist_url_without_www(self):
+        assert is_playlist_url("https://youtube.com/playlist?list=PLabc")
+
+    def test_playlist_url_with_https(self):
+        assert is_playlist_url("https://www.youtube.com/playlist?list=PLxyz")
+
+    def test_playlist_url_without_https(self):
+        assert is_playlist_url("youtube.com/playlist?list=PLxyz")
+
+    def test_regular_video_not_playlist(self):
+        assert not is_playlist_url("https://www.youtube.com/watch?v=abc123")
+        assert not is_playlist_url("https://youtu.be/abc123")
+        assert not is_playlist_url("https://youtube.com/shorts/abc123")
+
+    def test_empty_string_not_playlist(self):
+        assert not is_playlist_url("")
+        assert not is_playlist_url(None)

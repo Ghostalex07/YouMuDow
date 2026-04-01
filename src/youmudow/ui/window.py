@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 from youmudow.domain.validators import get_all_browser_profiles, get_available_browsers
 
-from youmudow.domain.models import Video
+from youmudow.domain.models import Video, DownloadOptions
 from youmudow.domain.validators import is_valid_youtube_url, is_playlist_url
 from youmudow.app.state import AppStateData
 from youmudow.app.events import EventType, EventBus, get_event_bus
@@ -84,6 +84,7 @@ class MainWindow:
         self._selected_video: Video | None = None
         self._is_searching = False
         self._is_downloading = False
+        self._playlist_videos: list[Video] = []
         self._debug_mode = debug_mode
         self._debug_panel_visible = False
         self._event_bus: EventBus | None = None
@@ -188,8 +189,24 @@ class MainWindow:
             font=FONT["h2"],
             command=self._on_search,
         )
-        self._search_btn.pack(side="left")
+        self._search_btn.pack(side="left", padx=(SPACING["sm"], 0))
         self._add_hover_effect(self._search_btn, COLORS["secondary"], COLORS["primary"])
+
+        self._download_all_btn = tk.Button(
+            search_frame,
+            text="Download All",
+            bg=COLORS["success"],
+            fg="#FFFFFF",
+            activebackground=COLORS["hover"],
+            activeforeground="#FFFFFF",
+            relief="flat",
+            bd=0,
+            font=("Segoe UI", 10),
+            command=self._on_download_all,
+            state="disabled",
+        )
+        self._download_all_btn.pack(side="left", padx=(SPACING["sm"], 0))
+        self._add_hover_effect(self._download_all_btn, COLORS["hover"], COLORS["success"])
 
         self._search_entry.focus()
 
@@ -731,6 +748,14 @@ class MainWindow:
             duration = self._format_duration(video.duration)
             self._results_tree.insert("", "end", values=(video.title, video.uploader, duration))
 
+        self._playlist_videos = results
+        
+        if results and len(results) > 1:
+            self._download_all_btn.configure(state="normal")
+            self._set_status(f"Found {len(results)} videos - click 'Download All' to download playlist")
+        else:
+            self._download_all_btn.configure(state="disabled")
+
     def _format_duration(self, seconds: int) -> str:
         if seconds == 0:
             return "-"
@@ -961,6 +986,41 @@ class MainWindow:
         
         self._controller.download_now(video)
         self._set_status(f"Downloading: {video.title}")
+
+    def _on_download_all(self) -> None:
+        if not self._playlist_videos:
+            return
+        
+        options = self._get_current_options()
+        
+        for video in self._playlist_videos:
+            video.options = options
+        
+        self._controller.enqueue_multiple(self._playlist_videos)
+        self._controller.start_downloads()
+        self._set_status(f"Downloading {len(self._playlist_videos)} videos from playlist...")
+
+    def _get_current_options(self) -> DownloadOptions:
+        """Get current download options from UI."""
+        opts = DownloadOptions(
+            format=self._format_var.get(),
+            quality=self._quality_var.get(),
+            subtitles=self._subtitles_var.get(),
+            subtitle_lang=self._subtitle_lang_var.get(),
+            embed_subtitles=self._embed_subs_var.get(),
+            rate_limit=self._rate_limit_var.get() or None,
+            split_chapters=self._split_chapters_var.get(),
+        )
+        
+        if self._use_cookies_var.get():
+            opts.use_cookies = True
+            if self._cookies_source_var.get() == "file" and self._cookies_file_var.get():
+                opts.cookies_file = self._cookies_file_var.get()
+            else:
+                opts.cookies_from_browser = self._browser_var.get()
+                opts.cookies_profile = self._profile_var.get() if self._profile_var.get() != "Default" else None
+        
+        return opts
 
     def _on_start_queue(self) -> None:
         if self._is_downloading:
