@@ -400,7 +400,7 @@ class YtdlpAdapter:
                                 if line:
                                     with output_lock:
                                         output_lines.append(line.strip())
-                        except:
+                        except Exception:
                             pass
                     
                     reader = threading.Thread(target=read_output, daemon=True)

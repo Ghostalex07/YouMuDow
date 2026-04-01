@@ -834,7 +834,6 @@ class MainWindow:
             self._controller.search(query)
 
     def _handle_url_input(self, url: str) -> None:
-        from youmudow.app.events import emit_log
         self._set_status("Fetching video info...")
         self._controller.search_url(url)
 
