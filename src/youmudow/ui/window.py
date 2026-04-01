@@ -173,7 +173,17 @@ class MainWindow:
             bd=0,
         )
         self._search_entry.grid(row=0, column=0, sticky="ew", padx=SPACING["md"], pady=SPACING["md"])
+        
+        def _on_paste(event) -> str:
+            clipboard = self._root.clipboard_get()
+            if is_valid_youtube_url(clipboard):
+                self._search_var.set("")
+            return None
+        
         self._search_entry.bind("<Return>", lambda _: self._on_search())
+        self._search_entry.bind("<Control-Return>", lambda _: self._on_search())
+        self._search_entry.bind("<Control-v>", _on_paste)
+        self._search_entry.bind("<Control-V>", _on_paste)
         self._search_entry.bind("<Control-a>", self._on_select_all)
         self._search_entry.bind("<Control-A>", self._on_select_all)
         self._search_entry.bind("<Control-BackSpace>", self._on_delete_word)
@@ -680,6 +690,12 @@ class MainWindow:
 
         self._log_unsubscribe = self._event_bus.subscribe(EventType.LOG_OUTPUT, on_log)
         self._clear_unsubscribe = self._event_bus.subscribe(EventType.LOG_CLEAR, on_clear)
+
+        self._root.bind("<Control-d>", lambda _: self._on_download_now())
+        self._root.bind("<Control-q>", lambda _: self._on_enqueue())
+        self._root.bind("<Control-l>", lambda _: self._search_entry.focus_set())
+        self._root.bind("<Control-n>", lambda _: self._search_var.set(""))
+        self._root.bind("<Escape>", lambda _: self._on_cancel_search())
 
     def _setup_controller_callbacks(self) -> None:
         def on_search_complete(results: list[Video]) -> None:

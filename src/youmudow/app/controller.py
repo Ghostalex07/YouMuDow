@@ -262,7 +262,7 @@ class AppController:
             elif "[DONE]" in message:
                 level = "success"
             elif "[download]" in message:
-                level = "debug"
+                level = "info"
             emit_log(message, level)
 
         search_adapter = getattr(self._search_service, '_adapter', None)
