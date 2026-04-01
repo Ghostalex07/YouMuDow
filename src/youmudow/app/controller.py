@@ -61,6 +61,8 @@ class AppController:
         self._state_manager = state_manager or StateManager()
 
         self._search_thread: threading.Thread | None = None
+        self._url_search_thread: threading.Thread | None = None
+        self._search_cancel_event = threading.Event()
         self._download_complete_callback: DownloadCompleteCallback | None = None
         self._search_complete_callback: SearchCompleteCallback | None = None
         self._debug_mode = False
@@ -114,21 +116,45 @@ class AppController:
         except Exception as e:
             self._state_manager.set_error(f"Search failed: {e}")
 
-    def search_url(self, url: str) -> Video | None:
+    def search_url(self, url: str) -> None:
         if not url:
-            return None
+            return
 
+        self._search_cancel_event.clear()
         self._state_manager.set_state(AppState.SEARCHING)
         
+        self._url_search_thread = threading.Thread(
+            target=self._perform_search_url,
+            args=(url,),
+            daemon=True,
+        )
+        self._url_search_thread.start()
+
+    def _perform_search_url(self, url: str) -> None:
         try:
-            video = self._search_service.get_metadata(url)
+            if self._search_cancel_event.is_set():
+                self._state_manager.set_state(AppState.IDLE)
+                return
+
+            base_url = url.split("&")[0] if "&" in url else url
+            video = self._search_service.get_metadata(base_url)
+            
+            if self._search_cancel_event.is_set():
+                self._state_manager.set_state(AppState.IDLE)
+                return
+            
             if video:
-                video.thumbnail = self._thumbnail_service.get_thumbnail_url(url)
+                video.thumbnail = self._thumbnail_service.get_thumbnail_url(base_url)
             self._state_manager.set_state(AppState.IDLE)
-            return video
+            if self._search_complete_callback:
+                self._search_complete_callback([video] if video else [])
         except Exception as e:
             self._state_manager.set_error(f"Failed to fetch URL: {e}")
-            return None
+            self._state_manager.set_state(AppState.IDLE)
+
+    def cancel_search(self) -> None:
+        self._search_cancel_event.set()
+        self._state_manager.set_state(AppState.IDLE)
 
     def search_playlist(self, url: str, limit: int = 50) -> list[Video]:
         if not url:

@@ -274,7 +274,7 @@ class YtdlpAdapter:
 
         return None
 
-    def get_playlist_videos(self, url: str, limit: int = 50) -> list[Video]:
+    def get_playlist_videos(self, url: str, limit: int = 53) -> list[Video]:
         """Fetch all videos from a playlist."""
         args = self._build_base_args(None)
         args.extend([

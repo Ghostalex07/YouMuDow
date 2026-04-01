@@ -85,6 +85,7 @@ class MainWindow:
         self._is_searching = False
         self._is_downloading = False
         self._playlist_videos: list[Video] = []
+        self._is_playlist = False
         self._debug_mode = debug_mode
         self._debug_panel_visible = False
         self._event_bus: EventBus | None = None
@@ -192,21 +193,20 @@ class MainWindow:
         self._search_btn.pack(side="left", padx=(SPACING["sm"], 0))
         self._add_hover_effect(self._search_btn, COLORS["secondary"], COLORS["primary"])
 
-        self._download_all_btn = tk.Button(
+        self._cancel_btn = tk.Button(
             search_frame,
-            text="Download All",
-            bg=COLORS["success"],
-            fg="#FFFFFF",
+            text="Cancel",
+            bg=COLORS["surface"],
+            fg=COLORS["text"],
             activebackground=COLORS["hover"],
-            activeforeground="#FFFFFF",
+            activeforeground=COLORS["text"],
             relief="flat",
             bd=0,
-            font=("Segoe UI", 10),
-            command=self._on_download_all,
-            state="disabled",
+            font=FONT["body"],
+            command=self._on_cancel_search,
         )
-        self._download_all_btn.pack(side="left", padx=(SPACING["sm"], 0))
-        self._add_hover_effect(self._download_all_btn, COLORS["hover"], COLORS["success"])
+        self._cancel_btn.pack(side="left", padx=(SPACING["xs"], 0))
+        self._cancel_btn.configure(state="disabled")
 
         self._search_entry.focus()
 
@@ -221,7 +221,7 @@ class MainWindow:
             container,
             columns=columns,
             show="headings",
-            selectmode="browse",
+            selectmode="extended",
             style="Modern.Treeview",
         )
         self._results_tree.heading("title", text="TITLE")
@@ -683,10 +683,18 @@ class MainWindow:
 
     def _setup_controller_callbacks(self) -> None:
         def on_search_complete(results: list[Video]) -> None:
-            self._is_searching = False
-            self._update_results(results)
-            self._set_status(f"Found {len(results)} results")
-            self._update_button_states()
+            try:
+                self._is_searching = False
+                self._update_results(results)
+                if results:
+                    self._selected_video = results[0]
+                    self._set_status(f"Found: {results[0].title}")
+                else:
+                    self._set_status("No results found")
+                self._update_button_states()
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
 
         def on_download_complete(video: Video) -> None:
             self._is_downloading = False
@@ -750,11 +758,13 @@ class MainWindow:
 
         self._playlist_videos = results
         
-        if results and len(results) > 1:
-            self._download_all_btn.configure(state="normal")
-            self._set_status(f"Found {len(results)} videos - click 'Download All' to download playlist")
-        else:
-            self._download_all_btn.configure(state="disabled")
+        if results:
+            if self._is_playlist and len(results) > 1:
+                self._set_status(f"Found {len(results)} videos - 'Add to Queue' adds all to queue")
+            elif len(results) > 1:
+                self._set_status(f"Found {len(results)} results - select one to download")
+            else:
+                self._set_status(f"Found: {results[0].title}")
 
     def _format_duration(self, seconds: int) -> str:
         if seconds == 0:
@@ -783,6 +793,7 @@ class MainWindow:
     def _update_button_states(self) -> None:
         is_busy = self._is_searching or self._is_downloading
         self._search_btn.configure(state="disabled" if is_busy else "normal")
+        self._cancel_btn.configure(state="normal" if self._is_searching else "disabled")
         self._download_btn.configure(state="disabled" if is_busy or not self._selected_video else "normal")
         self._enqueue_btn.configure(state="disabled" if is_busy or not self._selected_video else "normal")
 
@@ -794,9 +805,12 @@ class MainWindow:
         self._is_searching = True
         self._set_status("Searching...")
         self._update_button_states()
+        self._is_playlist = False
+        self._playlist_videos = []
 
         if is_valid_youtube_url(query):
             if is_playlist_url(query):
+                self._is_playlist = True
                 self._handle_playlist_input(query)
             else:
                 self._handle_url_input(query)
@@ -806,25 +820,13 @@ class MainWindow:
     def _handle_url_input(self, url: str) -> None:
         from youmudow.app.events import emit_log
         self._set_status("Fetching video info...")
-        
-        def on_url_complete(video: Video | None) -> None:
-            if video:
-                self._selected_video = video
-                self._update_detail_panel(video)
-                self._update_results([video])
-                self._set_status(f"Ready: {video.title}")
-            else:
-                self._set_status("Failed to fetch video")
-            self._is_searching = False
-            self._update_button_states()
+        self._controller.search_url(url)
 
-        def do_fetch() -> None:
-            video = self._controller.search_url(url)
-            self._root.after(0, lambda: on_url_complete(video))
-
-        import threading
-        thread = threading.Thread(target=do_fetch, daemon=True)
-        thread.start()
+    def _on_cancel_search(self) -> None:
+        self._controller.cancel_search()
+        self._is_searching = False
+        self._set_status("Search cancelled")
+        self._update_button_states()
 
     def _handle_playlist_input(self, url: str) -> None:
         self._set_status("Fetching playlist...")
@@ -864,6 +866,30 @@ class MainWindow:
             self._selected_video = results[index]
             self._update_detail_panel(self._selected_video)
             self._update_button_states()
+            
+            if len(selection) > 1:
+                self._set_status(f"{len(selection)} videos selected")
+
+    def _get_selected_videos(self) -> list[Video]:
+        """Get videos selected via Ctrl+click or Shift+click."""
+        selected_ids = self._results_tree.selection()
+        if not selected_ids:
+            return []
+        
+        results = self._controller.state.get_search_results()
+        if not results:
+            return []
+        
+        videos = []
+        for item_id in selected_ids:
+            try:
+                index = self._results_tree.index(item_id)
+                if 0 <= index < len(results):
+                    videos.append(results[index])
+            except Exception:
+                continue
+        
+        return videos
 
     def _update_detail_panel(self, video: Video) -> None:
         self._detail_title.configure(text=video.title or "-")
@@ -923,97 +949,49 @@ class MainWindow:
         self._profile_var.set(profile_names[0] if profile_names else "Default")
 
     def _on_enqueue(self) -> None:
+        selected = self._get_selected_videos()
+        
+        if selected:
+            opts = self._get_current_options()
+            for video in selected:
+                video.options = opts
+            self._controller.enqueue_multiple(selected)
+            self._set_status(f"Added {len(selected)} to queue")
+            return
+        
+        if self._is_playlist and self._playlist_videos:
+            return
+        
         video = self._selected_video
         if video is None:
             return
 
-        video.options.format = self._format_var.get()
-        video.options.quality = self._quality_var.get()
-        video.options.subtitles = self._subtitles_var.get()
-        video.options.subtitle_lang = self._subtitle_lang_var.get()
-        video.options.embed_subtitles = self._embed_subs_var.get()
-        video.options.use_cookies = self._use_cookies_var.get()
-        video.options.rate_limit = self._rate_limit_var.get() or None
-        video.options.split_chapters = self._split_chapters_var.get()
-        
-        if self._use_cookies_var.get():
-            if self._cookies_source_var.get() == "file" and self._cookies_file_var.get():
-                video.options.cookies_file = self._cookies_file_var.get()
-                video.options.cookies_from_browser = None
-                video.options.cookies_profile = None
-            else:
-                video.options.cookies_file = None
-                video.options.cookies_from_browser = self._browser_var.get()
-                video.options.cookies_profile = self._profile_var.get() if self._profile_var.get() != "Default" else None
-        else:
-            video.options.cookies_file = None
-            video.options.cookies_from_browser = None
-            video.options.cookies_profile = None
-        
+        self._apply_options_to_video(video)
         self._controller.enqueue(video)
         self._set_status(f"Added to queue: {video.title}")
 
-    def _on_download_now(self) -> None:
-        video = self._selected_video
-        if video is None:
-            return
-
-        self._is_downloading = True
-        self._update_button_states()
-        
-        video.options.format = self._format_var.get()
-        video.options.quality = self._quality_var.get()
-        video.options.subtitles = self._subtitles_var.get()
-        video.options.subtitle_lang = self._subtitle_lang_var.get()
-        video.options.embed_subtitles = self._embed_subs_var.get()
-        video.options.use_cookies = self._use_cookies_var.get()
-        video.options.rate_limit = self._rate_limit_var.get() or None
-        video.options.split_chapters = self._split_chapters_var.get()
-        
-        if self._use_cookies_var.get():
-            if self._cookies_source_var.get() == "file" and self._cookies_file_var.get():
-                video.options.cookies_file = self._cookies_file_var.get()
-                video.options.cookies_from_browser = None
-                video.options.cookies_profile = None
-            else:
-                video.options.cookies_file = None
-                video.options.cookies_from_browser = self._browser_var.get()
-                video.options.cookies_profile = self._profile_var.get() if self._profile_var.get() != "Default" else None
-        else:
-            video.options.cookies_file = None
-            video.options.cookies_from_browser = None
-            video.options.cookies_profile = None
-        
-        self._controller.download_now(video)
-        self._set_status(f"Downloading: {video.title}")
-
-    def _on_download_all(self) -> None:
-        if not self._playlist_videos:
-            return
-        
-        options = self._get_current_options()
+    def _add_all_to_queue(self) -> None:
+        opts = self._get_current_options()
         
         for video in self._playlist_videos:
-            video.options = options
+            video.options = opts
         
         self._controller.enqueue_multiple(self._playlist_videos)
-        self._controller.start_downloads()
-        self._set_status(f"Downloading {len(self._playlist_videos)} videos from playlist...")
+        self._set_status(f"Added {len(self._playlist_videos)} videos to queue")
 
     def _get_current_options(self) -> DownloadOptions:
-        """Get current download options from UI."""
         opts = DownloadOptions(
             format=self._format_var.get(),
             quality=self._quality_var.get(),
             subtitles=self._subtitles_var.get(),
             subtitle_lang=self._subtitle_lang_var.get(),
             embed_subtitles=self._embed_subs_var.get(),
+            use_cookies=self._use_cookies_var.get(),
             rate_limit=self._rate_limit_var.get() or None,
             split_chapters=self._split_chapters_var.get(),
         )
         
-        if self._use_cookies_var.get():
-            opts.use_cookies = True
+        if opts.use_cookies:
             if self._cookies_source_var.get() == "file" and self._cookies_file_var.get():
                 opts.cookies_file = self._cookies_file_var.get()
             else:
@@ -1021,6 +999,60 @@ class MainWindow:
                 opts.cookies_profile = self._profile_var.get() if self._profile_var.get() != "Default" else None
         
         return opts
+
+    def _apply_options_to_video(self, video: Video) -> None:
+        video.options.format = self._format_var.get()
+        video.options.quality = self._quality_var.get()
+        video.options.subtitles = self._subtitles_var.get()
+        video.options.subtitle_lang = self._subtitle_lang_var.get()
+        video.options.embed_subtitles = self._embed_subs_var.get()
+        video.options.use_cookies = self._use_cookies_var.get()
+        video.options.rate_limit = self._rate_limit_var.get() or None
+        video.options.split_chapters = self._split_chapters_var.get()
+        
+        if self._use_cookies_var.get():
+            if self._cookies_source_var.get() == "file" and self._cookies_file_var.get():
+                video.options.cookies_file = self._cookies_file_var.get()
+                video.options.cookies_from_browser = None
+                video.options.cookies_profile = None
+            else:
+                video.options.cookies_file = None
+                video.options.cookies_from_browser = self._browser_var.get()
+                video.options.cookies_profile = self._profile_var.get() if self._profile_var.get() != "Default" else None
+        else:
+            video.options.cookies_file = None
+            video.options.cookies_from_browser = None
+            video.options.cookies_profile = None
+
+    def _on_download_now(self) -> None:
+        selected = self._get_selected_videos()
+        
+        if selected:
+            self._is_downloading = True
+            self._update_button_states()
+            
+            opts = self._get_current_options()
+            for video in selected:
+                video.options = opts
+            
+            self._controller.enqueue_multiple(selected)
+            self._controller.start_downloads()
+            self._set_status(f"Downloading {len(selected)} videos...")
+            return
+        
+        if self._is_playlist and self._playlist_videos:
+            return
+        
+        video = self._selected_video
+        if video is None:
+            return
+
+        self._is_downloading = True
+        self._update_button_states()
+        
+        self._apply_options_to_video(video)
+        self._controller.download_now(video)
+        self._set_status(f"Downloading: {video.title}")
 
     def _on_start_queue(self) -> None:
         if self._is_downloading:
