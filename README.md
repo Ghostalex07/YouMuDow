@@ -24,7 +24,15 @@ A modern YouTube music downloader with real-time progress, embedded metadata, an
   - Advanced quality selection (1080p, 720p, 480p)
   - Audio quality (320kbps, 256kbps, 192kbps, etc.)
 - **Error handling**: Automatic retry without cookies on failure, fallback browser detection
-- **Comprehensive tests**: 111 unit tests
+- **Keyboard shortcuts**:
+  - `Ctrl+Enter` - Search
+  - `Ctrl+D` - Download selected video
+  - `Ctrl+Q` - Add to queue
+  - `Ctrl+L` - Focus search field
+  - `Ctrl+N` - Clear search field
+  - `Escape` - Cancel current operation
+- **Auto-replace URL**: Paste a YouTube URL to automatically replace the search field
+- **Comprehensive tests**: 117 unit tests
 
 ## Screenshots
 
@@ -115,6 +123,18 @@ PYTHONPATH=src python3 -m youmudow.main
    - **Subtitles**: Download and embed subtitles (multiple languages supported)
 5. **Download**: Click "Download Now" or add to queue
 6. **Debug Mode**: Enable via View → Debug Mode to see real-time logs
+
+### Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+Enter` | Search |
+| `Ctrl+D` | Download selected |
+| `Ctrl+Q` | Add to queue |
+| `Ctrl+L` | Focus search field |
+| `Ctrl+N` | Clear search field |
+| `Escape` | Cancel operation |
+| `Ctrl+V` | Paste URL (auto-replaces field) |
 
 ## Project Structure
 

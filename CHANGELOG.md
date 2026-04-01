@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.1] - 2026-04-01
+
+### Added
+- **URL Search Improvements**:
+  - Search by YouTube URL now works correctly
+  - URL parameter handling fixed (extracts base URL when additional params present)
+  - Cancel button for long-running URL searches
+- **Keyboard Shortcuts**:
+  - `Ctrl+Enter` - Search
+  - `Ctrl+D` - Download selected video
+  - `Ctrl+Q` - Add to queue
+  - `Ctrl+L` - Focus search field
+  - `Ctrl+N` - Clear search field
+  - `Escape` - Cancel current operation
+- **Auto-replace URL on Paste**:
+  - When pasting a YouTube URL, previous content is cleared automatically
+
+### Fixed
+- Search by URL returning None due to extra parameters in URL
+- Video not auto-selected after URL search (Download/Queue buttons now work)
+- Terminal not showing all logs without Debug Mode enabled
+
 ## [0.2.0] - 2026-04-01
 
 ### Added
