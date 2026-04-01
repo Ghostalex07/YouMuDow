@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from youmudow.domain.models import Video
+from youmudow.domain.validators import is_valid_youtube_url
 from youmudow.app.state import AppStateData
 from youmudow.app.events import EventType, EventBus, get_event_bus
 from youmudow.ui.widgets.log_terminal import LogTerminal
@@ -168,6 +169,9 @@ class MainWindow:
         )
         self._search_entry.grid(row=0, column=0, sticky="ew", padx=SPACING["md"], pady=SPACING["md"])
         self._search_entry.bind("<Return>", lambda _: self._on_search())
+        self._search_entry.bind("<Control-a>", self._on_select_all)
+        self._search_entry.bind("<Control-A>", self._on_select_all)
+        self._search_entry.bind("<Control-BackSpace>", self._on_delete_word)
 
         self._search_btn = tk.Button(
             search_frame,
@@ -541,6 +545,18 @@ class MainWindow:
             return f"{hours}:{minutes:02d}:{secs:02d}"
         return f"{minutes}:{secs:02d}"
 
+    def _on_select_all(self, event: tk.Event) -> None:
+        self._search_entry.select_range(0, "end")
+        return "break"
+
+    def _on_delete_word(self, event: tk.Event) -> None:
+        current = self._search_var.get()
+        if current:
+            words = current.split()
+            if words:
+                self._search_var.set(" ".join(words[:-1]))
+        return "break"
+
     def _set_status(self, message: str) -> None:
         self._status_var.set(message)
 
@@ -558,7 +574,34 @@ class MainWindow:
         self._is_searching = True
         self._set_status("Searching...")
         self._update_button_states()
-        self._controller.search(query)
+
+        if is_valid_youtube_url(query):
+            self._handle_url_input(query)
+        else:
+            self._controller.search(query)
+
+    def _handle_url_input(self, url: str) -> None:
+        from youmudow.app.events import emit_log
+        self._set_status("Fetching video info...")
+        
+        def on_url_complete(video: Video | None) -> None:
+            if video:
+                self._selected_video = video
+                self._update_detail_panel(video)
+                self._update_results([video])
+                self._set_status(f"Ready: {video.title}")
+            else:
+                self._set_status("Failed to fetch video")
+            self._is_searching = False
+            self._update_button_states()
+
+        def do_fetch() -> None:
+            video = self._controller.search_url(url)
+            self._root.after(0, lambda: on_url_complete(video))
+
+        import threading
+        thread = threading.Thread(target=do_fetch, daemon=True)
+        thread.start()
 
     def _on_result_select(self, event: tk.Event) -> None:
         selection = self._results_tree.selection()
@@ -577,6 +620,7 @@ class MainWindow:
         if 0 <= index < len(results):
             self._selected_video = results[index]
             self._update_detail_panel(self._selected_video)
+            self._update_button_states()
 
     def _update_detail_panel(self, video: Video) -> None:
         self._detail_title.configure(text=video.title or "-")
