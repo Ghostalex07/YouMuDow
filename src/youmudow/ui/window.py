@@ -9,8 +9,10 @@ from tkinter import ttk
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from youmudow.domain.validators import get_all_browser_profiles, get_available_browsers, get_available_browsers
+
 from youmudow.domain.models import Video
-from youmudow.domain.validators import is_valid_youtube_url
+from youmudow.domain.validators import is_valid_youtube_url, is_playlist_url
 from youmudow.app.state import AppStateData
 from youmudow.app.events import EventType, EventBus, get_event_bus
 from youmudow.ui.widgets.log_terminal import LogTerminal
@@ -51,6 +53,7 @@ COLORS = {
     "info": "#60A5FA",
     "hover": "#2A2A36",
     "selection": "#4C3D8C",
+    "input_bg": "#2A2A36",
 }
 
 
@@ -331,12 +334,202 @@ class MainWindow:
         format_combo = ttk.Combobox(
             row3,
             textvariable=self._format_var,
-            values=["mp3", "mp4", "wav", "m4a"],
+            values=["mp3", "mp4", "m4a", "best"],
             state="readonly",
-            width=12,
+            width=8,
             font=FONT["body"],
         )
-        format_combo.pack(side="left")
+        format_combo.pack(side="left", padx=(0, SPACING["sm"]))
+
+        row4 = tk.Frame(detail_frame, bg=COLORS["surface"])
+        row4.pack(fill="x", pady=(SPACING["sm"], SPACING["md"]))
+        tk.Label(
+            row4,
+            text="Quality:",
+            bg=COLORS["surface"],
+            fg=COLORS["text_secondary"],
+            font=FONT["body"],
+            width=10,
+            anchor="w",
+        ).pack(side="left")
+
+        self._quality_var = tk.StringVar(value="best")
+        quality_combo = ttk.Combobox(
+            row4,
+            textvariable=self._quality_var,
+            values=["best", "320kbps", "256kbps", "192kbps", "1080p", "720p", "480p"],
+            state="readonly",
+            width=10,
+            font=FONT["body"],
+        )
+        quality_combo.pack(side="left")
+
+        row5 = tk.Frame(detail_frame, bg=COLORS["surface"])
+        row5.pack(fill="x", pady=(SPACING["sm"], SPACING["md"]))
+
+        self._subtitles_var = tk.BooleanVar(value=False)
+        subtitles_check = tk.Checkbutton(
+            row5,
+            text="Download subtitles",
+            variable=self._subtitles_var,
+            bg=COLORS["surface"],
+            fg=COLORS["text"],
+            activebackground=COLORS["surface"],
+            activeforeground=COLORS["text"],
+            selectcolor=COLORS["surface"],
+            relief="flat",
+            font=FONT["body"],
+            command=self._on_subtitles_toggle,
+        )
+        subtitles_check.pack(side="left")
+
+        self._subtitle_lang_var = tk.StringVar(value="en")
+        lang_entry = tk.Entry(
+            row5,
+            textvariable=self._subtitle_lang_var,
+            bg=COLORS["input_bg"],
+            fg=COLORS["text"],
+            relief="flat",
+            font=("Segoe UI", 9),
+            width=10,
+        )
+        lang_entry.pack(side="left", padx=(SPACING["sm"], 0))
+        tk.Label(
+            row5,
+            text="(en,es,fr...)",
+            bg=COLORS["surface"],
+            fg=COLORS["text_secondary"],
+            font=("Segoe UI", 8),
+        ).pack(side="left", padx=(2, 0))
+
+        self._embed_subs_var = tk.BooleanVar(value=False)
+        embed_check = tk.Checkbutton(
+            row5,
+            text="Embed",
+            variable=self._embed_subs_var,
+            bg=COLORS["surface"],
+            fg=COLORS["text_secondary"],
+            activebackground=COLORS["surface"],
+            activeforeground=COLORS["text"],
+            selectcolor=COLORS["surface"],
+            relief="flat",
+            font=("Segoe UI", 9),
+        )
+        embed_check.pack(side="left", padx=(SPACING["sm"], 0))
+
+        row6 = tk.Frame(detail_frame, bg=COLORS["surface"])
+        row6.pack(fill="x", pady=(SPACING["sm"], SPACING["md"]))
+
+        tk.Label(
+            row6,
+            text="Auth:",
+            bg=COLORS["surface"],
+            fg=COLORS["text_secondary"],
+            font=("Segoe UI", 9),
+            width=10,
+            anchor="w",
+        ).pack(side="left")
+
+        self._use_cookies_var = tk.BooleanVar(value=False)
+        self._cookies_source_var = tk.StringVar(value="browser")
+        self._cookies_file_var = tk.StringVar(value="")
+        cookies_check = tk.Checkbutton(
+            row6,
+            text="Cookies",
+            variable=self._use_cookies_var,
+            bg=COLORS["surface"],
+            fg=COLORS["text"],
+            activebackground=COLORS["surface"],
+            activeforeground=COLORS["text"],
+            selectcolor=COLORS["surface"],
+            relief="flat",
+            font=("Segoe UI", 9),
+            command=self._on_cookies_toggle,
+        )
+        cookies_check.pack(side="left")
+
+        self._browser_var = tk.StringVar(value="chrome")
+        browser_combo = ttk.Combobox(
+            row6,
+            textvariable=self._browser_var,
+            values=["chrome"],
+            state="readonly",
+            width=8,
+            font=("Segoe UI", 9),
+        )
+        browser_combo.pack(side="left", padx=(SPACING["sm"], 0))
+        browser_combo.bind("<<ComboboxSelected>>", self._on_browser_changed)
+
+        self._profile_var = tk.StringVar(value="Default")
+        self._profile_combo = ttk.Combobox(
+            row6,
+            textvariable=self._profile_var,
+            values=["Default"],
+            state="readonly",
+            width=10,
+            font=("Segoe UI", 9),
+        )
+        self._profile_combo.pack(side="left", padx=(SPACING["sm"], 0))
+
+        self._cookies_file_btn = tk.Button(
+            row6,
+            text="📁",
+            bg=COLORS["surface"],
+            fg=COLORS["text"],
+            relief="flat",
+            font=("Segoe UI", 10),
+            width=2,
+            command=self._on_select_cookies_file,
+        )
+        self._cookies_file_btn.pack(side="left", padx=(SPACING["sm"], 0))
+        self._add_hover_effect(self._cookies_file_btn, COLORS["hover"], COLORS["surface"])
+
+        row7 = tk.Frame(detail_frame, bg=COLORS["surface"])
+        row7.pack(fill="x", pady=(SPACING["sm"], SPACING["md"]))
+
+        tk.Label(
+            row7,
+            text="Options:",
+            bg=COLORS["surface"],
+            fg=COLORS["text_secondary"],
+            font=("Segoe UI", 9),
+            width=10,
+            anchor="w",
+        ).pack(side="left")
+
+        self._rate_limit_var = tk.StringVar(value="")
+        rate_entry = tk.Entry(
+            row7,
+            textvariable=self._rate_limit_var,
+            bg=COLORS["input_bg"],
+            fg=COLORS["text"],
+            relief="flat",
+            font=("Segoe UI", 9),
+            width=8,
+        )
+        rate_entry.pack(side="left", padx=(0, SPACING["sm"]))
+        tk.Label(
+            row7,
+            text="Rate (e.g. 1M)",
+            bg=COLORS["surface"],
+            fg=COLORS["text_secondary"],
+            font=("Segoe UI", 8),
+        ).pack(side="left", padx=(0, SPACING["md"]))
+
+        self._split_chapters_var = tk.BooleanVar(value=False)
+        split_check = tk.Checkbutton(
+            row7,
+            text="Split chapters",
+            variable=self._split_chapters_var,
+            bg=COLORS["surface"],
+            fg=COLORS["text"],
+            activebackground=COLORS["surface"],
+            activeforeground=COLORS["text"],
+            selectcolor=COLORS["surface"],
+            relief="flat",
+            font=("Segoe UI", 9),
+        )
+        split_check.pack(side="left")
 
         button_frame = tk.Frame(detail_frame, bg=COLORS["surface"])
         button_frame.pack(fill="x", pady=(SPACING["md"], 0))
@@ -576,7 +769,10 @@ class MainWindow:
         self._update_button_states()
 
         if is_valid_youtube_url(query):
-            self._handle_url_input(query)
+            if is_playlist_url(query):
+                self._handle_playlist_input(query)
+            else:
+                self._handle_url_input(query)
         else:
             self._controller.search(query)
 
@@ -598,6 +794,26 @@ class MainWindow:
         def do_fetch() -> None:
             video = self._controller.search_url(url)
             self._root.after(0, lambda: on_url_complete(video))
+
+        import threading
+        thread = threading.Thread(target=do_fetch, daemon=True)
+        thread.start()
+
+    def _handle_playlist_input(self, url: str) -> None:
+        self._set_status("Fetching playlist...")
+        
+        def on_playlist_complete(videos: list[Video]) -> None:
+            if videos:
+                self._update_results(videos)
+                self._set_status(f"Playlist: {len(videos)} videos")
+            else:
+                self._set_status("Failed to fetch playlist")
+            self._is_searching = False
+            self._update_button_states()
+
+        def do_fetch() -> None:
+            videos = self._controller.search_playlist(url)
+            self._root.after(0, lambda: on_playlist_complete(videos))
 
         import threading
         thread = threading.Thread(target=do_fetch, daemon=True)
@@ -625,14 +841,88 @@ class MainWindow:
     def _update_detail_panel(self, video: Video) -> None:
         self._detail_title.configure(text=video.title or "-")
         self._detail_uploader.configure(text=video.uploader or "-")
-        self._format_var.set(video.format)
+        self._format_var.set(video.options.format)
+        self._quality_var.set(video.options.quality)
+        self._subtitles_var.set(video.options.subtitles)
+        self._subtitle_lang_var.set(video.options.subtitle_lang)
+        self._embed_subs_var.set(video.options.embed_subtitles)
+        self._use_cookies_var.set(video.options.use_cookies)
+        self._rate_limit_var.set(video.options.rate_limit or "")
+        self._split_chapters_var.set(video.options.split_chapters or False)
+        
+        if video.options.cookies_file:
+            self._cookies_source_var.set("file")
+            self._cookies_file_var.set(video.options.cookies_file)
+        else:
+            self._cookies_source_var.set("browser")
+            self._browser_var.set(video.options.cookies_from_browser or "chrome")
+            self._on_browser_changed()
+            saved_profile = video.options.cookies_profile or "Default"
+            current_profiles = list(self._profile_combo["values"])
+            if saved_profile in current_profiles:
+                self._profile_var.set(saved_profile)
+            elif current_profiles:
+                self._profile_var.set(current_profiles[0])
+            else:
+                self._profile_var.set("Default")
+
+    def _on_subtitles_toggle(self) -> None:
+        pass
+
+    def _on_cookies_toggle(self) -> None:
+        enabled = self._use_cookies_var.get()
+        self._browser_var.set(get_available_browsers()[0] if get_available_browsers() else "chrome")
+        self._on_browser_changed()
+
+    def _on_select_cookies_file(self) -> None:
+        from tkinter import filedialog
+        file_path = filedialog.askopenfilename(
+            title="Select Cookies File",
+            filetypes=[("Netscape cookies", "*.txt"), ("All files", "*.*")],
+        )
+        if file_path:
+            self._use_cookies_var.set(True)
+            self._cookies_file_var.set(file_path)
+
+    def _on_browser_changed(self, event=None) -> None:
+        browser = self._browser_var.get()
+        profiles = get_all_browser_profiles()
+        browser_profiles = profiles.get(browser, [])
+        if browser_profiles:
+            profile_names = [p.name for p in browser_profiles]
+        else:
+            profile_names = ["Default"]
+        self._profile_combo["values"] = profile_names
+        self._profile_var.set(profile_names[0] if profile_names else "Default")
 
     def _on_enqueue(self) -> None:
         video = self._selected_video
         if video is None:
             return
 
-        video.format = self._format_var.get()
+        video.options.format = self._format_var.get()
+        video.options.quality = self._quality_var.get()
+        video.options.subtitles = self._subtitles_var.get()
+        video.options.subtitle_lang = self._subtitle_lang_var.get()
+        video.options.embed_subtitles = self._embed_subs_var.get()
+        video.options.use_cookies = self._use_cookies_var.get()
+        video.options.rate_limit = self._rate_limit_var.get() or None
+        video.options.split_chapters = self._split_chapters_var.get()
+        
+        if self._use_cookies_var.get():
+            if self._cookies_source_var.get() == "file" and self._cookies_file_var.get():
+                video.options.cookies_file = self._cookies_file_var.get()
+                video.options.cookies_from_browser = None
+                video.options.cookies_profile = None
+            else:
+                video.options.cookies_file = None
+                video.options.cookies_from_browser = self._browser_var.get()
+                video.options.cookies_profile = self._profile_var.get() if self._profile_var.get() != "Default" else None
+        else:
+            video.options.cookies_file = None
+            video.options.cookies_from_browser = None
+            video.options.cookies_profile = None
+        
         self._controller.enqueue(video)
         self._set_status(f"Added to queue: {video.title}")
 
@@ -644,7 +934,29 @@ class MainWindow:
         self._is_downloading = True
         self._update_button_states()
         
-        video.format = self._format_var.get()
+        video.options.format = self._format_var.get()
+        video.options.quality = self._quality_var.get()
+        video.options.subtitles = self._subtitles_var.get()
+        video.options.subtitle_lang = self._subtitle_lang_var.get()
+        video.options.embed_subtitles = self._embed_subs_var.get()
+        video.options.use_cookies = self._use_cookies_var.get()
+        video.options.rate_limit = self._rate_limit_var.get() or None
+        video.options.split_chapters = self._split_chapters_var.get()
+        
+        if self._use_cookies_var.get():
+            if self._cookies_source_var.get() == "file" and self._cookies_file_var.get():
+                video.options.cookies_file = self._cookies_file_var.get()
+                video.options.cookies_from_browser = None
+                video.options.cookies_profile = None
+            else:
+                video.options.cookies_file = None
+                video.options.cookies_from_browser = self._browser_var.get()
+                video.options.cookies_profile = self._profile_var.get() if self._profile_var.get() != "Default" else None
+        else:
+            video.options.cookies_file = None
+            video.options.cookies_from_browser = None
+            video.options.cookies_profile = None
+        
         self._controller.download_now(video)
         self._set_status(f"Downloading: {video.title}")
 

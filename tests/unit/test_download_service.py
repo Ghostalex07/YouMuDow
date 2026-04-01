@@ -12,7 +12,7 @@ from youmudow.services.download_service import (
     DownloadEventType,
     ProgressParser,
 )
-from youmudow.domain.models import Video
+from youmudow.domain.models import Video, DownloadOptions
 from youmudow.domain.enums import DownloadStatus
 
 
@@ -45,7 +45,7 @@ def sample_video():
         url="https://youtube.com/watch?v=test123",
         uploader="Test Artist",
         duration=180,
-        format="mp3",
+        options=DownloadOptions(format="mp3"),
     )
 
 

@@ -104,3 +104,56 @@ class TestIsValidFormat:
 
     def test_none_input(self):
         assert not is_valid_format(None)
+
+
+class TestBrowserSupport:
+    """Tests for browser and profile functionality."""
+
+    def test_supported_browsers_constant(self):
+        from youmudow.domain.validators import SUPPORTED_BROWSERS
+        assert isinstance(SUPPORTED_BROWSERS, list)
+        assert len(SUPPORTED_BROWSERS) == 7
+        expected = ["chrome", "chromium", "firefox", "brave", "edge", "opera", "vivaldi"]
+        assert SUPPORTED_BROWSERS == expected
+
+    def test_get_available_browsers_returns_list(self):
+        from youmudow.domain.validators import get_available_browsers
+        result = get_available_browsers()
+        assert isinstance(result, list)
+        for browser in result:
+            assert browser in ["chrome", "chromium", "firefox", "brave", "edge", "opera", "vivaldi"]
+
+    def test_check_browser_profile_returns_tuple(self):
+        from youmudow.domain.validators import check_browser_profile
+        result = check_browser_profile("firefox")
+        assert isinstance(result, tuple)
+        assert len(result) == 2
+        assert isinstance(result[0], bool)
+        assert isinstance(result[1], str)
+
+    def test_check_browser_profile_unknown(self):
+        from youmudow.domain.validators import check_browser_profile
+        exists, message = check_browser_profile("unknown_browser")
+        assert exists is False
+        assert "not installed" in message.lower() or "available" in message.lower()
+
+    def test_get_fallback_browser_returns_or_none(self):
+        from youmudow.domain.validators import get_fallback_browser
+        result = get_fallback_browser()
+        if result is not None:
+            assert result in ["chrome", "chromium", "firefox", "brave", "edge", "opera", "vivaldi"]
+
+    def test_get_all_browser_profiles_returns_dict(self):
+        from youmudow.domain.validators import get_all_browser_profiles, SUPPORTED_BROWSERS
+        result = get_all_browser_profiles()
+        assert isinstance(result, dict)
+        for browser, profiles in result.items():
+            assert browser in SUPPORTED_BROWSERS
+            assert isinstance(profiles, list)
+
+    def test_browser_profile_dataclass(self):
+        from youmudow.domain.validators import BrowserProfile
+        profile = BrowserProfile(name="Default", path="/path/to/profile", browser="chrome")
+        assert profile.name == "Default"
+        assert profile.path == "/path/to/profile"
+        assert profile.browser == "chrome"

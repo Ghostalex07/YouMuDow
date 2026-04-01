@@ -130,6 +130,25 @@ class AppController:
             self._state_manager.set_error(f"Failed to fetch URL: {e}")
             return None
 
+    def search_playlist(self, url: str, limit: int = 50) -> list[Video]:
+        if not url:
+            return []
+
+        self._state_manager.set_state(AppState.SEARCHING)
+        
+        try:
+            videos = self._search_service.get_playlist(url, limit)
+            for video in videos:
+                if video.thumbnail:
+                    continue
+                video.thumbnail = self._thumbnail_service.get_thumbnail_url(video.url)
+            self._state_manager.set_search_results(videos)
+            self._state_manager.set_state(AppState.IDLE)
+            return videos
+        except Exception as e:
+            self._state_manager.set_error(f"Failed to fetch playlist: {e}")
+            return []
+
     def select_video(self, video: Video) -> dict[str, str]:
         return self._metadata_service.format_for_display(video)
 
@@ -168,8 +187,9 @@ class AppController:
     def cancel_download(self, video: Video) -> None:
         self._state_manager.cancel_download(video)
 
-    def set_format(self, video: Video, fmt: str) -> None:
-        video.format = fmt
+    def set_format(self, video: Video, fmt: str, quality: str = "best") -> None:
+        video.options.format = fmt
+        video.options.quality = quality
 
     def set_debug_mode(self, enabled: bool) -> None:
         from youmudow.app.state import AppMode

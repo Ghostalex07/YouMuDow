@@ -16,6 +16,8 @@ class YtdlpAdapterProtocol(Protocol):
 
     def get_metadata(self, url: str) -> Video | None: ...
 
+    def get_playlist_videos(self, url: str, limit: int = 50) -> list[Video]: ...
+
 
 class SearchService:
     """Service for searching videos."""
@@ -33,3 +35,6 @@ class SearchService:
 
     def get_metadata(self, url: str) -> Video | None:
         return self._adapter.get_metadata(url)
+
+    def get_playlist(self, url: str, limit: int = 50) -> list[Video]:
+        return self._adapter.get_playlist_videos(url, limit)
