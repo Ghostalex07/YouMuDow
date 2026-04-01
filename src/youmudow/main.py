@@ -1,6 +1,5 @@
 """Main entry point for YouMuDow application."""
 
-import os
 from pathlib import Path
 
 from youmudow.app import AppController
