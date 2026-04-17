@@ -211,3 +211,5 @@ MIT License - See [LICENSE](LICENSE) for details.
 ## Contributing
 
 See [docs/contributing.md](docs/contributing.md) for development guidelines.
+
+<!-- test coauthor -->
