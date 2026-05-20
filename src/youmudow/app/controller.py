@@ -62,6 +62,8 @@ class AppController:
         self._search_thread: threading.Thread | None = None
         self._url_search_thread: threading.Thread | None = None
         self._search_cancel_event = threading.Event()
+        self._search_epoch = 0
+        self._search_epoch_lock = threading.Lock()
         self._download_complete_callback: DownloadCompleteCallback | None = None
         self._search_complete_callback: SearchCompleteCallback | None = None
         self._debug_mode = False
@@ -122,28 +124,32 @@ class AppController:
         if not url:
             return
 
-        self._search_cancel_event.clear()
+        with self._search_epoch_lock:
+            self._search_epoch += 1
+            epoch = self._search_epoch
         self._state_manager.set_state(AppState.SEARCHING)
         
         self._url_search_thread = threading.Thread(
             target=self._perform_search_url,
-            args=(url,),
+            args=(url, epoch),
             daemon=True,
         )
         self._url_search_thread.start()
 
-    def _perform_search_url(self, url: str) -> None:
+    def _perform_search_url(self, url: str, epoch: int) -> None:
         try:
-            if self._search_cancel_event.is_set():
-                self._state_manager.set_state(AppState.IDLE)
-                return
+            with self._search_epoch_lock:
+                if epoch != self._search_epoch:
+                    self._state_manager.set_state(AppState.IDLE)
+                    return
 
             base_url = url.split("&")[0] if "&" in url else url
             video = self._search_service.get_metadata(base_url)
             
-            if self._search_cancel_event.is_set():
-                self._state_manager.set_state(AppState.IDLE)
-                return
+            with self._search_epoch_lock:
+                if epoch != self._search_epoch:
+                    self._state_manager.set_state(AppState.IDLE)
+                    return
             
             if video:
                 video.thumbnail = self._thumbnail_service.get_thumbnail_url(base_url)
@@ -155,7 +161,8 @@ class AppController:
             self._state_manager.set_state(AppState.IDLE)
 
     def cancel_search(self) -> None:
-        self._search_cancel_event.set()
+        with self._search_epoch_lock:
+            self._search_epoch += 1
         self._state_manager.set_state(AppState.IDLE)
 
     def search_playlist(self, url: str, limit: int = 50) -> list[Video]:

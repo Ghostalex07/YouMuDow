@@ -186,7 +186,7 @@ class MainWindow:
         )
         self._search_entry.grid(row=0, column=0, sticky="ew", padx=SPACING["md"], pady=SPACING["md"])
         
-        def _on_paste(event) -> str:
+        def _on_paste(event) -> str | None:
             from tkinter import TclError
             try:
                 clipboard = self._root.clipboard_get()
@@ -194,7 +194,6 @@ class MainWindow:
                 return None
             if is_valid_youtube_url(clipboard):
                 self._search_var.set(clipboard)
-                self._root.after(10, self._on_search)
                 return "break"
             return None
         
@@ -235,6 +234,21 @@ class MainWindow:
         )
         self._cancel_btn.pack(side="left", padx=(SPACING["xs"], 0))
         self._cancel_btn.configure(state="disabled")
+
+        self._cancel_dl_btn = tk.Button(
+            search_frame,
+            text="Stop DL",
+            bg=COLORS["error"],
+            fg="#FFFFFF",
+            activebackground=COLORS["warning"],
+            activeforeground="#000000",
+            relief="flat",
+            bd=0,
+            font=FONT["body"],
+            command=self._on_cancel_download,
+        )
+        self._cancel_dl_btn.pack(side="left", padx=(SPACING["xs"], 0))
+        self._cancel_dl_btn.configure(state="disabled")
 
         self._search_entry.focus()
 
@@ -521,7 +535,7 @@ class MainWindow:
         subtitles_check.pack(side="left")
 
         self._subtitle_lang_var = tk.StringVar(value="en")
-        lang_entry = tk.Entry(
+        self._subtitle_lang_entry = tk.Entry(
             row5,
             textvariable=self._subtitle_lang_var,
             bg=COLORS["input_bg"],
@@ -530,7 +544,7 @@ class MainWindow:
             font=("Segoe UI", 9),
             width=10,
         )
-        lang_entry.pack(side="left", padx=(SPACING["sm"], 0))
+        self._subtitle_lang_entry.pack(side="left", padx=(SPACING["sm"], 0))
         tk.Label(
             row5,
             text="(en,es,fr...)",
@@ -540,7 +554,7 @@ class MainWindow:
         ).pack(side="left", padx=(2, 0))
 
         self._embed_subs_var = tk.BooleanVar(value=False)
-        embed_check = tk.Checkbutton(
+        self._embed_subs_check = tk.Checkbutton(
             row5,
             text="Embed",
             variable=self._embed_subs_var,
@@ -552,7 +566,7 @@ class MainWindow:
             relief="flat",
             font=("Segoe UI", 9),
         )
-        embed_check.pack(side="left", padx=(SPACING["sm"], 0))
+        self._embed_subs_check.pack(side="left", padx=(SPACING["sm"], 0))
 
         row6 = tk.Frame(self._options_frame, bg=COLORS["surface"])
         row6.pack(fill="x", pady=(SPACING["sm"], SPACING["md"]))
@@ -671,6 +685,7 @@ class MainWindow:
         split_check.pack(side="left")
 
         self._options_frame.pack_forget()
+        self._on_subtitles_toggle()
 
     def _create_queue_panel(self, parent: tk.Frame) -> None:
         self._queue_frame = tk.Frame(parent, bg=COLORS["surface"])
@@ -725,13 +740,12 @@ class MainWindow:
         if not item:
             return
         self._queue_tree.selection_set(item)
-        index = self._queue_tree.index(item)
 
         snapshot = self._controller.state.get_snapshot()
         all_videos = list(snapshot.queue) + list(snapshot.active_downloads) + list(snapshot.completed_downloads)
-        if index >= len(all_videos):
+        video = next((v for v in all_videos if v.url == item), None)
+        if not video:
             return
-        video = all_videos[index]
 
         menu = tk.Menu(self._root, tearoff=0, bg=COLORS["surface"], fg=COLORS["text"])
         menu.add_command(label="Remove from queue", command=lambda: self._controller.remove_from_queue(video))
@@ -759,11 +773,11 @@ class MainWindow:
             snapshot = self._controller.state.get_snapshot()
 
         for v in snapshot.queue:
-            self._queue_tree.insert("", "end", values=("Queued", v.title, "-"))
+            self._queue_tree.insert("", "end", iid=v.url, values=("Queued", v.title, "-"))
         for v in snapshot.active_downloads:
-            self._queue_tree.insert("", "end", values=("Downloading", v.title, f"{v.progress:.0f}%"))
+            self._queue_tree.insert("", "end", iid=v.url, values=("Downloading", v.title, f"{v.progress:.0f}%"))
         for v in snapshot.completed_downloads:
-            self._queue_tree.insert("", "end", values=("Completed", v.title, "100%"))
+            self._queue_tree.insert("", "end", iid=v.url, values=("Completed", v.title, "100%"))
 
         total = len(snapshot.queue) + len(snapshot.active_downloads) + len(snapshot.completed_downloads)
         self._queue_count_label.configure(text=f"{total} items")
@@ -1020,6 +1034,8 @@ class MainWindow:
         self._search_btn.configure(state="disabled" if is_busy else "normal")
         self._cancel_btn.configure(state="normal" if self._is_searching else "disabled")
         self._download_btn.configure(state="disabled" if is_busy or not self._selected_video else "normal")
+        if hasattr(self, '_cancel_dl_btn'):
+            self._cancel_dl_btn.configure(state="normal" if self._is_downloading else "disabled")
         if hasattr(self, '_add_all_btn'):
             self._add_all_btn.configure(state="normal" if self._is_playlist and self._playlist_videos else "disabled")
         if hasattr(self, '_open_folder_btn'):
@@ -1048,6 +1064,12 @@ class MainWindow:
     def _handle_url_input(self, url: str) -> None:
         self._set_status("Fetching video info...")
         self._controller.search_url(url)
+
+    def _on_cancel_download(self) -> None:
+        self._controller.stop_downloads()
+        self._is_downloading = False
+        self._set_status("Downloads stopped")
+        self._update_button_states()
 
     def _on_cancel_search(self) -> None:
         self._controller.cancel_search()
@@ -1212,22 +1234,32 @@ class MainWindow:
         thumbnail_url = video.thumbnail
         if not thumbnail_url:
             return
-        try:
-            from urllib.request import urlopen
-            import io
-            from PIL import Image, ImageTk
 
-            data = urlopen(thumbnail_url, timeout=5).read()
-            img = Image.open(io.BytesIO(data))
-            max_w = 240
-            max_h = 120
-            img.thumbnail((max_w, max_h), Image.LANCZOS)
-            self._tk_image = ImageTk.PhotoImage(img)
-            self._thumbnail_label.configure(image=self._tk_image, text="")
-        except ImportError:
-            self._thumbnail_label.configure(text=f"[Thumbnail: {thumbnail_url}]")
-        except Exception:
-            pass
+        def _fetch_and_set() -> None:
+            try:
+                from urllib.request import urlopen
+                import io
+                data = urlopen(thumbnail_url, timeout=5).read()
+                self._root.after(0, _set_thumbnail, data, thumbnail_url)
+            except Exception:
+                pass
+
+        def _set_thumbnail(data: bytes, url: str) -> None:
+            try:
+                from PIL import Image, ImageTk
+                img = Image.open(io.BytesIO(data))
+                max_w = 240
+                max_h = 120
+                img.thumbnail((max_w, max_h), Image.LANCZOS)
+                self._tk_image = ImageTk.PhotoImage(img)
+                self._thumbnail_label.configure(image=self._tk_image, text="")
+            except ImportError:
+                self._thumbnail_label.configure(text=f"[Thumbnail: {url}]")
+            except Exception:
+                pass
+
+        import threading
+        threading.Thread(target=_fetch_and_set, daemon=True).start()
 
     def _on_retry_download(self) -> None:
         if self._selected_video is None:
@@ -1277,7 +1309,9 @@ class MainWindow:
             self._add_hover_effect(self._retry_btn, COLORS["warning"], COLORS["warning"])
 
     def _on_subtitles_toggle(self) -> None:
-        pass
+        state = "normal" if self._subtitles_var.get() else "disabled"
+        self._subtitle_lang_entry.configure(state=state)
+        self._embed_subs_check.configure(state=state)
 
     def _on_cookies_toggle(self) -> None:
         self._browser_var.set(get_available_browsers()[0] if get_available_browsers() else "chrome")

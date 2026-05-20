@@ -40,16 +40,21 @@ class AppConfig:
                 with open(CONFIG_FILE) as f:
                     stored = json.load(f)
                 self._data = {**DEFAULT_CONFIG, **stored}
-        except Exception:
-            pass
+        except json.JSONDecodeError:
+            import sys
+            print(f"[config] Corrupted config file, using defaults: {CONFIG_FILE}", file=sys.stderr)
+        except OSError as e:
+            import sys
+            print(f"[config] Failed to load config: {e}", file=sys.stderr)
 
     def save(self) -> None:
         try:
             CONFIG_DIR.mkdir(parents=True, exist_ok=True)
             with open(CONFIG_FILE, "w") as f:
                 json.dump(self._data, f, indent=2)
-        except Exception:
-            pass
+        except OSError as e:
+            import sys
+            print(f"[config] Failed to save config: {e}", file=sys.stderr)
 
     def get(self, key: str, default: Any = None) -> Any:
         return self._data.get(key, default)
