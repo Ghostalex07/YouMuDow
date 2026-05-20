@@ -29,5 +29,11 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
+# PyInstaller
+*.spec
+
+# Linting
+.ruff_cache/
+
 # Project specific
 *.log

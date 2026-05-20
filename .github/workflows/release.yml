@@ -1,0 +1,99 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pip install Pillow pyinstaller
+
+      - name: Install tkinter
+        run: sudo apt-get install -y python3-tk
+
+      - name: Build
+        run: python scripts/package.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: YouMuDow-linux
+          path: dist/YouMuDow-linux.zip
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pip install Pillow pyinstaller
+
+      - name: Build
+        run: python scripts/package.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: YouMuDow-windows
+          path: dist/YouMuDow-windows.zip
+
+  create-release:
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: YouMuDow-linux
+          path: dist/
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: YouMuDow-windows
+          path: dist/
+
+      - name: Extract changelog for this version
+        id: changelog
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          NOTES=$(awk "/^## \[$VERSION\]/{found=1; next} found && /^## \[/{exit} found{print}" CHANGELOG.md)
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body: ${{ steps.changelog.outputs.notes }}
+          files: |
+            dist/YouMuDow-linux.zip
+            dist/YouMuDow-windows.zip
+          draft: false
+          prerelease: false

@@ -1,114 +1,69 @@
 # YouMuDow
 
-A modern YouTube music downloader with real-time progress, embedded metadata, and a clean desktop interface.
-
 ![Python](https://img.shields.io/badge/python-3.10+-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![Version](https://img.shields.io/badge/version-1.0.0-green.svg)
+
+A modern YouTube music downloader with real-time progress, embedded metadata, and a clean desktop interface.
 
 ## Features
 
 - **Multi-format downloads**: MP3, MP4, WAV, M4A, FLAC, AAC, OGG
-- **Embedded metadata**: Title, artist, thumbnails automatically added to files
-- **Real-time terminal**: View download progress and logs as they happen
-- **Queue system**: Download multiple videos sequentially
-- **Clean GUI**: Simple and intuitive interface built with Tkinter
-- **Cross-platform**: Works on Linux, Windows, and macOS
-- **Cookie authentication**: 
-  - Browser cookies (Chrome, Firefox, Edge, Brave, Opera, Vivaldi, Chromium)
-  - Multi-profile support (select specific browser profile)
-  - Cookies file import (.txt Netscape format)
-- **Download options**:
-  - Rate limiting (e.g., 1M, 500K)
-  - Chapter splitting (split video into chapters)
-  - Multi-language subtitles
-  - Advanced quality selection (1080p, 720p, 480p)
-  - Audio quality (320kbps, 256kbps, 192kbps, etc.)
-- **Error handling**: Automatic retry without cookies on failure, fallback browser detection
-- **Keyboard shortcuts**:
-  - `Ctrl+Enter` - Search
-  - `Ctrl+D` - Download selected video
-  - `Ctrl+Q` - Add to queue
-  - `Ctrl+L` - Focus search field
-  - `Ctrl+N` - Clear search field
-  - `Escape` - Cancel current operation
-- **Auto-replace URL**: Paste a YouTube URL to automatically replace the search field
-- **Comprehensive tests**: 117 unit tests
-
-## Screenshots
-
-```
-┌─────────────────────────────────────────────────────────┐
-│ YouMuDow                                    [Debug Mode] │
-├─────────────────────────────────────────────────────────┤
-│ [Search...                              ] [Search]       │
-├───────────────────────────────────┬─────────────────────┤
-│ Title        │ Uploader  │ Dur.  │ Details             │
-│──────────────┼───────────┼───────│────────────────────│
-│ Song 1       │ Artist    │ 3:45  │ Title: Song 1      │
-│ Song 2       │ Artist    │ 4:12  │ Uploader: Artist   │
-│                                 │ Format: [MP3 ▼]    │
-│                                 │ [Add to Queue]     │
-├─────────────────────────────────────────────────────────┤
-│ Output Log                                               │
-│─────────────────────────────────────────────────────────│
-│ [12:00:00] [DOWNLOAD] Starting: Song 1                 │
-│ [12:00:05] [download] 45.5% at 1.2MiB/s ETA 00:30   │
-│ [12:00:30] [DONE] Song 1                              │
-├─────────────────────────────────────────────────────────┤
-│ Downloading: 45.5%                          ███████░░░ │
-└─────────────────────────────────────────────────────────┘
-```
+- **Embedded metadata and thumbnails**: Title, artist, thumbnail automatically added to files
+- **Real-time progress bar and download log**: See progress as it happens
+- **Queue system with visible queue panel**: Manage queued, active, and completed downloads
+- **Thumbnail preview in detail panel**: See video thumbnails using Pillow
+- **Persistent configuration**: Remembers output folder, format, cookies, window geometry
+- **System notifications on completion**: Desktop notification when download finishes
+- **Cookie authentication**: Chrome, Firefox, Edge, Brave, Opera, Vivaldi, multi-profile support
+- **Rate limiting, chapter splitting, subtitle download**: Advanced download options
+- **yt-dlp auto-updater built in**: Help > Update yt-dlp keeps it current
+- **Export download logs to file**: File > Export Logs saves session logs
+- **Retry failed downloads**: One-click retry for errored downloads
+- **Clipboard URL detection on startup**: Automatically detects YouTube URLs in clipboard
+- **Cross-platform**: Linux, macOS, Windows
+- **Keyboard shortcuts**: Ctrl+D to download, Ctrl+Q to queue, and more
 
 ## Requirements
 
 - Python 3.10+
-- yt-dlp
-- ffmpeg
-- tkinter (usually included with Python)
+- ffmpeg (required by yt-dlp)
+- tkinter (included with Python on Windows/macOS; needs separate install on Linux)
 
-### Linux (Debian/Ubuntu)
+## Installation
+
+### Option 1: Run from source
 
 ```bash
-sudo apt update
-sudo apt install python3-tk ffmpeg
-pip install yt-dlp
+git clone https://github.com/Ghostalex07/YouMuDow.git
+cd YouMuDow
+pip install -e ".[dev]"
+youmudow
+```
+
+### Option 2: Download executable
+
+Download the latest release from the [Releases page](https://github.com/Ghostalex07/YouMuDow/releases).
+ffmpeg must still be installed separately.
+
+## ffmpeg Installation
+
+### Linux
+
+```bash
+sudo apt install ffmpeg       # Debian/Ubuntu
+sudo dnf install ffmpeg       # Fedora
+```
+
+### macOS
+
+```bash
+brew install ffmpeg
 ```
 
 ### Windows
 
-1. Install Python 3.10+ from [python.org](https://python.org)
-2. Install ffmpeg and add to PATH
-3. Run: `pip install yt-dlp`
-
-### Browser Cookies (Optional)
-
-For cookie authentication, ensure one of these browsers is installed:
-- Chrome / Chromium
-- Firefox
-- Edge
-- Brave
-- Opera
-- Vivaldi
-
-The app will automatically detect installed browsers and show them in the dropdown.
-
-## Installation
-
-### Option 1: Clone and install
-
-```bash
-git clone https://github.com/YourUsername/YouMuDow.git
-cd YouMuDow
-pip install -e .
-```
-
-### Option 2: Run directly
-
-```bash
-git clone https://github.com/YourUsername/YouMuDow.git
-cd YouMuDow
-PYTHONPATH=src python3 -m youmudow.main
-```
+Download from [ffmpeg.org](https://ffmpeg.org/download.html) and add to PATH.
 
 ## Usage
 
@@ -116,15 +71,14 @@ PYTHONPATH=src python3 -m youmudow.main
 2. **Select**: Click on a result
 3. **Choose format**: Select MP3, MP4, WAV, or M4A
 4. **Download options** (optional):
-   - **Cookies**: Enable and select browser (Firefox, Chrome, etc.) or import cookies file
-   - **Profile**: Choose browser profile for authentication
-   - **Rate limit**: Limit download speed (e.g., 1M, 500K)
+   - **Cookies**: Enable and select browser or import cookies file
+   - **Rate limit**: Limit download speed (e.g., `1M`, `500K`)
    - **Split chapters**: Split video into separate files per chapter
-   - **Subtitles**: Download and embed subtitles (multiple languages supported)
-5. **Download**: Click "Download Now" or add to queue
-6. **Debug Mode**: Enable via View → Debug Mode to see real-time logs
+   - **Subtitles**: Download and embed subtitles
+5. **Download**: Click Download or add to queue
+6. **Monitor**: Watch progress in the queue panel and status bar
 
-### Keyboard Shortcuts
+## Keyboard Shortcuts
 
 | Shortcut | Action |
 |----------|--------|
@@ -136,101 +90,64 @@ PYTHONPATH=src python3 -m youmudow.main
 | `Escape` | Cancel operation |
 | `Ctrl+V` | Paste URL (auto-replaces field) |
 
-## Project Structure
+## Building from source
 
-```
-youmudow/
-├── src/youmudow/
-│   ├── main.py              # Entry point
-│   ├── domain/              # Data models
-│   │   ├── models.py       # Video model
-│   │   ├── enums.py        # DownloadStatus
-│   │   └── validators.py   # URL validation
-│   ├── adapters/           # External tools
-│   │   └── ytdlp_adapter.py
-│   ├── services/           # Business logic
-│   │   ├── search_service.py
-│   │   ├── download_service.py
-│   │   ├── metadata_service.py
-│   │   └── thumbnail_service.py
-│   ├── app/                # Application layer
-│   │   ├── controller.py   # Main controller
-│   │   ├── state.py       # State management
-│   │   └── events.py      # Event system
-│   └── ui/                # Interface layer
-│       ├── window.py       # Main window
-│       ├── styles/         # Theme system
-│       └── widgets/       # Reusable widgets
-├── tests/
-│   └── unit/              # Unit tests
-├── docs/                  # Documentation
-└── scripts/               # Build scripts
+```bash
+pip install pyinstaller
+python scripts/build.py       # generates executable in dist/
+python scripts/package.py     # generates distributable ZIP
 ```
 
 ## Development
 
 ```bash
-# Install with dev dependencies
 pip install -e ".[dev]"
-
-# Run tests
 pytest tests/ -v
-
-# Format code
 ruff check src/
 ```
 
-## Building from source
-
-Install dev dependencies:
-```bash
-pip install -e ".[dev]"
-pip install pyinstaller
-```
-
-Build executable:
-```bash
-python scripts/build.py
-```
-
-Create distributable package:
-```bash
-python scripts/package.py
-```
-
-Output will be in the `dist/` folder.
-Note: ffmpeg must be installed separately by end users.
-
-## Architecture
+## Project Structure
 
 ```
-┌──────────────────────────────────────────────────────┐
-│                    UI Layer (Tkinter)               │
-│  MainWindow → Controllers → Widgets                │
-└─────────────────────────┬────────────────────────────┘
-                          │
-┌─────────────────────────▼────────────────────────────┐
-│              App Layer (Controller)                  │
-│  State Management ← Events ← Business Logic         │
-└─────────────────────────┬────────────────────────────┘
-                          │
-┌─────────────────────────▼────────────────────────────┐
-│              Services Layer                           │
-│  SearchService → DownloadService → MetadataService    │
-└─────────────────────────┬────────────────────────────┘
-                          │
-┌─────────────────────────▼────────────────────────────┐
-│              Adapter Layer (yt-dlp)                  │
-│  YtdlpAdapter → subprocess → yt-dlp binary          │
-└──────────────────────────────────────────────────────┘
+youmudow/
+├── src/youmudow/
+│   ├── __init__.py            # App version
+│   ├── main.py                # Entry point
+│   ├── domain/                # Data models, validators
+│   │   ├── models.py
+│   │   ├── enums.py
+│   │   └── validators.py
+│   ├── adapters/              # yt-dlp integration
+│   │   └── ytdlp_adapter.py
+│   ├── services/              # Business logic
+│   │   ├── download_service.py
+│   │   ├── search_service.py
+│   │   ├── metadata_service.py
+│   │   ├── notification_service.py
+│   │   └── updater_service.py
+│   ├── app/                   # Application layer
+│   │   ├── controller.py
+│   │   ├── state.py
+│   │   ├── config.py
+│   │   └── events.py
+│   └── ui/                    # Interface layer
+│       ├── window.py
+│       ├── styles/
+│       └── widgets/
+│           └── log_terminal.py
+├── tests/
+│   └── unit/
+├── scripts/
+│   ├── build.py               # PyInstaller build
+│   └── package.py             # Distribution packaging
+├── .github/workflows/
+│   ├── ci.yml                 # CI pipeline
+│   └── release.yml            # Automated release
+├── CHANGELOG.md
+├── README.md
+└── pyproject.toml
 ```
 
 ## License
 
 MIT License - See [LICENSE](LICENSE) for details.
-
-## Contributing
-
-See [docs/contributing.md](docs/contributing.md) for development guidelines.
-
-<!-- test coauthor -->

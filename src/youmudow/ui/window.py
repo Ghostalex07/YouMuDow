@@ -1487,13 +1487,34 @@ class MainWindow:
             self._use_cookies_var.set(self._config.get("use_cookies", False))
             self._cookies_source_var.set(self._config.get("cookies_source", "browser"))
             self._cookies_file_var.set(self._config.get("cookies_file", ""))
-            self._browser_var.set(self._config.get("browser", get_available_browsers()[0] if get_available_browsers() else "chrome"))
+
+            saved_browser = self._config.get("browser", "chrome")
+            available = get_available_browsers()
+            if available:
+                browser_to_use = saved_browser if saved_browser in available else available[0]
+                self._browser_var.set(browser_to_use)
+            else:
+                self._browser_var.set("chrome")
+
             self._profile_var.set(self._config.get("profile", "Default"))
             self._rate_limit_var.set(self._config.get("rate_limit", ""))
             self._split_chapters_var.set(self._config.get("split_chapters", False))
+
             geo = self._config.window_geometry
             if geo:
-                self._root.geometry(geo)
+                try:
+                    self._root.geometry(geo)
+                    self._root.update_idletasks()
+                    x = self._root.winfo_x()
+                    y = self._root.winfo_y()
+                    w = self._root.winfo_width()
+                    h = self._root.winfo_height()
+                    sw = self._root.winfo_screenwidth()
+                    sh = self._root.winfo_screenheight()
+                    if x + w < 0 or y + h < 0 or x > sw or y > sh:
+                        self._root.geometry(f"{min(sw, 1200)}x{min(sh, 800)}+0+0")
+                except Exception:
+                    pass
         except Exception:
             pass
 
