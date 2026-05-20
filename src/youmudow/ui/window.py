@@ -1055,17 +1055,15 @@ class MainWindow:
 
         for item in self._results_tree.get_children():
             self._results_tree.delete(item)
-        self._results_tree.insert("", "end", values=("Searching...", "", ""))
 
         if is_valid_youtube_url(query):
-            for item in self._results_tree.get_children():
-                self._results_tree.delete(item)
             if is_playlist_url(query):
                 self._is_playlist = True
                 self._handle_playlist_input(query)
             else:
                 self._handle_url_input(query)
         else:
+            self._results_tree.insert("", "end", values=("Searching...", "", ""))
             self._controller.search(query)
 
     def _handle_url_input(self, url: str) -> None:
