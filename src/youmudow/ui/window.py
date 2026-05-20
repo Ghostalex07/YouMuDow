@@ -1238,7 +1238,6 @@ class MainWindow:
         def _fetch_and_set() -> None:
             try:
                 from urllib.request import urlopen
-                import io
                 data = urlopen(thumbnail_url, timeout=5).read()
                 self._root.after(0, _set_thumbnail, data, thumbnail_url)
             except Exception:
@@ -1247,6 +1246,7 @@ class MainWindow:
         def _set_thumbnail(data: bytes, url: str) -> None:
             try:
                 from PIL import Image, ImageTk
+                import io
                 img = Image.open(io.BytesIO(data))
                 max_w = 240
                 max_h = 120
