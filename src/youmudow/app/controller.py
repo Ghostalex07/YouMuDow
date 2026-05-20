@@ -6,16 +6,15 @@ Handles user actions and state management.
 
 import threading
 from pathlib import Path
-from typing import Callable, Protocol
+from typing import Protocol
 
 from youmudow.domain.models import Video
-from youmudow.domain.enums import DownloadStatus
 from youmudow.services.search_service import SearchService
 from youmudow.services.download_service import DownloadService
 from youmudow.services.metadata_service import MetadataService
 from youmudow.services.thumbnail_service import ThumbnailService
 from youmudow.app.state import StateManager, AppState
-from youmudow.app.events import get_event_bus, emit_log
+from youmudow.app.events import emit_log
 
 
 class ControllerProtocol(Protocol):

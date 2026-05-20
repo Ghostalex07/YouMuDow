@@ -7,7 +7,7 @@ All business logic is delegated to the controller.
 import tkinter as tk
 from tkinter import ttk
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 import webbrowser
 
 from youmudow.domain.validators import get_all_browser_profiles, get_available_browsers
@@ -92,8 +92,8 @@ class MainWindow:
         self._debug_mode = debug_mode
         self._debug_panel_visible = False
         self._event_bus: EventBus | None = None
-        self._log_unsubscribe: callable | None = None
-        self._clear_unsubscribe: callable | None = None
+        self._log_unsubscribe: Callable | None = None
+        self._clear_unsubscribe: Callable | None = None
         
         self._log_terminal: LogTerminal | None = None
         self._log_frame: tk.Frame | None = None
@@ -724,6 +724,7 @@ class MainWindow:
         except Exception as e:
             import traceback
             traceback.print_exc()
+            self._set_status(f"Error: {e}")
 
     def _on_download_complete(self, video: Video) -> None:
         self._is_downloading = False
@@ -972,7 +973,6 @@ class MainWindow:
         pass
 
     def _on_cookies_toggle(self) -> None:
-        enabled = self._use_cookies_var.get()
         self._browser_var.set(get_available_browsers()[0] if get_available_browsers() else "chrome")
         self._on_browser_changed()
 
@@ -1100,7 +1100,8 @@ class MainWindow:
         self._update_button_states()
         
         self._apply_options_to_video(video)
-        self._controller.download_now(video)
+        self._controller.enqueue(video)
+        self._controller.start_downloads()
         self._set_status(f"Downloading: {video.title}")
 
     def _on_start_queue(self) -> None:

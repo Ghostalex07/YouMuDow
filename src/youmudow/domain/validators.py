@@ -71,8 +71,6 @@ def get_unique_filename(directory: Path, filename: str) -> Path:
             if not new_path.exists():
                 return new_path
             return directory / f"{name}_final{ext}"
-    
-    return path
 
 
 def validate_format_quality(format: str, quality: str) -> tuple[bool, str]:
@@ -281,7 +279,6 @@ def get_fallback_browser() -> str | None:
     Returns:
         Browser name to use, or None if no browser found
     """
-    import os
     
     for browser in SUPPORTED_BROWSERS:
         exists, _ = check_browser_profile(browser)

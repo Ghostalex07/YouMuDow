@@ -6,10 +6,9 @@ Simple pub/sub event system for communication between layers.
 import threading
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Callable, TypeVar, Generic
+from typing import Callable, TypeVar
 
 from youmudow.domain.models import Video
-from youmudow.domain.enums import DownloadStatus
 
 
 T = TypeVar("T")
@@ -158,14 +157,16 @@ class EventBus:
         for handler in handlers:
             try:
                 handler(event)
-            except Exception:
-                pass
+            except Exception as e:
+                import sys
+                print(f"[EventBus] Handler error: {e}", file=sys.stderr)
 
         for handler in global_handlers:
             try:
                 handler(event)
-            except Exception:
-                pass
+            except Exception as e:
+                import sys
+                print(f"[EventBus] Handler error: {e}", file=sys.stderr)
 
     def clear(self) -> None:
         with self._subscribe_lock:

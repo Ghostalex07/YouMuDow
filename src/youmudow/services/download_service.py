@@ -5,11 +5,12 @@ Emits detailed progress events for integration with any UI layer.
 """
 
 import threading
+import time
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Callable, Protocol
+from typing import Callable
 
 from youmudow.adapters.ytdlp_adapter import YtdlpAdapter
 from youmudow.domain.models import Video
@@ -178,6 +179,10 @@ class DownloadWorker(threading.Thread):
 
         self._adapter.download(video, self._output_path, progress_callback_fn)
         self._current_video = None
+        self._progress_callback(DownloadEvent(
+            type=DownloadEventType.COMPLETED,
+            video=video,
+        ))
 
 
 class DownloadQueue:
@@ -213,6 +218,13 @@ class DownloadQueue:
     def clear(self) -> None:
         with self._lock:
             self._queue.clear()
+
+    def remove(self, video: Video) -> None:
+        with self._lock:
+            try:
+                self._queue.remove(video)
+            except ValueError:
+                pass
 
 
 class DownloadService:
@@ -309,9 +321,7 @@ class DownloadService:
             worker.cancel()
 
     def cancel_video(self, video: Video) -> None:
-        self._queue._queue = deque(
-            v for v in self._queue._queue if v != video
-        )
+        self._queue.remove(video)
         self._emit_event(DownloadEvent(
             type=DownloadEventType.CANCELLED,
             video=video,
@@ -333,7 +343,7 @@ class DownloadService:
                             video=video,
                         ))
             else:
-                threading.Event().wait(0.1)
+                time.sleep(0.1)
 
     def _handle_worker_event(self, event: DownloadEvent) -> None:
         if event.type == DownloadEventType.PROGRESS:

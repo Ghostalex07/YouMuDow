@@ -5,7 +5,7 @@ and application status.
 """
 
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Callable
 
@@ -100,57 +100,57 @@ class StateManager:
     def set_state(self, state: AppState) -> None:
         with self._lock:
             self._state = state
-            self._notify_change()
+        self._notify_change()
 
     def set_mode(self, mode: AppMode) -> None:
         with self._lock:
             self._mode = mode
-            self._notify_change()
+        self._notify_change()
 
     def set_error(self, message: str) -> None:
         with self._lock:
             self._state = AppState.ERROR
             self._error_message = message
-            self._notify_change()
+        self._notify_change()
 
     def clear_error(self) -> None:
         with self._lock:
             if self._state == AppState.ERROR:
                 self._state = AppState.IDLE
             self._error_message = ""
-            self._notify_change()
+        self._notify_change()
 
     def set_search_results(self, results: list[Video]) -> None:
         with self._lock:
             self._search_results = list(results)
-            self._notify_change()
+        self._notify_change()
 
     def add_search_result(self, video: Video) -> None:
         with self._lock:
             self._search_results.append(video)
-            self._notify_change()
+        self._notify_change()
 
     def clear_search_results(self) -> None:
         with self._lock:
             self._search_results.clear()
-            self._notify_change()
+        self._notify_change()
 
     def add_to_queue(self, video: Video) -> None:
         with self._lock:
             video.status = DownloadStatus.QUEUED
             self._queue.append(video)
-            self._notify_change()
+        self._notify_change()
 
     def remove_from_queue(self, video: Video) -> None:
         with self._lock:
             if video in self._queue:
                 self._queue.remove(video)
-            self._notify_change()
+        self._notify_change()
 
     def clear_queue(self) -> None:
         with self._lock:
             self._queue.clear()
-            self._notify_change()
+        self._notify_change()
 
     def start_download(self, video: Video) -> None:
         with self._lock:
@@ -160,12 +160,12 @@ class StateManager:
             self._active_downloads.append(video)
             if self._state != AppState.DOWNLOADING:
                 self._state = AppState.DOWNLOADING
-            self._notify_change()
+        self._notify_change()
 
     def update_progress(self, video: Video, progress: float) -> None:
         with self._lock:
             video.progress = progress
-            self._notify_change()
+        self._notify_change()
 
     def finish_download(self, video: Video) -> None:
         with self._lock:
@@ -174,7 +174,7 @@ class StateManager:
             self._completed_downloads.append(video)
             if not self._active_downloads:
                 self._state = AppState.IDLE
-            self._notify_change()
+        self._notify_change()
 
     def cancel_download(self, video: Video) -> None:
         with self._lock:
@@ -184,7 +184,7 @@ class StateManager:
                 self._queue.append(video)
             if not self._active_downloads:
                 self._state = AppState.IDLE
-            self._notify_change()
+        self._notify_change()
 
     def on_change(self, callback: Callable[[AppStateData], None]) -> None:
         self._change_callbacks.append(callback)
@@ -209,9 +209,19 @@ class StateManager:
             self._completed_downloads.clear()
             self._state = AppState.IDLE
             self._error_message = ""
-            self._notify_change()
+        self._notify_change()
 
     def _notify_change(self) -> None:
-        snapshot = self.get_snapshot()
-        for callback in self._change_callbacks:
+        with self._lock:
+            snapshot = AppStateData(
+                search_results=list(self._search_results),
+                queue=list(self._queue),
+                active_downloads=list(self._active_downloads),
+                completed_downloads=list(self._completed_downloads),
+                state=self._state,
+                mode=self._mode,
+                error_message=self._error_message,
+            )
+            callbacks = list(self._change_callbacks)
+        for callback in callbacks:
             callback(snapshot)

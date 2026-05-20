@@ -3,7 +3,6 @@
 Handles thumbnail URL generation and caching.
 """
 
-import hashlib
 from pathlib import Path
 from typing import Optional
 

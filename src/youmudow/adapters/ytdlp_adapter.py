@@ -74,7 +74,7 @@ class YtdlpAdapter:
             self._log_callback(message)
 
     def _build_base_args(self, video: Video | None = None, skip_cookies: bool = False) -> list[str]:
-        from youmudow.domain.validators import check_browser_profile, get_fallback_browser, get_all_browser_profiles, SUPPORTED_BROWSERS
+        from youmudow.domain.validators import check_browser_profile, get_fallback_browser, SUPPORTED_BROWSERS
         
         args = ["yt-dlp", "--no-check-certificate"]
         
@@ -101,7 +101,7 @@ class YtdlpAdapter:
                                 browser = fallback
                                 profile = None
                             else:
-                                self._log(f"[AUTH] Skipping cookies - no browser found")
+                                self._log("[AUTH] Skipping cookies - no browser found")
                                 skip_cookies = True
                         else:
                             cookie_arg = browser
@@ -113,7 +113,6 @@ class YtdlpAdapter:
                     else:
                         self._log(f"[WARNING] Unknown browser: {browser}")
                 elif opts.cookies_file:
-                    from pathlib import Path
                     cookie_path = Path(opts.cookies_file)
                     if cookie_path.exists():
                         args.extend(["--cookies", str(cookie_path)])
@@ -145,7 +144,7 @@ class YtdlpAdapter:
             ])
         
         if self._config.embed_metadata:
-            args.append("--add-metadata")
+            args.append("--embed-metadata")
         
         if self._config.embed_thumbnail and opts.format in ("mp3", "m4a", "opus"):
             args.append("--embed-thumbnail")
@@ -360,7 +359,7 @@ class YtdlpAdapter:
         if opts.subtitles:
             self._log(f"[SUB] Downloading subtitles ({opts.subtitle_lang})")
             if opts.embed_subtitles:
-                self._log(f"[SUB] Embedding subtitles in file")
+                self._log("[SUB] Embedding subtitles in file")
         
         self._log("-" * 50)
 
@@ -391,15 +390,22 @@ class YtdlpAdapter:
                     error_lines = []
                     
                     import threading
-                    output_lines = []
                     output_lock = threading.Lock()
                     
                     def read_output():
                         try:
                             for line in process.stdout:
                                 if line:
+                                    stripped = line.strip()
                                     with output_lock:
-                                        output_lines.append(line.strip())
+                                        if "error" in stripped.lower() or "warning" in stripped.lower():
+                                            error_lines.append(stripped)
+                                    self._log(stripped)
+                                    if progress_callback:
+                                        progress_info = self._parse_progress(stripped)
+                                        if progress_info:
+                                            video.progress = progress_info.progress
+                                            progress_callback(progress_info.progress, progress_info.speed)
                         except Exception:
                             pass
                     
@@ -414,18 +420,6 @@ class YtdlpAdapter:
                         process.kill()
                         break
                     reader.join(timeout=1)
-                    
-                    for line in output_lines:
-                        if line:
-                            if "error" in line.lower() or "warning" in line.lower():
-                                error_lines.append(line)
-                            self._log(line)
-                            
-                            if progress_callback:
-                                progress_info = self._parse_progress(line)
-                                if progress_info:
-                                    video.progress = progress_info.progress
-                                    progress_callback(progress_info.progress, progress_info.speed)
 
                     if process.returncode == 0:
                         final_path = get_unique_filename(output_path, f"{safe_title}.{fmt}")
@@ -453,7 +447,7 @@ class YtdlpAdapter:
                         
                         if is_cookie_error and opts.use_cookies and not cookie_failed and attempt == 1:
                             cookie_failed = True
-                            self._log(f"[AUTH] Failed to load browser cookies, will retry without authentication")
+                            self._log("[AUTH] Failed to load browser cookies, will retry without authentication")
                             args = self._build_download_args(video, skip_cookies=True)
                             continue
                         
