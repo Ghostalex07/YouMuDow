@@ -1,24 +1,21 @@
 """Main entry point for YouMuDow application."""
 
-import platform
-from pathlib import Path
-
 from youmudow.app import AppController
+from youmudow.app.config import AppConfig
 from youmudow.ui import MainWindow
 
 
 def main() -> None:
     """Run the YouMuDow application."""
+    config = AppConfig()
+    
     controller = AppController()
     
-    if platform.system() == "Windows":
-        default_path = Path.home() / "Desktop" / "YouMuDow"
-    else:
-        default_path = Path.home() / "Music" / "YouMuDow"
-    default_path.mkdir(parents=True, exist_ok=True)
-    controller.set_output_path(default_path)
+    output_path = config.output_path
+    output_path.mkdir(parents=True, exist_ok=True)
+    controller.set_output_path(output_path)
     
-    window = MainWindow(controller)
+    window = MainWindow(controller, config=config)
     window.run()
 
 

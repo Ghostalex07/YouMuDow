@@ -7,7 +7,7 @@ All business logic is delegated to the controller.
 import tkinter as tk
 from tkinter import ttk
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Any, Callable
 import webbrowser
 
 from youmudow.domain.validators import get_all_browser_profiles, get_available_browsers
@@ -74,7 +74,8 @@ class MainWindow:
         widget.bind("<Enter>", on_enter)
         widget.bind("<Leave>", on_leave)
 
-    def __init__(self, controller: "AppController", debug_mode: bool = False) -> None:
+    def __init__(self, controller: "AppController", debug_mode: bool = False, config: Any = None) -> None:
+        self._config = config
         self._controller = controller
         self._root = tk.Tk()
         self._root.title("YouMuDow")
@@ -101,9 +102,11 @@ class MainWindow:
         self._main_content_frame: tk.Frame | None = None
 
         self._setup_ui()
+        self._apply_config()
         self._setup_event_listeners()
         self._setup_controller_callbacks()
         self._setup_state_observer()
+        self._root.after(500, self._check_clipboard_on_start)
 
     def _setup_ui(self) -> None:
         self._root.columnconfigure(0, weight=1)
@@ -127,10 +130,13 @@ class MainWindow:
         main_frame.columnconfigure(0, weight=3)
         main_frame.columnconfigure(1, weight=2)
         main_frame.rowconfigure(1, weight=1)
+        main_frame.rowconfigure(2, weight=0)
 
         self._create_search_bar(main_frame)
         self._create_results_panel(main_frame)
         self._create_detail_panel(main_frame)
+        self._create_queue_panel(main_frame)
+        self._queue_panel_visible = False
 
     def _create_log_panel(self) -> None:
         self._log_frame = tk.Frame(self._paned_window, bg=COLORS["bg"])
@@ -315,6 +321,18 @@ class MainWindow:
         )
         self._detail_toggle_btn.pack(side="left")
 
+        # Thumbnail
+        self._thumbnail_label = tk.Label(
+            detail_container,
+            text="[No thumbnail]",
+            bg=COLORS["surface"],
+            fg=COLORS["text_secondary"],
+            font=FONT["small"],
+            anchor="center",
+            height=8,
+        )
+        self._thumbnail_label.pack(fill="x", pady=(0, SPACING["sm"]))
+
         row_title = tk.Frame(detail_container, bg=COLORS["surface"])
         row_title.pack(fill="x", pady=(0, SPACING["xs"]))
         tk.Label(
@@ -371,10 +389,54 @@ class MainWindow:
             font=FONT["body"],
             command=self._on_download_now,
         )
-        self._download_btn.pack(fill="x", pady=(0, SPACING["md"]))
+        self._download_btn.pack(fill="x", pady=(0, SPACING["xs"]))
         self._add_hover_effect(self._download_btn, COLORS["secondary"], COLORS["primary"])
 
-        tk.Frame(detail_container, height=2, bg=COLORS["bg"]).pack(fill="x", pady=(0, SPACING["md"]))
+        # Open folder & Add all buttons (side by side)
+        btn_row = tk.Frame(detail_container, bg=COLORS["bg"])
+        btn_row.pack(fill="x", pady=(0, SPACING["md"]))
+
+        self._open_folder_btn = tk.Button(
+            btn_row,
+            text="Open Folder",
+            bg=COLORS["surface"],
+            fg=COLORS["text"],
+            activebackground=COLORS["hover"],
+            activeforeground=COLORS["text"],
+            relief="flat",
+            font=FONT["body"],
+            command=self._on_open_folder,
+        )
+        self._open_folder_btn.pack(side="left", fill="x", expand=True, padx=(0, SPACING["xs"]))
+        self._add_hover_effect(self._open_folder_btn, COLORS["hover"], COLORS["surface"])
+
+        self._add_all_btn = tk.Button(
+            btn_row,
+            text="Add All",
+            bg=COLORS["surface"],
+            fg=COLORS["text"],
+            activebackground=COLORS["hover"],
+            activeforeground=COLORS["text"],
+            relief="flat",
+            font=FONT["body"],
+            command=self._add_all_to_queue,
+        )
+        self._add_all_btn.pack(side="left", fill="x", expand=True, padx=(SPACING["xs"], 0))
+        self._add_hover_effect(self._add_all_btn, COLORS["hover"], COLORS["surface"])
+
+        self._queue_toggle_btn = tk.Button(
+            btn_row,
+            text="Queue ▾",
+            bg=COLORS["surface"],
+            fg=COLORS["text"],
+            activebackground=COLORS["hover"],
+            activeforeground=COLORS["text"],
+            relief="flat",
+            font=FONT["body"],
+            command=self._toggle_queue_panel,
+        )
+        self._queue_toggle_btn.pack(side="left", fill="x", expand=True, padx=(SPACING["xs"], 0))
+        self._add_hover_effect(self._queue_toggle_btn, COLORS["hover"], COLORS["surface"])
 
         self._options_frame = tk.Frame(detail_container, bg=COLORS["surface"])
 
@@ -595,6 +657,97 @@ class MainWindow:
 
         self._options_frame.pack_forget()
 
+    def _create_queue_panel(self, parent: tk.Frame) -> None:
+        self._queue_frame = tk.Frame(parent, bg=COLORS["surface"])
+        self._queue_frame.grid(row=2, column=0, columnspan=2, sticky="ew", padx=SPACING["md"], pady=(0, SPACING["md"]))
+
+        qheader = tk.Frame(self._queue_frame, bg=COLORS["surface"])
+        qheader.pack(fill="x", pady=(SPACING["sm"], SPACING["xs"]))
+
+        tk.Label(
+            qheader,
+            text="QUEUE",
+            bg=COLORS["surface"],
+            fg=COLORS["text_secondary"],
+            font=FONT["label"],
+        ).pack(side="left", padx=SPACING["sm"])
+
+        self._queue_count_label = tk.Label(
+            qheader,
+            text="0 queued",
+            bg=COLORS["surface"],
+            fg=COLORS["text_secondary"],
+            font=FONT["small"],
+        )
+        self._queue_count_label.pack(side="right", padx=SPACING["sm"])
+
+        qcols = ("status", "title", "progress")
+        self._queue_tree = ttk.Treeview(
+            self._queue_frame,
+            columns=qcols,
+            show="headings",
+            height=5,
+            style="Modern.Treeview",
+        )
+        self._queue_tree.heading("status", text="STATUS")
+        self._queue_tree.heading("title", text="TITLE")
+        self._queue_tree.heading("progress", text="PROGRESS")
+        self._queue_tree.column("status", width=100)
+        self._queue_tree.column("title", width=300)
+        self._queue_tree.column("progress", width=80)
+
+        qscroll = ttk.Scrollbar(self._queue_frame, orient="vertical")
+        qscroll.configure(command=self._queue_tree.yview)
+        self._queue_tree.configure(yscrollcommand=qscroll.set)
+
+        self._queue_tree.pack(side="left", fill="both", expand=True, padx=(SPACING["sm"], 0), pady=(0, SPACING["sm"]))
+        qscroll.pack(side="right", fill="y", pady=(0, SPACING["sm"]), padx=(0, SPACING["sm"]))
+
+    def _toggle_queue_panel(self) -> None:
+        if not hasattr(self, '_queue_frame'):
+            return
+        if self._queue_panel_visible:
+            self._queue_frame.grid_remove()
+            self._queue_panel_visible = False
+            self._queue_toggle_btn.configure(text="Queue ▸")
+        else:
+            self._queue_frame.grid()
+            self._queue_panel_visible = True
+            self._queue_toggle_btn.configure(text="Queue ▾")
+            self._update_queue_display()
+
+    def _update_queue_display(self, snapshot: AppStateData | None = None) -> None:
+        for item in self._queue_tree.get_children():
+            self._queue_tree.delete(item)
+
+        if snapshot is None:
+            snapshot = self._controller.state.get_snapshot()
+
+        for v in snapshot.queue:
+            self._queue_tree.insert("", "end", values=("Queued", v.title, "-"))
+        for v in snapshot.active_downloads:
+            self._queue_tree.insert("", "end", values=("Downloading", v.title, f"{v.progress:.0f}%"))
+        for v in snapshot.completed_downloads:
+            self._queue_tree.insert("", "end", values=("Completed", v.title, "100%"))
+
+        total = len(snapshot.queue) + len(snapshot.active_downloads) + len(snapshot.completed_downloads)
+        self._queue_count_label.configure(text=f"{total} items")
+
+    def _on_open_folder(self) -> None:
+        import subprocess
+        import platform
+        path = self._controller.get_output_path()
+        try:
+            system = platform.system()
+            if system == "Windows":
+                subprocess.Popen(["explorer", str(path)])
+            elif system == "Darwin":
+                subprocess.Popen(["open", str(path)])
+            else:
+                subprocess.Popen(["xdg-open", str(path)])
+        except Exception:
+            self._set_status(f"Output: {path}")
+
     def _create_status_bar(self) -> None:
         status_frame = tk.Frame(self._root, bg=COLORS["surface"])
         status_frame.grid(row=1, column=0, sticky="ew", padx=SPACING["md"], pady=SPACING["sm"])
@@ -767,6 +920,8 @@ class MainWindow:
                 self._progress_bar.itemconfig(self._progress_rect, fill=COLORS["border"])
         
         self._update_button_states()
+        if self._queue_panel_visible:
+            self._update_queue_display(snapshot)
         self._root.after(50, self._update_progress_bar)
 
         mode_is_debug = snapshot.mode.name == "DEBUG"
@@ -822,6 +977,10 @@ class MainWindow:
         self._search_btn.configure(state="disabled" if is_busy else "normal")
         self._cancel_btn.configure(state="normal" if self._is_searching else "disabled")
         self._download_btn.configure(state="disabled" if is_busy or not self._selected_video else "normal")
+        if hasattr(self, '_add_all_btn'):
+            self._add_all_btn.configure(state="normal" if self._is_playlist and self._playlist_videos else "disabled")
+        if hasattr(self, '_open_folder_btn'):
+            self._open_folder_btn.configure(state="normal")
 
     def _on_search(self) -> None:
         query = self._search_var.get().strip()
@@ -867,11 +1026,20 @@ class MainWindow:
     def _on_playlist_complete(self, videos: list[Video]) -> None:
         if videos:
             self._update_results(videos)
+            self._playlist_videos = videos
             self._set_status(f"Playlist: {len(videos)} videos")
         else:
             self._set_status("Failed to fetch playlist")
         self._is_searching = False
         self._update_button_states()
+
+    def _check_clipboard_on_start(self) -> None:
+        try:
+            clipboard = self._root.clipboard_get()
+            if clipboard and is_valid_youtube_url(clipboard.strip()):
+                self._search_var.set(clipboard.strip())
+        except Exception:
+            pass
 
     def _on_result_select(self, event: tk.Event) -> None:
         selection = self._results_tree.selection()
@@ -941,9 +1109,32 @@ class MainWindow:
             self._options_frame.pack(fill="both", expand=True, padx=SPACING["md"], pady=(0, SPACING["md"]))
             self._detail_toggle_btn.configure(text="▼ OPTIONS")
 
+    def _load_thumbnail(self, video: Video) -> None:
+        self._thumbnail_label.configure(text="[No thumbnail]")
+        thumbnail_url = video.thumbnail
+        if not thumbnail_url:
+            return
+        try:
+            from urllib.request import urlopen
+            import io
+            from PIL import Image, ImageTk
+
+            data = urlopen(thumbnail_url, timeout=5).read()
+            img = Image.open(io.BytesIO(data))
+            max_w = 240
+            max_h = 120
+            img.thumbnail((max_w, max_h), Image.LANCZOS)
+            self._tk_image = ImageTk.PhotoImage(img)
+            self._thumbnail_label.configure(image=self._tk_image, text="")
+        except ImportError:
+            self._thumbnail_label.configure(text=f"[Thumbnail: {thumbnail_url}]")
+        except Exception:
+            pass
+
     def _update_detail_panel(self, video: Video) -> None:
         self._detail_title.configure(text=video.title or "-")
         self._detail_uploader.configure(text=video.uploader or "-")
+        self._load_thumbnail(video)
         self._format_var.set(video.options.format)
         self._quality_var.set(video.options.quality)
         self._subtitles_var.set(video.options.subtitles)
@@ -1002,6 +1193,8 @@ class MainWindow:
         
         if selected:
             opts = self._get_current_options()
+            if opts is None:
+                return
             for video in selected:
                 video.options = opts
             self._controller.enqueue_multiple(selected)
@@ -1021,6 +1214,8 @@ class MainWindow:
 
     def _add_all_to_queue(self) -> None:
         opts = self._get_current_options()
+        if opts is None:
+            return
         
         for video in self._playlist_videos:
             video.options = opts
@@ -1028,7 +1223,14 @@ class MainWindow:
         self._controller.enqueue_multiple(self._playlist_videos)
         self._set_status(f"Added {len(self._playlist_videos)} videos to queue")
 
-    def _get_current_options(self) -> DownloadOptions:
+    def _get_current_options(self) -> DownloadOptions | None:
+        from youmudow.domain.validators import is_valid_rate_limit
+
+        rate = self._rate_limit_var.get().strip()
+        if rate and not is_valid_rate_limit(rate):
+            self._set_status("Invalid rate limit. Use format: 1M, 500K, 2G")
+            return None
+
         opts = DownloadOptions(
             format=self._format_var.get(),
             quality=self._quality_var.get(),
@@ -1036,7 +1238,7 @@ class MainWindow:
             subtitle_lang=self._subtitle_lang_var.get(),
             embed_subtitles=self._embed_subs_var.get(),
             use_cookies=self._use_cookies_var.get(),
-            rate_limit=self._rate_limit_var.get() or None,
+            rate_limit=rate or None,
             split_chapters=self._split_chapters_var.get(),
         )
         
@@ -1077,10 +1279,12 @@ class MainWindow:
         selected = self._get_selected_videos()
         
         if selected:
+            opts = self._get_current_options()
+            if opts is None:
+                return
             self._is_downloading = True
             self._update_button_states()
             
-            opts = self._get_current_options()
             for video in selected:
                 video.options = opts
             
@@ -1129,7 +1333,56 @@ class MainWindow:
         self._controller.set_debug_mode(self._debug_mode)
         self._update_debug_visibility()
 
+    def _on_close(self) -> None:
+        if self._config:
+            try:
+                self._config.window_geometry = self._root.geometry()
+                from youmudow.domain.validators import is_valid_rate_limit
+                rate = self._rate_limit_var.get().strip()
+                if rate and not is_valid_rate_limit(rate):
+                    rate = ""
+                self._config.set("format", self._format_var.get())
+                self._config.set("quality", self._quality_var.get())
+                self._config.set("subtitles", self._subtitles_var.get())
+                self._config.set("subtitle_lang", self._subtitle_lang_var.get())
+                self._config.set("embed_subtitles", self._embed_subs_var.get())
+                self._config.set("use_cookies", self._use_cookies_var.get())
+                self._config.set("cookies_source", self._cookies_source_var.get())
+                self._config.set("cookies_file", self._cookies_file_var.get())
+                self._config.set("browser", self._browser_var.get())
+                self._config.set("profile", self._profile_var.get())
+                self._config.set("rate_limit", rate)
+                self._config.set("split_chapters", self._split_chapters_var.get())
+                self._config.output_path = self._controller.get_output_path()
+                self._config.save()
+            except Exception:
+                pass
+        self.destroy()
+
+    def _apply_config(self) -> None:
+        if not self._config:
+            return
+        try:
+            self._format_var.set(self._config.get("format", "mp3"))
+            self._quality_var.set(self._config.get("quality", "best"))
+            self._subtitles_var.set(self._config.get("subtitles", False))
+            self._subtitle_lang_var.set(self._config.get("subtitle_lang", "en"))
+            self._embed_subs_var.set(self._config.get("embed_subtitles", False))
+            self._use_cookies_var.set(self._config.get("use_cookies", False))
+            self._cookies_source_var.set(self._config.get("cookies_source", "browser"))
+            self._cookies_file_var.set(self._config.get("cookies_file", ""))
+            self._browser_var.set(self._config.get("browser", get_available_browsers()[0] if get_available_browsers() else "chrome"))
+            self._profile_var.set(self._config.get("profile", "Default"))
+            self._rate_limit_var.set(self._config.get("rate_limit", ""))
+            self._split_chapters_var.set(self._config.get("split_chapters", False))
+            geo = self._config.window_geometry
+            if geo:
+                self._root.geometry(geo)
+        except Exception:
+            pass
+
     def run(self) -> None:
+        self._root.protocol("WM_DELETE_WINDOW", self._on_close)
         self._root.mainloop()
 
     def destroy(self) -> None:

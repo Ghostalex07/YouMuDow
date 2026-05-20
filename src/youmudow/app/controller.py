@@ -76,6 +76,9 @@ class AppController:
     def set_output_path(self, path: Path) -> None:
         self._download_service.set_output_path(path)
 
+    def get_output_path(self) -> Path:
+        return self._download_service.get_output_path()
+
     def on_download_complete(self, callback: DownloadCompleteCallback) -> None:
         self._download_complete_callback = callback
 
@@ -241,6 +244,8 @@ class AppController:
         def on_complete(video: Video) -> None:
             self._state_manager.finish_download(video)
             emit_log(f"[DONE] {video.title} - Download completed", level="success")
+            from youmudow.services.notification_service import notify
+            notify("YouMuDow", f"Downloaded: {video.title}")
             if self._download_complete_callback:
                 self._download_complete_callback(video)
 

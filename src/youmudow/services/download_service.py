@@ -4,6 +4,7 @@ Handles video downloads with queue support and progress tracking.
 Emits detailed progress events for integration with any UI layer.
 """
 
+import subprocess
 import threading
 import time
 from collections import deque
@@ -140,6 +141,7 @@ class DownloadWorker(threading.Thread):
         self._progress_callback = progress_callback
         self._current_video: Video | None = None
         self._cancel_event = threading.Event()
+        self._process: subprocess.Popen | None = None
 
     @property
     def worker_id(self) -> int:
@@ -155,6 +157,12 @@ class DownloadWorker(threading.Thread):
 
     def cancel(self) -> None:
         self._cancel_event.set()
+        if self._process and self._process.poll() is None:
+            self._process.terminate()
+            try:
+                self._process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                self._process.kill()
 
     def run(self) -> None:
         if self._current_video is None:
@@ -177,7 +185,7 @@ class DownloadWorker(threading.Thread):
 
         progress_callback_fn(0.0, "")
 
-        self._adapter.download(video, self._output_path, progress_callback_fn)
+        self._adapter.download(video, self._output_path, progress_callback_fn, cancel_event=self._cancel_event)
         self._current_video = None
         self._progress_callback(DownloadEvent(
             type=DownloadEventType.COMPLETED,
@@ -269,6 +277,9 @@ class DownloadService:
 
     def set_output_path(self, path: Path) -> None:
         self._output_path = path
+
+    def get_output_path(self) -> Path:
+        return self._output_path
 
     def on_event(self, callback: Callable[[DownloadEvent], None]) -> None:
         self._event_callbacks.append(callback)

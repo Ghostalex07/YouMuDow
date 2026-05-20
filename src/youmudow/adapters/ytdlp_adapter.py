@@ -8,6 +8,7 @@ without affecting the rest of the application.
 import json
 import re
 import subprocess
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -321,6 +322,7 @@ class YtdlpAdapter:
         video: Video,
         output_path: Path,
         progress_callback: ProgressCallback | None = None,
+        cancel_event: threading.Event | None = None,
     ) -> Video:
         from youmudow.domain.validators import sanitize_filename, get_unique_filename, validate_format_quality, parse_yt_dlp_error
         
@@ -389,12 +391,14 @@ class YtdlpAdapter:
 
                     error_lines = []
                     
-                    import threading
                     output_lock = threading.Lock()
                     
                     def read_output():
                         try:
                             for line in process.stdout:
+                                if cancel_event and cancel_event.is_set():
+                                    process.terminate()
+                                    break
                                 if line:
                                     stripped = line.strip()
                                     with output_lock:
