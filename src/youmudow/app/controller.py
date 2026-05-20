@@ -182,6 +182,7 @@ class AppController:
             return videos
         except Exception as e:
             self._state_manager.set_error(f"Failed to fetch playlist: {e}")
+            self._state_manager.set_state(AppState.IDLE)
             return []
 
     def select_video(self, video: Video) -> dict[str, str]:
@@ -196,9 +197,11 @@ class AppController:
 
     def remove_from_queue(self, video: Video) -> None:
         self._state_manager.remove_from_queue(video)
+        self._download_service.cancel_video(video)
 
     def clear_queue(self) -> None:
         self._state_manager.clear_queue()
+        self._download_service.clear_queue()
 
     def start_downloads(self) -> None:
         queue = self._state_manager.get_queue()
@@ -256,12 +259,21 @@ class AppController:
             if self._download_complete_callback:
                 self._download_complete_callback(video)
 
+        def on_error(video: Video) -> None:
+            self._state_manager.finish_download(video)
+            msg = video.error_message or "Download failed"
+            emit_log(f"[ERROR] {video.title} - {msg}", level="error")
+            if self._download_complete_callback:
+                self._download_complete_callback(video)
+
         def on_started(video: Video) -> None:
             emit_log(f"[DOWNLOAD] Starting: {video.title}", level="info")
 
         self._download_service.on_progress(on_progress)
         self._download_service.on_complete(on_complete)
         self._download_service.on_event(lambda e: on_started(e.video) if e.type.name == "STARTED" else None)
+
+        self._download_service.on_error(on_error)
 
     def _setup_log_callback(self) -> None:
         def on_log_message(message: str) -> None:

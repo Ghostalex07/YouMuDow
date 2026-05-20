@@ -3,8 +3,7 @@
 import pytest
 import tempfile
 import os
-from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 from youmudow.adapters.ytdlp_adapter import (
     YtdlpAdapter,
@@ -12,7 +11,6 @@ from youmudow.adapters.ytdlp_adapter import (
     create_adapter,
 )
 from youmudow.domain.models import Video, DownloadOptions
-from youmudow.domain.enums import DownloadStatus
 
 
 @pytest.fixture

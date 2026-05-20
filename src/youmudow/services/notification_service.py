@@ -12,7 +12,9 @@ def notify(title: str, message: str) -> None:
                 stderr=subprocess.DEVNULL,
             )
         elif system == "Darwin":
-            script = f'display notification "{message}" with title "{title}"'
+            safe_msg = message.replace('"', '\\"')
+            safe_title = title.replace('"', '\\"')
+            script = f'display notification "{safe_msg}" with title "{safe_title}"'
             subprocess.Popen(
                 ["osascript", "-e", script],
                 stdout=subprocess.DEVNULL,

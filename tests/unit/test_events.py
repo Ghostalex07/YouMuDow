@@ -1,5 +1,4 @@
 """Tests for EventBus."""
-import pytest
 from youmudow.app.events import (
     EventBus, EventType, Event, SearchEvent, DownloadEvent,
     LogEvent, get_event_bus,
@@ -25,7 +24,8 @@ class TestEventBus:
     def test_unsubscribe(self):
         bus = EventBus()
         results = []
-        handler = lambda e: results.append(1)
+        def handler(e: object) -> None:
+            results.append(1)
         unsub = bus.subscribe(EventType.SEARCH_STARTED, handler)
         bus.publish(SearchEvent(type=EventType.SEARCH_STARTED))
         assert len(results) == 1

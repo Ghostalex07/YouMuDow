@@ -353,6 +353,9 @@ class YtdlpAdapter:
         
         try:
             for attempt in range(1, max_retries + 1):
+                if cancel_event and cancel_event.is_set():
+                    self._log("[CANCEL] Download cancelled by user")
+                    break
                 if attempt > 1:
                     wait_time = attempt - 1
                     self._log(f"[RETRY] Attempt {attempt}/{max_retries}, waiting {wait_time}s...")

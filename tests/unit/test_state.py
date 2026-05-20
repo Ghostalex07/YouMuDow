@@ -1,5 +1,4 @@
 """Tests for StateManager."""
-import pytest
 from youmudow.app.state import StateManager, AppState, AppMode, AppStateData
 from youmudow.domain.models import Video
 from youmudow.domain.enums import DownloadStatus

@@ -1,8 +1,7 @@
 """Tests for download service."""
 
 import pytest
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock
 
 from youmudow.services.download_service import (
     DownloadService,

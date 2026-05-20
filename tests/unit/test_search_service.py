@@ -1,7 +1,7 @@
 """Tests for search service."""
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock
 
 from youmudow.services.search_service import SearchService
 from youmudow.domain.models import Video

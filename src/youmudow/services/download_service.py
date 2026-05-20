@@ -141,6 +141,8 @@ class DownloadWorker(threading.Thread):
         self._progress_callback = progress_callback
         self._current_video: Video | None = None
         self._cancel_event = threading.Event()
+        self._ready = threading.Event()
+        self._stop = threading.Event()
         self._process: subprocess.Popen | None = None
 
     @property
@@ -154,6 +156,7 @@ class DownloadWorker(threading.Thread):
     def submit(self, video: Video) -> None:
         self._current_video = video
         self._cancel_event.clear()
+        self._ready.set()
 
     def cancel(self) -> None:
         self._cancel_event.set()
@@ -164,33 +167,42 @@ class DownloadWorker(threading.Thread):
             except subprocess.TimeoutExpired:
                 self._process.kill()
 
+    def stop(self) -> None:
+        self._stop.set()
+        self._ready.set()
+
     def run(self) -> None:
-        if self._current_video is None:
-            return
+        while not self._stop.is_set():
+            self._ready.wait()
+            self._ready.clear()
+            if self._stop.is_set():
+                break
 
-        video = self._current_video
+            video = self._current_video
+            if video is None:
+                continue
 
-        def progress_callback_fn(progress: float, speed: str) -> None:
-            evt = DownloadEvent(
-                type=DownloadEventType.PROGRESS,
-                video=video,
-                progress=DownloadProgress(
+            def progress_callback_fn(progress: float, speed: str) -> None:
+                evt = DownloadEvent(
+                    type=DownloadEventType.PROGRESS,
                     video=video,
-                    progress=progress,
-                    speed=ProgressParser.format_speed(speed),
-                    status=DownloadStatus.DOWNLOADING,
-                ),
-            )
-            self._progress_callback(evt)
+                    progress=DownloadProgress(
+                        video=video,
+                        progress=progress,
+                        speed=ProgressParser.format_speed(speed),
+                        status=DownloadStatus.DOWNLOADING,
+                    ),
+                )
+                self._progress_callback(evt)
 
-        progress_callback_fn(0.0, "")
+            progress_callback_fn(0.0, "")
 
-        self._adapter.download(video, self._output_path, progress_callback_fn, cancel_event=self._cancel_event)
-        self._current_video = None
-        self._progress_callback(DownloadEvent(
-            type=DownloadEventType.COMPLETED,
-            video=video,
-        ))
+            self._adapter.download(video, self._output_path, progress_callback_fn, cancel_event=self._cancel_event)
+            self._current_video = None
+            self._progress_callback(DownloadEvent(
+                type=DownloadEventType.COMPLETED,
+                video=video,
+            ))
 
 
 class DownloadQueue:
@@ -298,6 +310,16 @@ class DownloadService:
 
         self._event_callbacks.append(wrapper)
 
+    def on_error(self, callback: Callable[[Video], None]) -> None:
+        def wrapper(event: DownloadEvent) -> None:
+            if event.type == DownloadEventType.ERROR:
+                callback(event.video)
+
+        self._event_callbacks.append(wrapper)
+
+    def clear_queue(self) -> None:
+        self._queue.clear()
+
     def add_to_queue(self, video: Video) -> None:
         self._queue.add(video)
         self._emit_event(DownloadEvent(
@@ -330,9 +352,20 @@ class DownloadService:
         self._running = False
         for worker in self._workers:
             worker.cancel()
+            worker.stop()
+        self._workers.clear()
 
     def cancel_video(self, video: Video) -> None:
         self._queue.remove(video)
+        with self._lock:
+            for worker in self._workers:
+                if worker._current_video is video:
+                    worker.cancel()
+                    for wid, vid in list(self._active_downloads.items()):
+                        if vid == video:
+                            del self._active_downloads[wid]
+                            break
+                    break
         self._emit_event(DownloadEvent(
             type=DownloadEventType.CANCELLED,
             video=video,
@@ -341,7 +374,8 @@ class DownloadService:
     def _process_queue(self) -> None:
         while self._running:
             if not self._queue.is_empty():
-                idle_workers = [w for w in self._workers if not w.is_busy]
+                with self._lock:
+                    idle_workers = [w for w in self._workers if not w.is_busy]
                 if idle_workers:
                     video = self._queue.get()
                     if video:

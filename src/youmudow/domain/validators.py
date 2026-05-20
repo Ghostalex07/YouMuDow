@@ -7,15 +7,15 @@ from pathlib import Path
 
 
 YOUTUBE_PATTERNS = [
-    r"(?:https?://)?(?:www\.)?youtube\.com/watch\?v=[\w-]+",
+    r"(?:https?://)?(?:www\.|m\.|music\.)?youtube\.com/watch\?v=[\w-]+",
     r"(?:https?://)?(?:www\.)?youtu\.be/[\w-]+",
-    r"(?:https?://)?(?:www\.)?youtube\.com/shorts/[\w-]+",
-    r"(?:https?://)?(?:www\.)?youtube\.com/playlist\?list=[\w-]+",
+    r"(?:https?://)?(?:www\.|m\.)?youtube\.com/shorts/[\w-]+",
+    r"(?:https?://)?(?:www\.|music\.)?youtube\.com/playlist\?list=[\w-]+",
 ]
 
 YOUTUBE_REGEX = re.compile("|".join(YOUTUBE_PATTERNS), re.IGNORECASE)
 
-PLAYLIST_PATTERN = r"(?:https?://)?(?:www\.)?youtube\.com/playlist\?list=[\w-]+"
+PLAYLIST_PATTERN = r"(?:https?://)?(?:www\.|music\.)?youtube\.com/playlist\?list=[\w-]+"
 PLAYLIST_REGEX = re.compile(PLAYLIST_PATTERN, re.IGNORECASE)
 
 INVALID_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')

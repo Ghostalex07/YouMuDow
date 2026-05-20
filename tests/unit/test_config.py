@@ -1,11 +1,9 @@
 """Tests for AppConfig."""
-import json
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-from youmudow.app.config import AppConfig, DEFAULT_CONFIG, CONFIG_DIR, CONFIG_FILE
+from youmudow.app.config import AppConfig
 from youmudow.domain.models import DownloadOptions
 
 

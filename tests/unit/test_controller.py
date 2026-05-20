@@ -1,12 +1,11 @@
 """Tests for AppController."""
 import pytest
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock
 from pathlib import Path
 
 from youmudow.app.controller import AppController
 from youmudow.app.state import AppState, AppMode
-from youmudow.domain.models import Video, DownloadOptions
-from youmudow.domain.enums import DownloadStatus
+from youmudow.domain.models import Video
 
 
 class TestAppController:
