@@ -13,10 +13,12 @@ import webbrowser
 from youmudow.domain.validators import get_all_browser_profiles, get_available_browsers
 
 from youmudow.domain.models import Video, DownloadOptions
+from youmudow.domain.enums import DownloadStatus
 from youmudow.domain.validators import is_valid_youtube_url, is_playlist_url
 from youmudow.app.state import AppStateData
 from youmudow.app.events import EventType, EventBus, get_event_bus
 from youmudow.ui.widgets.log_terminal import LogTerminal
+from youmudow import __version__
 
 if TYPE_CHECKING:
     from youmudow.app.controller import AppController
@@ -78,7 +80,7 @@ class MainWindow:
         self._config = config
         self._controller = controller
         self._root = tk.Tk()
-        self._root.title("YouMuDow")
+        self._root.title(f"YouMuDow v{__version__}")
         ancho_pantalla = self._root.winfo_screenwidth()
         alto_pantalla = self._root.winfo_screenheight()
         self._root.geometry(f"{ancho_pantalla}x{alto_pantalla}")
@@ -107,6 +109,7 @@ class MainWindow:
         self._setup_controller_callbacks()
         self._setup_state_observer()
         self._root.after(500, self._check_clipboard_on_start)
+        self._root.after(3000, self._check_ytdlp_on_start)
 
     def _setup_ui(self) -> None:
         self._root.columnconfigure(0, weight=1)
@@ -391,6 +394,18 @@ class MainWindow:
         )
         self._download_btn.pack(fill="x", pady=(0, SPACING["xs"]))
         self._add_hover_effect(self._download_btn, COLORS["secondary"], COLORS["primary"])
+
+        self._retry_btn = tk.Button(
+            detail_container,
+            text="↺ Retry",
+            bg=COLORS["warning"],
+            fg="#000000",
+            activebackground=COLORS["secondary"],
+            activeforeground="#000000",
+            relief="flat",
+            font=FONT["body"],
+            command=self._on_retry_download,
+        )
 
         # Open folder & Add all buttons (side by side)
         btn_row = tk.Frame(detail_container, bg=COLORS["bg"])
@@ -703,6 +718,26 @@ class MainWindow:
         self._queue_tree.pack(side="left", fill="both", expand=True, padx=(SPACING["sm"], 0), pady=(0, SPACING["sm"]))
         qscroll.pack(side="right", fill="y", pady=(0, SPACING["sm"]), padx=(0, SPACING["sm"]))
 
+        self._queue_tree.bind("<Button-3>", self._on_queue_right_click)
+
+    def _on_queue_right_click(self, event: tk.Event) -> None:
+        item = self._queue_tree.identify_row(event.y)
+        if not item:
+            return
+        self._queue_tree.selection_set(item)
+        index = self._queue_tree.index(item)
+
+        snapshot = self._controller.state.get_snapshot()
+        all_videos = list(snapshot.queue) + list(snapshot.active_downloads) + list(snapshot.completed_downloads)
+        if index >= len(all_videos):
+            return
+        video = all_videos[index]
+
+        menu = tk.Menu(self._root, tearoff=0, bg=COLORS["surface"], fg=COLORS["text"])
+        menu.add_command(label="Remove from queue", command=lambda: self._controller.remove_from_queue(video))
+        menu.add_command(label="Open in browser", command=lambda: webbrowser.open(video.url))
+        menu.tk_popup(event.x_root, event.y_root)
+
     def _toggle_queue_panel(self) -> None:
         if not hasattr(self, '_queue_frame'):
             return
@@ -799,6 +834,7 @@ class MainWindow:
         file_menu = tk.Menu(menubar, tearoff=0, bg=COLORS["surface"], fg=COLORS["text"], bd=1)
         menubar.add_cascade(label="File", menu=file_menu)
         file_menu.add_command(label="Set Output Folder", command=self._on_set_output)
+        file_menu.add_command(label="Export Logs...", command=self._on_export_logs)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self._root.quit)
 
@@ -815,6 +851,13 @@ class MainWindow:
             variable=self._debug_var,
             command=self._on_toggle_debug,
         )
+
+        help_menu = tk.Menu(menubar, tearoff=0, bg=COLORS["surface"], fg=COLORS["text"], bd=1)
+        menubar.add_cascade(label="Help", menu=help_menu)
+        help_menu.add_command(label="Update yt-dlp", command=self._on_update_ytdlp)
+        help_menu.add_command(label="yt-dlp version", command=self._on_show_ytdlp_version)
+        help_menu.add_separator()
+        help_menu.add_command(label="About", command=self._on_about)
 
     def _update_debug_visibility(self) -> None:
         if not self._paned_window or not self._log_frame:
@@ -1041,6 +1084,61 @@ class MainWindow:
         except Exception:
             pass
 
+    def _check_ytdlp_on_start(self) -> None:
+        from youmudow.services.updater_service import get_ytdlp_version
+        version = get_ytdlp_version()
+        if not version:
+            self._set_status("⚠ yt-dlp not found. Install it with: pip install yt-dlp")
+
+    def _on_update_ytdlp(self) -> None:
+        from youmudow.services.updater_service import update_ytdlp
+        self._set_status("Updating yt-dlp...")
+
+        def on_success(version: str) -> None:
+            self._root.after(0, lambda: self._set_status(f"yt-dlp updated to {version}"))
+
+        def on_error(error: str) -> None:
+            self._root.after(0, lambda: self._set_status(f"Update failed: {error}"))
+
+        update_ytdlp(on_success, on_error)
+
+    def _on_show_ytdlp_version(self) -> None:
+        from tkinter import messagebox
+        from youmudow.services.updater_service import get_ytdlp_version
+        version = get_ytdlp_version()
+        messagebox.showinfo("yt-dlp version", f"Installed version: {version or 'not found'}")
+
+    def _on_about(self) -> None:
+        from tkinter import messagebox
+        from youmudow.services.updater_service import get_ytdlp_version
+        messagebox.showinfo(
+            "About YouMuDow",
+            f"YouMuDow v{__version__}\n"
+            f"yt-dlp: {get_ytdlp_version() or 'not found'}\n\n"
+            "A modern YouTube music downloader.\n"
+            "github.com/Ghostalex07/YouMuDow",
+        )
+
+    def _on_export_logs(self) -> None:
+        from tkinter import filedialog
+        from datetime import datetime
+        if not self._log_terminal:
+            return
+        default_name = f"youmudow_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        path = filedialog.asksaveasfilename(
+            title="Export Logs",
+            defaultextension=".txt",
+            initialfile=default_name,
+            filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
+        )
+        if path:
+            try:
+                from pathlib import Path
+                self._log_terminal.export_to_file(Path(path))
+                self._set_status(f"Logs exported to {path}")
+            except Exception as e:
+                self._set_status(f"Export failed: {e}")
+
     def _on_result_select(self, event: tk.Event) -> None:
         selection = self._results_tree.selection()
         if not selection:
@@ -1131,6 +1229,18 @@ class MainWindow:
         except Exception:
             pass
 
+    def _on_retry_download(self) -> None:
+        if self._selected_video is None:
+            return
+        video = self._selected_video
+        video.status = DownloadStatus.READY
+        video.error_message = ""
+        video.progress = 0.0
+        self._apply_options_to_video(video)
+        self._controller.enqueue(video)
+        self._controller.start_downloads()
+        self._set_status(f"Retrying: {video.title}")
+
     def _update_detail_panel(self, video: Video) -> None:
         self._detail_title.configure(text=video.title or "-")
         self._detail_uploader.configure(text=video.uploader or "-")
@@ -1159,6 +1269,12 @@ class MainWindow:
                 self._profile_var.set(current_profiles[0])
             else:
                 self._profile_var.set("Default")
+
+        if self._retry_btn.winfo_ismapped():
+            self._retry_btn.pack_forget()
+        if video.status == DownloadStatus.ERROR:
+            self._retry_btn.pack(fill="x", pady=(0, SPACING["xs"]))
+            self._add_hover_effect(self._retry_btn, COLORS["warning"], COLORS["warning"])
 
     def _on_subtitles_toggle(self) -> None:
         pass

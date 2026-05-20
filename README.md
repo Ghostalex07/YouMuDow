@@ -180,6 +180,27 @@ pytest tests/ -v
 ruff check src/
 ```
 
+## Building from source
+
+Install dev dependencies:
+```bash
+pip install -e ".[dev]"
+pip install pyinstaller
+```
+
+Build executable:
+```bash
+python scripts/build.py
+```
+
+Create distributable package:
+```bash
+python scripts/package.py
+```
+
+Output will be in the `dist/` folder.
+Note: ffmpeg must be installed separately by end users.
+
 ## Architecture
 
 ```

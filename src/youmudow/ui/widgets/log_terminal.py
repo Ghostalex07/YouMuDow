@@ -8,6 +8,7 @@ import tkinter as tk
 from tkinter import ttk
 import datetime
 import threading
+from pathlib import Path
 
 
 MAX_LINES = 1000
@@ -49,6 +50,7 @@ class LogTerminal(ttk.Frame):
         self._lock = threading.Lock()
         self._pending_messages: list[tuple[str, str, str | None]] = []
         self._processing = False
+        self._log_buffer: list[str] = []
 
         self._create_widgets()
         self._configure_tags()
@@ -145,6 +147,8 @@ class LogTerminal(ttk.Frame):
             return
 
         with self._lock:
+            ts = timestamp or datetime.datetime.now().strftime("%H:%M:%S")
+            self._log_buffer.append(f"[{ts}] [{level.upper()}] {message}")
             self._pending_messages.append((message, level, timestamp))
             if self._processing:
                 return
@@ -242,6 +246,14 @@ class LogTerminal(ttk.Frame):
                 pass
         
         self.after_idle(do_clear)
+
+    def get_logs(self) -> str:
+        return "\n".join(self._log_buffer)
+
+    def export_to_file(self, path: Path) -> None:
+        with open(path, "w") as f:
+            f.write(self.get_logs())
+            f.write("\n")
 
     def _trim_lines(self) -> None:
         """Remove oldest lines when max is reached."""
