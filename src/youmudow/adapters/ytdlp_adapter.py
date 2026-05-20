@@ -75,8 +75,6 @@ class YtdlpAdapter:
             self._log_callback(message)
 
     def _build_base_args(self, video: Video | None = None, skip_cookies: bool = False) -> list[str]:
-        from youmudow.domain.validators import check_browser_profile, get_fallback_browser, SUPPORTED_BROWSERS
-        
         args = ["yt-dlp", "--no-check-certificate"]
         
         if self._config.ffmpeg_location:
@@ -90,29 +88,12 @@ class YtdlpAdapter:
                 if opts.cookies_from_browser:
                     browser = opts.cookies_from_browser.lower()
                     profile = opts.cookies_profile
-                    
-                    valid_browsers = SUPPORTED_BROWSERS
-                    if browser in valid_browsers:
-                        exists, message = check_browser_profile(browser)
-                        if not exists:
-                            self._log(f"[AUTH] {message}")
-                            fallback = get_fallback_browser()
-                            if fallback and fallback != browser:
-                                self._log(f"[AUTH] Falling back to {fallback.capitalize()}")
-                                browser = fallback
-                                profile = None
-                            else:
-                                self._log("[AUTH] Skipping cookies - no browser found")
-                                skip_cookies = True
-                        else:
-                            cookie_arg = browser
-                            if profile and profile.lower() not in ["default", "main"]:
-                                cookie_arg = f"{browser}:{profile}"
-                            args.extend(["--cookies-from-browser", cookie_arg])
-                            profile_msg = f" ({profile})" if profile and profile.lower() not in ["default", "main"] else ""
-                            self._log(f"[AUTH] Using {browser.capitalize()}{profile_msg} cookies")
-                    else:
-                        self._log(f"[WARNING] Unknown browser: {browser}")
+                    cookie_arg = browser
+                    if profile and profile.lower() not in ["default", "main"]:
+                        cookie_arg = f"{browser}:{profile}"
+                    args.extend(["--cookies-from-browser", cookie_arg])
+                    profile_msg = f" ({profile})" if profile and profile.lower() not in ["default", "main"] else ""
+                    self._log(f"[AUTH] Using {browser.capitalize()}{profile_msg} cookies")
                 elif opts.cookies_file:
                     cookie_path = Path(opts.cookies_file)
                     if cookie_path.exists():
