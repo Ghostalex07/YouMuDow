@@ -8,6 +8,7 @@ import tkinter as tk
 from tkinter import ttk
 from pathlib import Path
 from typing import TYPE_CHECKING
+import webbrowser
 
 from youmudow.domain.validators import get_all_browser_profiles, get_available_browsers
 
@@ -77,7 +78,9 @@ class MainWindow:
         self._controller = controller
         self._root = tk.Tk()
         self._root.title("YouMuDow")
-        self._root.geometry("1000x700")
+        ancho_pantalla = self._root.winfo_screenwidth()
+        alto_pantalla = self._root.winfo_screenheight()
+        self._root.geometry(f"{ancho_pantalla}x{alto_pantalla}")
         self._root.minsize(800, 600)
         self._root.configure(bg=COLORS["bg"])
 
@@ -175,9 +178,15 @@ class MainWindow:
         self._search_entry.grid(row=0, column=0, sticky="ew", padx=SPACING["md"], pady=SPACING["md"])
         
         def _on_paste(event) -> str:
-            clipboard = self._root.clipboard_get()
+            from tkinter import TclError
+            try:
+                clipboard = self._root.clipboard_get()
+            except TclError:
+                return None
             if is_valid_youtube_url(clipboard):
-                self._search_var.set("")
+                self._search_var.set(clipboard)
+                self._root.after(10, self._on_search)
+                return "break"
             return None
         
         self._search_entry.bind("<Return>", lambda _: self._on_search())
@@ -249,6 +258,7 @@ class MainWindow:
         scrollbar.grid(row=0, column=1, sticky="ns")
         self._results_tree.bind("<<TreeviewSelect>>", self._on_result_select)
         self._results_tree.bind("<Double-Button-1>", lambda _: self._on_enqueue())
+        self._results_tree.bind("<Button-3>", self._on_open_in_browser)
 
         self._style_treeview()
 
@@ -290,22 +300,25 @@ class MainWindow:
         detail_container = tk.Frame(parent, bg=COLORS["bg"])
         detail_container.grid(row=1, column=1, sticky="nsew", padx=(SPACING["sm"], SPACING["md"]), pady=(0, SPACING["md"]))
 
-        detail_frame = tk.Frame(detail_container, bg=COLORS["surface"])
-        detail_frame.pack(fill="both", expand=True, padx=SPACING["md"], pady=SPACING["md"])
+        header_frame = tk.Frame(detail_container, bg=COLORS["bg"])
+        header_frame.pack(fill="x", pady=(0, SPACING["xs"]))
 
-        tk.Label(
-            detail_frame,
-            text="DETAILS",
-            bg=COLORS["surface"],
+        self._detail_toggle_btn = tk.Button(
+            header_frame,
+            text="▶ OPTIONS",
+            bg=COLORS["bg"],
             fg=COLORS["text_secondary"],
             font=FONT["label"],
-            anchor="w",
-        ).pack(anchor="w", pady=(0, SPACING["md"]))
+            relief="flat",
+            bd=0,
+            command=self._toggle_detail_panel,
+        )
+        self._detail_toggle_btn.pack(side="left")
 
-        row1 = tk.Frame(detail_frame, bg=COLORS["surface"])
-        row1.pack(fill="x", pady=(0, SPACING["sm"]))
+        row_title = tk.Frame(detail_container, bg=COLORS["surface"])
+        row_title.pack(fill="x", pady=(0, SPACING["xs"]))
         tk.Label(
-            row1,
+            row_title,
             text="Title:",
             bg=COLORS["surface"],
             fg=COLORS["text_secondary"],
@@ -314,7 +327,7 @@ class MainWindow:
             anchor="w",
         ).pack(side="left")
         self._detail_title = tk.Label(
-            row1,
+            row_title,
             text="-",
             bg=COLORS["surface"],
             fg=COLORS["text"],
@@ -324,10 +337,10 @@ class MainWindow:
         )
         self._detail_title.pack(side="left", fill="x", expand=True)
 
-        row2 = tk.Frame(detail_frame, bg=COLORS["surface"])
-        row2.pack(fill="x", pady=(0, SPACING["sm"]))
+        row_uploader = tk.Frame(detail_container, bg=COLORS["surface"])
+        row_uploader.pack(fill="x", pady=(0, SPACING["sm"]))
         tk.Label(
-            row2,
+            row_uploader,
             text="Uploader:",
             bg=COLORS["surface"],
             fg=COLORS["text_secondary"],
@@ -336,7 +349,7 @@ class MainWindow:
             anchor="w",
         ).pack(side="left")
         self._detail_uploader = tk.Label(
-            row2,
+            row_uploader,
             text="-",
             bg=COLORS["surface"],
             fg=COLORS["text"],
@@ -345,7 +358,27 @@ class MainWindow:
         )
         self._detail_uploader.pack(side="left")
 
-        row3 = tk.Frame(detail_frame, bg=COLORS["surface"])
+        tk.Frame(detail_container, height=2, bg=COLORS["bg"]).pack(fill="x", pady=(0, SPACING["md"]))
+
+        self._download_btn = tk.Button(
+            detail_container,
+            text="Download",
+            bg=COLORS["primary"],
+            fg="#FFFFFF",
+            activebackground=COLORS["secondary"],
+            activeforeground="#FFFFFF",
+            relief="flat",
+            font=FONT["body"],
+            command=self._on_download_now,
+        )
+        self._download_btn.pack(fill="x", pady=(0, SPACING["md"]))
+        self._add_hover_effect(self._download_btn, COLORS["secondary"], COLORS["primary"])
+
+        tk.Frame(detail_container, height=2, bg=COLORS["bg"]).pack(fill="x", pady=(0, SPACING["md"]))
+
+        self._options_frame = tk.Frame(detail_container, bg=COLORS["surface"])
+
+        row3 = tk.Frame(self._options_frame, bg=COLORS["surface"])
         row3.pack(fill="x", pady=(0, SPACING["md"]))
         tk.Label(
             row3,
@@ -368,7 +401,7 @@ class MainWindow:
         )
         format_combo.pack(side="left", padx=(0, SPACING["sm"]))
 
-        row4 = tk.Frame(detail_frame, bg=COLORS["surface"])
+        row4 = tk.Frame(self._options_frame, bg=COLORS["surface"])
         row4.pack(fill="x", pady=(SPACING["sm"], SPACING["md"]))
         tk.Label(
             row4,
@@ -391,7 +424,7 @@ class MainWindow:
         )
         quality_combo.pack(side="left")
 
-        row5 = tk.Frame(detail_frame, bg=COLORS["surface"])
+        row5 = tk.Frame(self._options_frame, bg=COLORS["surface"])
         row5.pack(fill="x", pady=(SPACING["sm"], SPACING["md"]))
 
         self._subtitles_var = tk.BooleanVar(value=False)
@@ -444,7 +477,7 @@ class MainWindow:
         )
         embed_check.pack(side="left", padx=(SPACING["sm"], 0))
 
-        row6 = tk.Frame(detail_frame, bg=COLORS["surface"])
+        row6 = tk.Frame(self._options_frame, bg=COLORS["surface"])
         row6.pack(fill="x", pady=(SPACING["sm"], SPACING["md"]))
 
         tk.Label(
@@ -513,7 +546,7 @@ class MainWindow:
         self._cookies_file_btn.pack(side="left", padx=(SPACING["sm"], 0))
         self._add_hover_effect(self._cookies_file_btn, COLORS["hover"], COLORS["surface"])
 
-        row7 = tk.Frame(detail_frame, bg=COLORS["surface"])
+        row7 = tk.Frame(self._options_frame, bg=COLORS["surface"])
         row7.pack(fill="x", pady=(SPACING["sm"], SPACING["md"]))
 
         tk.Label(
@@ -560,36 +593,7 @@ class MainWindow:
         )
         split_check.pack(side="left")
 
-        button_frame = tk.Frame(detail_frame, bg=COLORS["surface"])
-        button_frame.pack(fill="x", pady=(SPACING["md"], 0))
-
-        self._enqueue_btn = tk.Button(
-            button_frame,
-            text="Add to Queue",
-            bg=COLORS["surface"],
-            fg=COLORS["text"],
-            activebackground=COLORS["hover"],
-            activeforeground=COLORS["text"],
-            relief="flat",
-            font=FONT["body"],
-            command=self._on_enqueue,
-        )
-        self._enqueue_btn.pack(side="left", padx=(0, SPACING["sm"]), fill="x", expand=True)
-        self._add_hover_effect(self._enqueue_btn, COLORS["hover"], COLORS["surface"])
-
-        self._download_btn = tk.Button(
-            button_frame,
-            text="Download",
-            bg=COLORS["primary"],
-            fg="#FFFFFF",
-            activebackground=COLORS["secondary"],
-            activeforeground="#FFFFFF",
-            relief="flat",
-            font=FONT["h2"],
-            command=self._on_download_now,
-        )
-        self._download_btn.pack(side="left", fill="x", expand=True)
-        self._add_hover_effect(self._download_btn, COLORS["secondary"], COLORS["primary"])
+        self._options_frame.pack_forget()
 
     def _create_status_bar(self) -> None:
         status_frame = tk.Frame(self._root, bg=COLORS["surface"])
@@ -699,30 +703,36 @@ class MainWindow:
 
     def _setup_controller_callbacks(self) -> None:
         def on_search_complete(results: list[Video]) -> None:
-            try:
-                self._is_searching = False
-                self._update_results(results)
-                if results:
-                    self._selected_video = results[0]
-                    self._set_status(f"Found: {results[0].title}")
-                else:
-                    self._set_status("No results found")
-                self._update_button_states()
-            except Exception as e:
-                import traceback
-                traceback.print_exc()
+            self._root.after(0, self._on_search_complete, results)
 
         def on_download_complete(video: Video) -> None:
-            self._is_downloading = False
-            self._set_status(f"Downloaded: {video.title}")
-            self._update_button_states()
+            self._root.after(0, self._on_download_complete, video)
 
         self._controller.on_search_complete(on_search_complete)
         self._controller.on_download_complete(on_download_complete)
 
+    def _on_search_complete(self, results: list[Video]) -> None:
+        try:
+            self._is_searching = False
+            self._update_results(results)
+            if results:
+                self._selected_video = results[0]
+                self._set_status(f"Found: {results[0].title}")
+            else:
+                self._set_status("No results found")
+            self._update_button_states()
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+
+    def _on_download_complete(self, video: Video) -> None:
+        self._is_downloading = False
+        self._set_status(f"Downloaded: {video.title}")
+        self._update_button_states()
+
     def _setup_state_observer(self) -> None:
         def on_state_change(snapshot: AppStateData) -> None:
-            self._update_from_snapshot(snapshot)
+            self._root.after(0, self._update_from_snapshot, snapshot)
 
         self._controller.state.on_change(on_state_change)
 
@@ -811,7 +821,6 @@ class MainWindow:
         self._search_btn.configure(state="disabled" if is_busy else "normal")
         self._cancel_btn.configure(state="normal" if self._is_searching else "disabled")
         self._download_btn.configure(state="disabled" if is_busy or not self._selected_video else "normal")
-        self._enqueue_btn.configure(state="disabled" if is_busy or not self._selected_video else "normal")
 
     def _on_search(self) -> None:
         query = self._search_var.get().strip()
@@ -846,22 +855,22 @@ class MainWindow:
     def _handle_playlist_input(self, url: str) -> None:
         self._set_status("Fetching playlist...")
         
-        def on_playlist_complete(videos: list[Video]) -> None:
-            if videos:
-                self._update_results(videos)
-                self._set_status(f"Playlist: {len(videos)} videos")
-            else:
-                self._set_status("Failed to fetch playlist")
-            self._is_searching = False
-            self._update_button_states()
-
         def do_fetch() -> None:
             videos = self._controller.search_playlist(url)
-            self._root.after(0, lambda: on_playlist_complete(videos))
+            self._root.after(0, self._on_playlist_complete, videos)
 
         import threading
         thread = threading.Thread(target=do_fetch, daemon=True)
         thread.start()
+
+    def _on_playlist_complete(self, videos: list[Video]) -> None:
+        if videos:
+            self._update_results(videos)
+            self._set_status(f"Playlist: {len(videos)} videos")
+        else:
+            self._set_status("Failed to fetch playlist")
+        self._is_searching = False
+        self._update_button_states()
 
     def _on_result_select(self, event: tk.Event) -> None:
         selection = self._results_tree.selection()
@@ -885,6 +894,23 @@ class MainWindow:
             if len(selection) > 1:
                 self._set_status(f"{len(selection)} videos selected")
 
+    def _on_open_in_browser(self, event: tk.Event) -> None:
+        item_id = self._results_tree.identify_row(event.y)
+        if not item_id:
+            return
+
+        results = self._controller.state.get_search_results()
+        if not results:
+            return
+
+        try:
+            index = self._results_tree.index(item_id)
+        except Exception:
+            return
+
+        if 0 <= index < len(results):
+            webbrowser.open(results[index].url)
+
     def _get_selected_videos(self) -> list[Video]:
         """Get videos selected via Ctrl+click or Shift+click."""
         selected_ids = self._results_tree.selection()
@@ -905,6 +931,14 @@ class MainWindow:
                 continue
         
         return videos
+
+    def _toggle_detail_panel(self) -> None:
+        if self._options_frame.winfo_ismapped():
+            self._options_frame.pack_forget()
+            self._detail_toggle_btn.configure(text="▶ OPTIONS")
+        else:
+            self._options_frame.pack(fill="both", expand=True, padx=SPACING["md"], pady=(0, SPACING["md"]))
+            self._detail_toggle_btn.configure(text="▼ OPTIONS")
 
     def _update_detail_panel(self, video: Video) -> None:
         self._detail_title.configure(text=video.title or "-")
