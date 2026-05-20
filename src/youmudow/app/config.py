@@ -26,6 +26,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "rate_limit": "",
     "split_chapters": False,
     "debug_mode": False,
+    "options_panel_open": False,
 }
 
 

@@ -255,7 +255,7 @@ class YtdlpAdapter:
 
         return None
 
-    def get_playlist_videos(self, url: str, limit: int = 53) -> list[Video]:
+    def get_playlist_videos(self, url: str, limit: int = 50) -> list[Video]:
         """Fetch all videos from a playlist."""
         args = self._build_base_args(None)
         args.extend([
@@ -410,7 +410,11 @@ class YtdlpAdapter:
                     reader.join(timeout=1)
 
                     if process.returncode == 0:
-                        final_path = get_unique_filename(output_path, f"{safe_title}.{fmt}")
+                        try:
+                            final_path = get_unique_filename(output_path, f"{safe_title}.{fmt}")
+                        except FileExistsError as e:
+                            self._log(f"[WARNING] {e}")
+                            final_path = output_path / f"{safe_title}.{fmt}"
                         if final_path.name != f"{safe_title}.{fmt}":
                             self._log(f"[INFO] File renamed to: {final_path.name}")
                         

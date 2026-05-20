@@ -49,31 +49,26 @@ def sanitize_filename(name: str, replacement: str = "_") -> str:
     return sanitized or "untitled"
 
 
-def get_unique_filename(directory: Path, filename: str) -> Path:
-    """Get a unique filename by adding (1), (2), etc. if file exists."""
+def get_unique_filename(directory: Path, filename: str, max_attempts: int = 999) -> Path:
+    """Get a unique filename by adding (1), (2), etc. if file exists.
+
+    Raises FileExistsError if max_attempts is exceeded.
+    """
     directory = Path(directory)
     path = directory / filename
-    
+
     if not path.exists():
         return path
-    
+
     name, ext = os.path.splitext(filename)
-    counter = 1
-    while True:
-        new_filename = f"{name} ({counter}){ext}"
-        new_path = directory / new_filename
+    for counter in range(1, max_attempts + 1):
+        new_path = directory / f"{name} ({counter}){ext}"
         if not new_path.exists():
             return new_path
-        counter += 1
-        if counter > 999:
-            new_filename = f"{name}_{counter}{ext}"
-            new_path = directory / new_filename
-            if not new_path.exists():
-                return new_path
-            counter += 1
-            if counter > 9999:
-                return directory / f"{name}_final_{counter}{ext}"
-            continue
+
+    raise FileExistsError(
+        f"Could not find a unique filename for '{filename}' after {max_attempts} attempts in {directory}"
+    )
 
 
 def validate_format_quality(format: str, quality: str) -> tuple[bool, str]:

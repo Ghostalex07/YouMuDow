@@ -6,7 +6,6 @@ Emits detailed progress events for integration with any UI layer.
 
 import subprocess
 import threading
-import time
 from collections import deque
 from dataclasses import dataclass
 from enum import Enum
@@ -52,76 +51,10 @@ class DownloadEvent:
     error: str | None = None
 
 
-class ProgressParser:
-    """Parses yt-dlp output lines for progress information."""
-
-    _progress_patterns = [
-        r"\[download\]\s+(\d+\.?\d*)%.*?at\s+(\S+).*?ETA\s+(\S+)",
-        r"\[download\]\s+(\d+\.?\d*)%.*?of\s+~?([~\d.]+\w+).*?at\s+(\S+)",
-        r"\[download\]\s+(\d+\.?\d*)%",
-    ]
-
-    _speed_pattern = r"at\s+(\S+)"
-    _eta_pattern = r"ETA\s+(\S+)"
-    _size_pattern = r"of\s+~?([~\d.]+\w+)"
-
-    @classmethod
-    def parse(cls, line: str) -> DownloadProgress | None:
-        import re
-
-        if "[download]" not in line:
-            return None
-
-        progress_match = None
-        for pattern in cls._progress_patterns:
-            progress_match = re.search(pattern, line)
-            if progress_match:
-                break
-
-        if not progress_match:
-            return None
-
-        progress = DownloadProgress(video=None)
-        groups = progress_match.groups()
-
-        if len(groups) >= 1:
-            try:
-                progress.progress = float(groups[0])
-            except ValueError:
-                progress.progress = 0.0
-
-        if len(groups) >= 2:
-            if len(groups) == 2 and "%" not in line:
-                progress.speed = groups[1]
-            else:
-                progress.speed = groups[1] if len(groups) == 3 else ""
-
-        if len(groups) >= 3:
-            if len(groups) == 3 and "%" in line:
-                progress.downloaded_bytes = groups[1]
-                progress.speed = groups[2]
-            else:
-                progress.eta = groups[2]
-
-        speed_match = re.search(cls._speed_pattern, line)
-        if speed_match:
-            progress.speed = speed_match.group(1)
-
-        eta_match = re.search(cls._eta_pattern, line)
-        if eta_match:
-            progress.eta = eta_match.group(1)
-
-        size_match = re.search(cls._size_pattern, line)
-        if size_match:
-            progress.downloaded_bytes = size_match.group(1)
-
-        return progress
-
-    @classmethod
-    def format_speed(cls, speed: str) -> str:
-        if not speed:
-            return "Calculating..."
-        return f"{speed}/s"
+def _format_speed(speed: str) -> str:
+    if not speed:
+        return "Calculating..."
+    return f"{speed}/s"
 
 
 class DownloadWorker(threading.Thread):
@@ -189,7 +122,7 @@ class DownloadWorker(threading.Thread):
                     progress=DownloadProgress(
                         video=video,
                         progress=progress,
-                        speed=ProgressParser.format_speed(speed),
+                        speed=_format_speed(speed),
                         status=DownloadStatus.DOWNLOADING,
                     ),
                 )
@@ -197,7 +130,14 @@ class DownloadWorker(threading.Thread):
 
             progress_callback_fn(0.0, "")
 
-            self._adapter.download(video, self._output_path, progress_callback_fn, cancel_event=self._cancel_event)
+            try:
+                self._adapter.download(
+                    video, self._output_path, progress_callback_fn, cancel_event=self._cancel_event
+                )
+            except Exception as e:
+                video.status = DownloadStatus.ERROR
+                video.error_message = str(e)
+
             self._current_video = None
             self._progress_callback(DownloadEvent(
                 type=DownloadEventType.COMPLETED,
@@ -269,6 +209,7 @@ class DownloadService:
         self._event_callbacks: list[Callable[[DownloadEvent], None]] = []
         self._lock = threading.Lock()
         self._active_downloads: dict[int, Video] = {}
+        self._queue_event = threading.Event()
 
     @property
     def queue_size(self) -> int:
@@ -322,6 +263,7 @@ class DownloadService:
 
     def add_to_queue(self, video: Video) -> None:
         self._queue.add(video)
+        self._queue_event.set()
         self._emit_event(DownloadEvent(
             type=DownloadEventType.QUEUED,
             video=video,
@@ -373,22 +315,26 @@ class DownloadService:
 
     def _process_queue(self) -> None:
         while self._running:
-            if not self._queue.is_empty():
-                with self._lock:
-                    idle_workers = [w for w in self._workers if not w.is_busy]
-                if idle_workers:
-                    video = self._queue.get()
-                    if video:
-                        worker = idle_workers[0]
-                        with self._lock:
-                            self._active_downloads[worker.worker_id] = video
-                        worker.submit(video)
-                        self._emit_event(DownloadEvent(
-                            type=DownloadEventType.STARTED,
-                            video=video,
-                        ))
+            if self._queue.is_empty():
+                self._queue_event.wait(timeout=0.1)
+                self._queue_event.clear()
+                continue
+            with self._lock:
+                idle_workers = [w for w in self._workers if not w.is_busy]
+            if idle_workers:
+                video = self._queue.get()
+                if video:
+                    worker = idle_workers[0]
+                    with self._lock:
+                        self._active_downloads[worker.worker_id] = video
+                    worker.submit(video)
+                    self._emit_event(DownloadEvent(
+                        type=DownloadEventType.STARTED,
+                        video=video,
+                    ))
             else:
-                time.sleep(0.1)
+                self._queue_event.wait(timeout=0.05)
+                self._queue_event.clear()
 
     def _handle_worker_event(self, event: DownloadEvent) -> None:
         if event.type == DownloadEventType.PROGRESS:

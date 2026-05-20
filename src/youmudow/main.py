@@ -15,7 +15,8 @@ def main() -> None:
     output_path.mkdir(parents=True, exist_ok=True)
     controller.set_output_path(output_path)
     
-    window = MainWindow(controller, config=config)
+    debug_mode = config.get("debug_mode", False)
+    window = MainWindow(controller, debug_mode=debug_mode, config=config)
     window.run()
 
 

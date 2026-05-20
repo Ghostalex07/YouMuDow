@@ -9,9 +9,8 @@ from youmudow.services.download_service import (
     DownloadEvent,
     DownloadProgress,
     DownloadEventType,
-    ProgressParser,
 )
-from youmudow.domain.models import Video, DownloadOptions
+from youmudow.domain.models import Video
 from youmudow.domain.enums import DownloadStatus
 
 
@@ -33,18 +32,6 @@ def download_service(mock_adapter, tmp_path):
     return DownloadService(
         adapter=mock_adapter,
         default_output_path=tmp_path,
-    )
-
-
-@pytest.fixture
-def sample_video():
-    """Create a sample video for testing."""
-    return Video(
-        title="Test Song",
-        url="https://youtube.com/watch?v=test123",
-        uploader="Test Artist",
-        duration=180,
-        options=DownloadOptions(format="mp3"),
     )
 
 
@@ -137,31 +124,6 @@ class TestDownloadService:
         result = download_service.download_now(sample_video)
         assert result is not None
         assert isinstance(result, Video)
-
-
-class TestProgressParser:
-    """Tests for ProgressParser."""
-
-    def test_parse_full_progress_line(self):
-        line = "[download] 45.5% of ~10.5MiB at 1.2MiB/s ETA 00:30"
-        result = ProgressParser.parse(line)
-        assert result is not None
-        assert result.progress == 45.5
-
-    def test_parse_progress_without_size(self):
-        line = "[download] 50.0% at 2.5MiB/s ETA 01:00"
-        result = ProgressParser.parse(line)
-        assert result is not None
-        assert result.progress == 50.0
-
-    def test_parse_returns_none_for_non_download(self):
-        line = "[info] Video title"
-        result = ProgressParser.parse(line)
-        assert result is None
-
-    def test_format_speed(self):
-        assert ProgressParser.format_speed("1.5MiB") == "1.5MiB/s"
-        assert ProgressParser.format_speed("") == "Calculating..."
 
 
 class TestDownloadEvents:

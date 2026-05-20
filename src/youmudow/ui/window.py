@@ -4,13 +4,18 @@ Tkinter-based GUI layer with modern dark theme.
 All business logic is delegated to the controller.
 """
 
+import threading
+import platform
+import subprocess
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox, filedialog
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 import webbrowser
 
-from youmudow.domain.validators import get_all_browser_profiles, get_available_browsers
+from youmudow.domain.validators import get_all_browser_profiles, get_available_browsers, is_valid_rate_limit
+from youmudow.services.updater_service import get_ytdlp_version, update_ytdlp
 
 from youmudow.domain.models import Video, DownloadOptions
 from youmudow.domain.enums import DownloadStatus
@@ -81,9 +86,7 @@ class MainWindow:
         self._controller = controller
         self._root = tk.Tk()
         self._root.title(f"YouMuDow v{__version__}")
-        ancho_pantalla = self._root.winfo_screenwidth()
-        alto_pantalla = self._root.winfo_screenheight()
-        self._root.geometry(f"{ancho_pantalla}x{alto_pantalla}")
+        self._root.withdraw()
         self._root.minsize(800, 600)
         self._root.configure(bg=COLORS["bg"])
 
@@ -110,6 +113,7 @@ class MainWindow:
         self._setup_state_observer()
         self._root.after(500, self._check_clipboard_on_start)
         self._root.after(3000, self._check_ytdlp_on_start)
+        self._root.deiconify()
 
     def _setup_ui(self) -> None:
         self._root.columnconfigure(0, weight=1)
@@ -187,10 +191,9 @@ class MainWindow:
         self._search_entry.grid(row=0, column=0, sticky="ew", padx=SPACING["md"], pady=SPACING["md"])
         
         def _on_paste(event) -> str | None:
-            from tkinter import TclError
             try:
                 clipboard = self._root.clipboard_get()
-            except TclError:
+            except tk.TclError:
                 return None
             if is_valid_youtube_url(clipboard):
                 self._search_var.set(clipboard)
@@ -338,7 +341,6 @@ class MainWindow:
         )
         self._detail_toggle_btn.pack(side="left")
 
-        # Thumbnail
         self._thumbnail_label = tk.Label(
             detail_container,
             text="[No thumbnail]",
@@ -421,7 +423,6 @@ class MainWindow:
             command=self._on_retry_download,
         )
 
-        # Open folder & Add all buttons (side by side)
         btn_row = tk.Frame(detail_container, bg=COLORS["bg"])
         btn_row.pack(fill="x", pady=(0, SPACING["md"]))
 
@@ -469,10 +470,10 @@ class MainWindow:
 
         self._options_frame = tk.Frame(detail_container, bg=COLORS["surface"])
 
-        row3 = tk.Frame(self._options_frame, bg=COLORS["surface"])
-        row3.pack(fill="x", pady=(0, SPACING["md"]))
+        format_row = tk.Frame(self._options_frame, bg=COLORS["surface"])
+        format_row.pack(fill="x", pady=(0, SPACING["md"]))
         tk.Label(
-            row3,
+            format_row,
             text="Format:",
             bg=COLORS["surface"],
             fg=COLORS["text_secondary"],
@@ -483,7 +484,7 @@ class MainWindow:
         
         self._format_var = tk.StringVar(value="mp3")
         format_combo = ttk.Combobox(
-            row3,
+            format_row,
             textvariable=self._format_var,
             values=["mp3", "mp4", "m4a", "best"],
             state="readonly",
@@ -492,10 +493,10 @@ class MainWindow:
         )
         format_combo.pack(side="left", padx=(0, SPACING["sm"]))
 
-        row4 = tk.Frame(self._options_frame, bg=COLORS["surface"])
-        row4.pack(fill="x", pady=(SPACING["sm"], SPACING["md"]))
+        quality_row = tk.Frame(self._options_frame, bg=COLORS["surface"])
+        quality_row.pack(fill="x", pady=(SPACING["sm"], SPACING["md"]))
         tk.Label(
-            row4,
+            quality_row,
             text="Quality:",
             bg=COLORS["surface"],
             fg=COLORS["text_secondary"],
@@ -506,7 +507,7 @@ class MainWindow:
 
         self._quality_var = tk.StringVar(value="best")
         quality_combo = ttk.Combobox(
-            row4,
+            quality_row,
             textvariable=self._quality_var,
             values=["best", "320kbps", "256kbps", "192kbps", "1080p", "720p", "480p"],
             state="readonly",
@@ -515,12 +516,12 @@ class MainWindow:
         )
         quality_combo.pack(side="left")
 
-        row5 = tk.Frame(self._options_frame, bg=COLORS["surface"])
-        row5.pack(fill="x", pady=(SPACING["sm"], SPACING["md"]))
+        subtitles_row = tk.Frame(self._options_frame, bg=COLORS["surface"])
+        subtitles_row.pack(fill="x", pady=(SPACING["sm"], SPACING["md"]))
 
         self._subtitles_var = tk.BooleanVar(value=False)
         subtitles_check = tk.Checkbutton(
-            row5,
+            subtitles_row,
             text="Download subtitles",
             variable=self._subtitles_var,
             bg=COLORS["surface"],
@@ -536,7 +537,7 @@ class MainWindow:
 
         self._subtitle_lang_var = tk.StringVar(value="en")
         self._subtitle_lang_entry = tk.Entry(
-            row5,
+            subtitles_row,
             textvariable=self._subtitle_lang_var,
             bg=COLORS["input_bg"],
             fg=COLORS["text"],
@@ -546,7 +547,7 @@ class MainWindow:
         )
         self._subtitle_lang_entry.pack(side="left", padx=(SPACING["sm"], 0))
         tk.Label(
-            row5,
+            subtitles_row,
             text="(en,es,fr...)",
             bg=COLORS["surface"],
             fg=COLORS["text_secondary"],
@@ -555,7 +556,7 @@ class MainWindow:
 
         self._embed_subs_var = tk.BooleanVar(value=False)
         self._embed_subs_check = tk.Checkbutton(
-            row5,
+            subtitles_row,
             text="Embed",
             variable=self._embed_subs_var,
             bg=COLORS["surface"],
@@ -568,11 +569,11 @@ class MainWindow:
         )
         self._embed_subs_check.pack(side="left", padx=(SPACING["sm"], 0))
 
-        row6 = tk.Frame(self._options_frame, bg=COLORS["surface"])
-        row6.pack(fill="x", pady=(SPACING["sm"], SPACING["md"]))
+        auth_row = tk.Frame(self._options_frame, bg=COLORS["surface"])
+        auth_row.pack(fill="x", pady=(SPACING["sm"], SPACING["md"]))
 
         tk.Label(
-            row6,
+            auth_row,
             text="Auth:",
             bg=COLORS["surface"],
             fg=COLORS["text_secondary"],
@@ -585,7 +586,7 @@ class MainWindow:
         self._cookies_source_var = tk.StringVar(value="browser")
         self._cookies_file_var = tk.StringVar(value="")
         cookies_check = tk.Checkbutton(
-            row6,
+            auth_row,
             text="Cookies",
             variable=self._use_cookies_var,
             bg=COLORS["surface"],
@@ -603,7 +604,7 @@ class MainWindow:
         default_browser = installed_browsers[0] if installed_browsers else "chrome"
         self._browser_var = tk.StringVar(value=default_browser)
         browser_combo = ttk.Combobox(
-            row6,
+            auth_row,
             textvariable=self._browser_var,
             values=installed_browsers if installed_browsers else ["chrome"],
             state="readonly",
@@ -615,7 +616,7 @@ class MainWindow:
 
         self._profile_var = tk.StringVar(value="Default")
         self._profile_combo = ttk.Combobox(
-            row6,
+            auth_row,
             textvariable=self._profile_var,
             values=["Default"],
             state="readonly",
@@ -625,7 +626,7 @@ class MainWindow:
         self._profile_combo.pack(side="left", padx=(SPACING["sm"], 0))
 
         self._cookies_file_btn = tk.Button(
-            row6,
+            auth_row,
             text="📁",
             bg=COLORS["surface"],
             fg=COLORS["text"],
@@ -637,11 +638,11 @@ class MainWindow:
         self._cookies_file_btn.pack(side="left", padx=(SPACING["sm"], 0))
         self._add_hover_effect(self._cookies_file_btn, COLORS["hover"], COLORS["surface"])
 
-        row7 = tk.Frame(self._options_frame, bg=COLORS["surface"])
-        row7.pack(fill="x", pady=(SPACING["sm"], SPACING["md"]))
+        extra_options_row = tk.Frame(self._options_frame, bg=COLORS["surface"])
+        extra_options_row.pack(fill="x", pady=(SPACING["sm"], SPACING["md"]))
 
         tk.Label(
-            row7,
+            extra_options_row,
             text="Options:",
             bg=COLORS["surface"],
             fg=COLORS["text_secondary"],
@@ -652,7 +653,7 @@ class MainWindow:
 
         self._rate_limit_var = tk.StringVar(value="")
         rate_entry = tk.Entry(
-            row7,
+            extra_options_row,
             textvariable=self._rate_limit_var,
             bg=COLORS["input_bg"],
             fg=COLORS["text"],
@@ -662,7 +663,7 @@ class MainWindow:
         )
         rate_entry.pack(side="left", padx=(0, SPACING["sm"]))
         tk.Label(
-            row7,
+            extra_options_row,
             text="Rate (e.g. 1M)",
             bg=COLORS["surface"],
             fg=COLORS["text_secondary"],
@@ -671,7 +672,7 @@ class MainWindow:
 
         self._split_chapters_var = tk.BooleanVar(value=False)
         split_check = tk.Checkbutton(
-            row7,
+            extra_options_row,
             text="Split chapters",
             variable=self._split_chapters_var,
             bg=COLORS["surface"],
@@ -783,8 +784,6 @@ class MainWindow:
         self._queue_count_label.configure(text=f"{total} items")
 
     def _on_open_folder(self) -> None:
-        import subprocess
-        import platform
         path = self._controller.get_output_path()
         try:
             system = platform.system()
@@ -1054,7 +1053,13 @@ class MainWindow:
         self._is_playlist = False
         self._playlist_videos = []
 
+        for item in self._results_tree.get_children():
+            self._results_tree.delete(item)
+        self._results_tree.insert("", "end", values=("Searching...", "", ""))
+
         if is_valid_youtube_url(query):
+            for item in self._results_tree.get_children():
+                self._results_tree.delete(item)
             if is_playlist_url(query):
                 self._is_playlist = True
                 self._handle_playlist_input(query)
@@ -1086,7 +1091,6 @@ class MainWindow:
             videos = self._controller.search_playlist(url)
             self._root.after(0, self._on_playlist_complete, videos)
 
-        import threading
         thread = threading.Thread(target=do_fetch, daemon=True)
         thread.start()
 
@@ -1109,13 +1113,11 @@ class MainWindow:
             pass
 
     def _check_ytdlp_on_start(self) -> None:
-        from youmudow.services.updater_service import get_ytdlp_version
         version = get_ytdlp_version()
         if not version:
             self._set_status("⚠ yt-dlp not found. Install it with: pip install yt-dlp")
 
     def _on_update_ytdlp(self) -> None:
-        from youmudow.services.updater_service import update_ytdlp
         self._set_status("Updating yt-dlp...")
 
         def on_success(version: str) -> None:
@@ -1127,14 +1129,10 @@ class MainWindow:
         update_ytdlp(on_success, on_error)
 
     def _on_show_ytdlp_version(self) -> None:
-        from tkinter import messagebox
-        from youmudow.services.updater_service import get_ytdlp_version
         version = get_ytdlp_version()
         messagebox.showinfo("yt-dlp version", f"Installed version: {version or 'not found'}")
 
     def _on_about(self) -> None:
-        from tkinter import messagebox
-        from youmudow.services.updater_service import get_ytdlp_version
         messagebox.showinfo(
             "About YouMuDow",
             f"YouMuDow v{__version__}\n"
@@ -1144,8 +1142,6 @@ class MainWindow:
         )
 
     def _on_export_logs(self) -> None:
-        from tkinter import filedialog
-        from datetime import datetime
         if not self._log_terminal:
             return
         default_name = f"youmudow_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
@@ -1157,7 +1153,6 @@ class MainWindow:
         )
         if path:
             try:
-                from pathlib import Path
                 self._log_terminal.export_to_file(Path(path))
                 self._set_status(f"Logs exported to {path}")
             except Exception as e:
@@ -1264,7 +1259,6 @@ class MainWindow:
             except Exception:
                 pass
 
-        import threading
         threading.Thread(target=_fetch_and_set, daemon=True).start()
 
     def _on_retry_download(self) -> None:
@@ -1324,7 +1318,6 @@ class MainWindow:
         self._on_browser_changed()
 
     def _on_select_cookies_file(self) -> None:
-        from tkinter import filedialog
         file_path = filedialog.askopenfilename(
             title="Select Cookies File",
             filetypes=[("Netscape cookies", "*.txt"), ("All files", "*.*")],
@@ -1381,8 +1374,6 @@ class MainWindow:
         self._set_status(f"Added {len(self._playlist_videos)} videos to queue")
 
     def _get_current_options(self) -> DownloadOptions | None:
-        from youmudow.domain.validators import is_valid_rate_limit
-
         rate = self._rate_limit_var.get().strip()
         if rate and not is_valid_rate_limit(rate):
             self._set_status("Invalid rate limit. Use format: 1M, 500K, 2G")
@@ -1409,28 +1400,9 @@ class MainWindow:
         return opts
 
     def _apply_options_to_video(self, video: Video) -> None:
-        video.options.format = self._format_var.get()
-        video.options.quality = self._quality_var.get()
-        video.options.subtitles = self._subtitles_var.get()
-        video.options.subtitle_lang = self._subtitle_lang_var.get()
-        video.options.embed_subtitles = self._embed_subs_var.get()
-        video.options.use_cookies = self._use_cookies_var.get()
-        video.options.rate_limit = self._rate_limit_var.get() or None
-        video.options.split_chapters = self._split_chapters_var.get()
-        
-        if self._use_cookies_var.get():
-            if self._cookies_source_var.get() == "file" and self._cookies_file_var.get():
-                video.options.cookies_file = self._cookies_file_var.get()
-                video.options.cookies_from_browser = None
-                video.options.cookies_profile = None
-            else:
-                video.options.cookies_file = None
-                video.options.cookies_from_browser = self._browser_var.get()
-                video.options.cookies_profile = self._profile_var.get() if self._profile_var.get() != "Default" else None
-        else:
-            video.options.cookies_file = None
-            video.options.cookies_from_browser = None
-            video.options.cookies_profile = None
+        opts = self._get_current_options()
+        if opts is not None:
+            video.options = opts
 
     def _on_download_now(self) -> None:
         selected = self._get_selected_videos()
@@ -1479,7 +1451,6 @@ class MainWindow:
         self._set_status("Queue cleared")
 
     def _on_set_output(self) -> None:
-        from tkinter import filedialog
         folder = filedialog.askdirectory(title="Select Output Folder")
         if folder:
             self._controller.set_output_path(Path(folder))
@@ -1494,7 +1465,6 @@ class MainWindow:
         if self._config:
             try:
                 self._config.window_geometry = self._root.geometry()
-                from youmudow.domain.validators import is_valid_rate_limit
                 rate = self._rate_limit_var.get().strip()
                 if rate and not is_valid_rate_limit(rate):
                     rate = ""
@@ -1510,6 +1480,7 @@ class MainWindow:
                 self._config.set("profile", self._profile_var.get())
                 self._config.set("rate_limit", rate)
                 self._config.set("split_chapters", self._split_chapters_var.get())
+                self._config.set("options_panel_open", self._options_frame.winfo_ismapped())
                 self._config.output_path = self._controller.get_output_path()
                 self._config.save()
             except Exception:
@@ -1540,6 +1511,10 @@ class MainWindow:
             self._profile_var.set(self._config.get("profile", "Default"))
             self._rate_limit_var.set(self._config.get("rate_limit", ""))
             self._split_chapters_var.set(self._config.get("split_chapters", False))
+
+            if self._config.get("options_panel_open", False):
+                self._options_frame.pack(fill="both", expand=True, padx=SPACING["md"], pady=(0, SPACING["md"]))
+                self._detail_toggle_btn.configure(text="▼ OPTIONS")
 
             geo = self._config.window_geometry
             if geo:
