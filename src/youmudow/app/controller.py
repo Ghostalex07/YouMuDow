@@ -185,9 +185,6 @@ class AppController:
             self._state_manager.set_state(AppState.IDLE)
             return []
 
-    def select_video(self, video: Video) -> dict[str, str]:
-        return self._metadata_service.format_for_display(video)
-
     def enqueue(self, video: Video) -> None:
         self._state_manager.add_to_queue(video)
 
@@ -224,10 +221,6 @@ class AppController:
 
     def cancel_download(self, video: Video) -> None:
         self._state_manager.cancel_download(video)
-
-    def set_format(self, video: Video, fmt: str, quality: str = "best") -> None:
-        video.options.format = fmt
-        video.options.quality = quality
 
     def set_debug_mode(self, enabled: bool) -> None:
         from youmudow.app.state import AppMode

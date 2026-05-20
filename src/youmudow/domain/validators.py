@@ -70,7 +70,10 @@ def get_unique_filename(directory: Path, filename: str) -> Path:
             new_path = directory / new_filename
             if not new_path.exists():
                 return new_path
-            return directory / f"{name}_final{ext}"
+            counter += 1
+            if counter > 9999:
+                return directory / f"{name}_final_{counter}{ext}"
+            continue
 
 
 def validate_format_quality(format: str, quality: str) -> tuple[bool, str]:

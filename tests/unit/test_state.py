@@ -9,15 +9,12 @@ class TestStateManager:
         sm = StateManager()
         assert sm.state == AppState.IDLE
         assert sm.mode == AppMode.NORMAL
-        assert not sm.is_downloading
-        assert not sm.is_searching
-        assert sm.error_message == ""
+        assert sm.get_snapshot().error_message == ""
 
     def test_set_state(self):
         sm = StateManager()
         sm.set_state(AppState.SEARCHING)
         assert sm.state == AppState.SEARCHING
-        assert sm.is_searching
 
     def test_set_mode(self):
         sm = StateManager()
@@ -28,14 +25,13 @@ class TestStateManager:
         sm = StateManager()
         sm.set_error("test error")
         assert sm.state == AppState.ERROR
-        assert sm.error_message == "test error"
+        assert sm.get_snapshot().error_message == "test error"
 
     def test_clear_error(self):
         sm = StateManager()
         sm.set_error("test")
         sm.clear_error()
         assert sm.state == AppState.IDLE
-        assert sm.error_message == ""
 
     def test_search_results(self):
         sm = StateManager()
@@ -70,9 +66,9 @@ class TestStateManager:
         sm.add_to_queue(v)
         sm.start_download(v)
         assert v not in sm.get_queue()
-        assert v in sm.get_active_downloads()
+        assert v in sm.get_snapshot().active_downloads
         assert v.status == DownloadStatus.DOWNLOADING
-        assert sm.is_downloading
+        assert sm.state == AppState.DOWNLOADING
 
     def test_finish_download(self):
         sm = StateManager()
@@ -80,9 +76,9 @@ class TestStateManager:
         sm.add_to_queue(v)
         sm.start_download(v)
         sm.finish_download(v)
-        assert v not in sm.get_active_downloads()
+        assert v not in sm.get_snapshot().active_downloads
         assert v in sm.get_completed_downloads()
-        assert not sm.is_downloading
+        assert sm.state == AppState.IDLE
 
     def test_update_progress(self):
         sm = StateManager()
@@ -98,7 +94,7 @@ class TestStateManager:
         sm.add_to_queue(v)
         sm.start_download(v)
         sm.cancel_download(v)
-        assert v not in sm.get_active_downloads()
+        assert v not in sm.get_snapshot().active_downloads
         assert v in sm.get_queue()
 
     def test_snapshot(self):

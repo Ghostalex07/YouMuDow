@@ -961,6 +961,8 @@ class MainWindow:
                 self._set_status(f"Downloading: {active.progress:.1f}%")
                 self._progress_bar.itemconfig(self._progress_rect, fill=COLORS["primary"])
             else:
+                self._progress_var.set(0)
+                self._progress_bar.itemconfig(self._progress_rect, fill=COLORS["primary"])
                 self._set_status("Downloading...")
         elif snapshot.state.name == "ERROR":
             self._is_searching = False
@@ -1235,6 +1237,8 @@ class MainWindow:
         if not thumbnail_url:
             return
 
+        self._last_thumb_url = thumbnail_url
+
         def _fetch_and_set() -> None:
             try:
                 from urllib.request import urlopen
@@ -1244,6 +1248,8 @@ class MainWindow:
                 pass
 
         def _set_thumbnail(data: bytes, url: str) -> None:
+            if getattr(self, '_last_thumb_url', None) != url:
+                return
             try:
                 from PIL import Image, ImageTk
                 import io
@@ -1325,6 +1331,7 @@ class MainWindow:
         )
         if file_path:
             self._use_cookies_var.set(True)
+            self._cookies_source_var.set("file")
             self._cookies_file_var.set(file_path)
 
     def _on_browser_changed(self, event=None) -> None:

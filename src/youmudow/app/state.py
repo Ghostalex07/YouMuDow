@@ -66,21 +66,6 @@ class StateManager:
         with self._lock:
             return self._mode
 
-    @property
-    def is_downloading(self) -> bool:
-        with self._lock:
-            return self._state == AppState.DOWNLOADING
-
-    @property
-    def is_searching(self) -> bool:
-        with self._lock:
-            return self._state == AppState.SEARCHING
-
-    @property
-    def error_message(self) -> str:
-        with self._lock:
-            return self._error_message
-
     def get_search_results(self) -> list[Video]:
         with self._lock:
             return list(self._search_results)
@@ -88,10 +73,6 @@ class StateManager:
     def get_queue(self) -> list[Video]:
         with self._lock:
             return list(self._queue)
-
-    def get_active_downloads(self) -> list[Video]:
-        with self._lock:
-            return list(self._active_downloads)
 
     def get_completed_downloads(self) -> list[Video]:
         with self._lock:
@@ -123,11 +104,6 @@ class StateManager:
     def set_search_results(self, results: list[Video]) -> None:
         with self._lock:
             self._search_results = list(results)
-        self._notify_change()
-
-    def add_search_result(self, video: Video) -> None:
-        with self._lock:
-            self._search_results.append(video)
         self._notify_change()
 
     def clear_search_results(self) -> None:

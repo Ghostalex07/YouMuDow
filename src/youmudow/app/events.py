@@ -198,66 +198,6 @@ def on(
     return decorator
 
 
-def emit_search_started(query: str) -> None:
-    emit(SearchEvent(type=EventType.SEARCH_STARTED, query=query))
-
-
-def emit_search_completed(query: str, results: list[Video]) -> None:
-    emit(SearchEvent(type=EventType.SEARCH_COMPLETED, query=query, results=results))
-
-
-def emit_search_error(query: str, error: str) -> None:
-    emit(SearchEvent(type=EventType.SEARCH_ERROR, query=query, error=error))
-
-
-def emit_download_queued(video: Video) -> None:
-    emit(DownloadEvent(type=EventType.DOWNLOAD_QUEUED, video=video))
-
-
-def emit_download_started(video: Video) -> None:
-    emit(DownloadEvent(type=EventType.DOWNLOAD_STARTED, video=video))
-
-
-def emit_download_progress(
-    video: Video,
-    progress: float,
-    speed: str = "",
-    eta: str = "",
-) -> None:
-    emit(DownloadEvent(
-        type=EventType.DOWNLOAD_PROGRESS,
-        video=video,
-        progress=progress,
-        speed=speed,
-        eta=eta,
-    ))
-
-
-def emit_download_completed(video: Video) -> None:
-    emit(DownloadEvent(type=EventType.DOWNLOAD_COMPLETED, video=video))
-
-
-def emit_download_error(video: Video, error: str) -> None:
-    emit(DownloadEvent(type=EventType.DOWNLOAD_ERROR, video=video, error=error))
-
-
-def emit_download_cancelled(video: Video) -> None:
-    emit(DownloadEvent(type=EventType.DOWNLOAD_CANCELLED, video=video))
-
-
-def emit_state_changed(old_state: str, new_state: str) -> None:
-    emit(StateChangeEvent(
-        type=EventType.STATE_CHANGED,
-        state_name=new_state,
-        old_state=old_state,
-        new_state=new_state,
-    ))
-
-
-def emit_selection_changed(video: Video | None, index: int = -1) -> None:
-    emit(SelectionEvent(type=EventType.SELECTION_CHANGED, video=video, index=index))
-
-
 def emit_log(message: str, level: str = "info") -> None:
     """Emit a log message event for terminal display."""
     import datetime
