@@ -97,17 +97,13 @@ class YtdlpAdapter:
                             browser = fallback
                             opts.cookies_from_browser = fallback
                             opts.cookies_profile = None
-                        else:
-                            self._log("[AUTH] Skipping cookies - no browser found")
-                            skip_cookies = True
-                    if not skip_cookies:
-                        profile = opts.cookies_profile
-                        cookie_arg = browser
-                        if profile and profile.lower() not in ["default", "main"]:
-                            cookie_arg = f"{browser}:{profile}"
-                        args.extend(["--cookies-from-browser", cookie_arg])
-                        profile_msg = f" ({profile})" if profile and profile.lower() not in ["default", "main"] else ""
-                        self._log(f"[AUTH] Using {browser.capitalize()}{profile_msg} cookies")
+                    profile = opts.cookies_profile
+                    cookie_arg = browser
+                    if profile and profile.lower() not in ["default", "main"]:
+                        cookie_arg = f"{browser}:{profile}"
+                    args.extend(["--cookies-from-browser", cookie_arg])
+                    profile_msg = f" ({profile})" if profile and profile.lower() not in ["default", "main"] else ""
+                    self._log(f"[AUTH] Using {browser.capitalize()}{profile_msg} cookies")
                 elif opts.cookies_file:
                     cookie_path = Path(opts.cookies_file)
                     if cookie_path.exists():
