@@ -20,7 +20,7 @@ TERMINAL_SPACING = {
 }
 
 
-TERMINAL_COLORS = {
+_TERMINAL_COLORS_DARK = {
     "background": "#0A0A10",
     "foreground": "#ECECF1",
     "info": "#8A8A99",
@@ -31,7 +31,24 @@ TERMINAL_COLORS = {
     "separator": "#2E2E38",
     "timestamp": "#5A5A6A",
     "download": "#A78BFA",
+    "metadata": "#34D399",
 }
+
+_TERMINAL_COLORS_LIGHT = {
+    "background": "#F8F8FC",
+    "foreground": "#18181B",
+    "info": "#71717A",
+    "warning": "#D97706",
+    "error": "#DC2626",
+    "success": "#16A34A",
+    "debug": "#2563EB",
+    "separator": "#E4E4E7",
+    "timestamp": "#A1A1AA",
+    "download": "#7C3AED",
+    "metadata": "#16A34A",
+}
+
+TERMINAL_COLORS = _TERMINAL_COLORS_DARK  # module-level alias for external use
 
 
 class LogTerminal(ttk.Frame):
@@ -42,6 +59,7 @@ class LogTerminal(ttk.Frame):
         parent: tk.Widget,
         show_timestamp: bool = True,
         max_lines: int = MAX_LINES,
+        dark_mode: bool = True,
     ) -> None:
         super().__init__(parent)
         self._show_timestamp = show_timestamp
@@ -51,21 +69,39 @@ class LogTerminal(ttk.Frame):
         self._pending_messages: list[tuple[str, str, str | None]] = []
         self._processing = False
         self._log_buffer: list[str] = []
+        self._colors = _TERMINAL_COLORS_DARK if dark_mode else _TERMINAL_COLORS_LIGHT
 
         self._create_widgets()
         self._configure_tags()
 
     def _create_widgets(self) -> None:
-        toolbar = tk.Frame(self, bg=TERMINAL_COLORS["background"])
+        self._create_widgets_impl()
+
+    def set_dark_mode(self, dark: bool) -> None:
+        self._colors = _TERMINAL_COLORS_DARK if dark else _TERMINAL_COLORS_LIGHT
+        self._reconfigure_tags()
+
+    def _reconfigure_tags(self) -> None:
+        c = self._colors
+        try:
+            self._text.configure(bg=c["background"], fg=c["foreground"])
+            for tag in ("info", "warning", "error", "success", "debug", "separator", "download", "metadata"):
+                self._text.tag_configure(tag, foreground=c.get(tag, c["foreground"]))
+        except tk.TclError:
+            pass
+
+    def _create_widgets_impl(self) -> None:
+        c = self._colors
+        toolbar = tk.Frame(self, bg=c["background"])
         toolbar.pack(fill="x", pady=(0, 4))
 
         clear_btn = tk.Button(
             toolbar,
             text="Clear",
-            bg=TERMINAL_COLORS["background"],
-            fg=TERMINAL_COLORS["foreground"],
-            activebackground=TERMINAL_COLORS["separator"],
-            activeforeground=TERMINAL_COLORS["foreground"],
+            bg=c["background"],
+            fg=c["foreground"],
+            activebackground=c["separator"],
+            activeforeground=c["foreground"],
             relief="flat",
             bd=0,
             padx=12,
@@ -76,8 +112,8 @@ class LogTerminal(ttk.Frame):
         clear_btn.pack(side="left")
         
         def add_hover(widget: tk.Widget) -> None:
-            hover_bg = TERMINAL_COLORS["separator"]
-            normal_bg = TERMINAL_COLORS["background"]
+            hover_bg = c["separator"]
+            normal_bg = c["background"]
             def on_enter(e: tk.Event) -> None:
                 widget.configure(bg=hover_bg)
             def on_leave(e: tk.Event) -> None:
@@ -91,11 +127,11 @@ class LogTerminal(ttk.Frame):
         auto_scroll_check = tk.Checkbutton(
             toolbar,
             text="Auto-scroll",
-            bg=TERMINAL_COLORS["background"],
-            fg=TERMINAL_COLORS["foreground"],
-            activebackground=TERMINAL_COLORS["background"],
-            activeforeground=TERMINAL_COLORS["foreground"],
-            selectcolor=TERMINAL_COLORS["background"],
+            bg=c["background"],
+            fg=c["foreground"],
+            activebackground=c["background"],
+            activeforeground=c["foreground"],
+            selectcolor=c["background"],
             relief="flat",
             bd=0,
             font=("Segoe UI", 9),
@@ -103,19 +139,19 @@ class LogTerminal(ttk.Frame):
         )
         auto_scroll_check.pack(side="left", padx=(16, 0))
 
-        container = tk.Frame(self, bg=TERMINAL_COLORS["background"], bd=1, relief="solid", highlightbackground=TERMINAL_COLORS["separator"])
+        container = tk.Frame(self, bg=c["background"], bd=1, relief="solid", highlightbackground=c["separator"])
         container.pack(fill="both", expand=True)
 
-        text_frame = tk.Frame(container, bg=TERMINAL_COLORS["background"])
+        text_frame = tk.Frame(container, bg=c["background"])
         text_frame.pack(fill="both", expand=True, padx=1, pady=1)
 
         self._text = tk.Text(
             text_frame,
             wrap="none",
             font=("Cascadia Code", 10),
-            bg=TERMINAL_COLORS["background"],
-            fg=TERMINAL_COLORS["foreground"],
-            insertbackground=TERMINAL_COLORS["foreground"],
+            bg=c["background"],
+            fg=c["foreground"],
+            insertbackground=c["foreground"],
             relief="flat",
             bd=0,
             padx=TERMINAL_SPACING["sm"],
@@ -125,21 +161,22 @@ class LogTerminal(ttk.Frame):
         )
         self._text.pack(side="left", fill="both", expand=True)
 
-        scrollbar = tk.Scrollbar(text_frame, orient="vertical", bg=TERMINAL_COLORS["background"], activebackground=TERMINAL_COLORS["separator"], troughcolor=TERMINAL_COLORS["background"], relief="flat", bd=0)
+        scrollbar = tk.Scrollbar(text_frame, orient="vertical", bg=c["background"], activebackground=c["separator"], troughcolor=c["background"], relief="flat", bd=0)
         scrollbar.configure(command=self._text.yview)
         self._text.configure(yscrollcommand=scrollbar.set)
         scrollbar.pack(side="right", fill="y")
 
     def _configure_tags(self) -> None:
-        self._text.tag_configure("info", foreground=TERMINAL_COLORS["info"])
-        self._text.tag_configure("warning", foreground=TERMINAL_COLORS["warning"])
-        self._text.tag_configure("error", foreground=TERMINAL_COLORS["error"], font=("Cascadia Code", 10, "bold"))
-        self._text.tag_configure("success", foreground=TERMINAL_COLORS["success"])
-        self._text.tag_configure("timestamp", foreground=TERMINAL_COLORS["timestamp"])
-        self._text.tag_configure("debug", foreground=TERMINAL_COLORS["debug"])
-        self._text.tag_configure("separator", foreground=TERMINAL_COLORS["separator"])
-        self._text.tag_configure("download", foreground=TERMINAL_COLORS["download"])
-        self._text.tag_configure("metadata", foreground=TERMINAL_COLORS["download"])
+        c = self._colors
+        self._text.tag_configure("info", foreground=c["info"])
+        self._text.tag_configure("warning", foreground=c["warning"])
+        self._text.tag_configure("error", foreground=c["error"], font=("Cascadia Code", 10, "bold"))
+        self._text.tag_configure("success", foreground=c["success"])
+        self._text.tag_configure("timestamp", foreground=c["timestamp"])
+        self._text.tag_configure("debug", foreground=c["debug"])
+        self._text.tag_configure("separator", foreground=c["separator"])
+        self._text.tag_configure("download", foreground=c["download"])
+        self._text.tag_configure("metadata", foreground=c["download"])
 
     def append(self, message: str, level: str = "info", timestamp: str | None = None) -> None:
         """Append a log message to the terminal (thread-safe)."""

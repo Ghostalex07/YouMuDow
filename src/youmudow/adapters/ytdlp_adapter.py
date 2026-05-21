@@ -139,7 +139,7 @@ class YtdlpAdapter:
             if opts.embed_subtitles:
                 args.append("--embed-subs")
         elif self._config.embed_subs:
-            args.append("--embed-subs")
+            args.extend(["--write-subs", "--embed-subs"])
         
         if opts.rate_limit:
             args.extend(["--limit-rate", opts.rate_limit])

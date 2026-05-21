@@ -308,3 +308,59 @@ class TestDurationParsing:
         assert a._parse_duration("invalid") == 0
         assert a._parse_duration("") == 0
         assert a._parse_duration(None) == 0
+
+
+class TestBuildDownloadArgsSubtitles:
+    """Tests for subtitle argument building in download args."""
+
+    def test_embed_subs_from_config_includes_write_subs(self):
+        """embed_subs from YtdlpConfig must include --write-subs or it's a no-op."""
+        from youmudow.adapters.ytdlp_adapter import YtdlpAdapter, YtdlpConfig
+        from youmudow.domain.models import Video, DownloadOptions
+
+        config = YtdlpConfig(embed_subs=True)
+        adapter = YtdlpAdapter(config=config)
+
+        video = Video(
+            title="Test",
+            url="https://youtube.com/watch?v=x",
+            options=DownloadOptions(subtitles=False),
+        )
+        args = adapter._build_download_args(video)
+
+        if "--embed-subs" in args:
+            assert "--write-subs" in args, (
+                "--embed-subs added without --write-subs: yt-dlp will ignore it silently"
+            )
+
+    def test_subtitles_true_includes_write_subs(self):
+        from youmudow.adapters.ytdlp_adapter import YtdlpAdapter
+        from youmudow.domain.models import Video, DownloadOptions
+
+        adapter = YtdlpAdapter()
+        video = Video(
+            title="Test",
+            url="https://youtube.com/watch?v=x",
+            options=DownloadOptions(subtitles=True, subtitle_lang="es"),
+        )
+        args = adapter._build_download_args(video)
+
+        assert "--write-subs" in args
+        assert "--sub-langs" in args
+        idx = args.index("--sub-langs")
+        assert args[idx + 1] == "es"
+
+    def test_embed_subtitles_requires_subtitles_true(self):
+        from youmudow.adapters.ytdlp_adapter import YtdlpAdapter
+        from youmudow.domain.models import Video, DownloadOptions
+
+        adapter = YtdlpAdapter()
+        video = Video(
+            title="Test",
+            url="https://youtube.com/watch?v=x",
+            options=DownloadOptions(subtitles=True, embed_subtitles=True),
+        )
+        args = adapter._build_download_args(video)
+
+        assert "--write-subs" in args
+        assert "--embed-subs" in args

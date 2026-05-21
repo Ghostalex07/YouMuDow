@@ -186,6 +186,7 @@ class MainWindow:
             highlightthickness=1,
             highlightbackground=_c("border"),
         )
+        entry_frame._bg_key = "surface"
         entry_frame.pack(side="left", fill="both", expand=True, padx=(0, SPACING["sm"]))
         entry_frame.columnconfigure(0, weight=1)
 
@@ -369,6 +370,7 @@ class MainWindow:
         self._thumbnail_label.pack(fill="x", pady=(0, SPACING["sm"]))
 
         row_title = tk.Frame(detail_container, bg=_c("surface"))
+        row_title._bg_key = "surface"
         row_title.pack(fill="x", pady=(0, SPACING["xs"]))
         tk.Label(
             row_title,
@@ -391,6 +393,7 @@ class MainWindow:
         self._detail_title.pack(side="left", fill="x", expand=True)
 
         row_uploader = tk.Frame(detail_container, bg=_c("surface"))
+        row_uploader._bg_key = "surface"
         row_uploader.pack(fill="x", pady=(0, SPACING["sm"]))
         tk.Label(
             row_uploader,
@@ -490,8 +493,10 @@ class MainWindow:
         self._add_hover_effect(self._queue_toggle_btn, "hover", "surface")
 
         self._options_frame = tk.Frame(detail_container, bg=_c("surface"))
+        self._options_frame._bg_key = "surface"
 
         format_row = tk.Frame(self._options_frame, bg=_c("surface"))
+        format_row._bg_key = "surface"
         format_row.pack(fill="x", pady=(0, SPACING["md"]))
         tk.Label(
             format_row,
@@ -515,6 +520,7 @@ class MainWindow:
         format_combo.pack(side="left", padx=(0, SPACING["sm"]))
 
         quality_row = tk.Frame(self._options_frame, bg=_c("surface"))
+        quality_row._bg_key = "surface"
         quality_row.pack(fill="x", pady=(SPACING["sm"], SPACING["md"]))
         tk.Label(
             quality_row,
@@ -538,6 +544,7 @@ class MainWindow:
         quality_combo.pack(side="left")
 
         subtitles_row = tk.Frame(self._options_frame, bg=_c("surface"))
+        subtitles_row._bg_key = "surface"
         subtitles_row.pack(fill="x", pady=(SPACING["sm"], SPACING["md"]))
 
         self._subtitles_var = tk.BooleanVar(value=False)
@@ -591,6 +598,7 @@ class MainWindow:
         self._embed_subs_check.pack(side="left", padx=(SPACING["sm"], 0))
 
         auth_row = tk.Frame(self._options_frame, bg=_c("surface"))
+        auth_row._bg_key = "surface"
         auth_row.pack(fill="x", pady=(SPACING["sm"], SPACING["md"]))
 
         tk.Label(
@@ -661,6 +669,7 @@ class MainWindow:
         self._add_hover_effect(self._cookies_file_btn, "hover", "surface")
 
         extra_options_row = tk.Frame(self._options_frame, bg=_c("surface"))
+        extra_options_row._bg_key = "surface"
         extra_options_row.pack(fill="x", pady=(SPACING["sm"], SPACING["md"]))
 
         tk.Label(
@@ -712,9 +721,11 @@ class MainWindow:
 
     def _create_queue_panel(self, parent: tk.Frame) -> None:
         self._queue_frame = tk.Frame(parent, bg=_c("surface"))
+        self._queue_frame._bg_key = "surface"
         self._queue_frame.grid(row=2, column=0, columnspan=2, sticky="ew", padx=SPACING["md"], pady=(0, SPACING["md"]))
 
         qheader = tk.Frame(self._queue_frame, bg=_c("surface"))
+        qheader._bg_key = "surface"
         qheader.pack(fill="x", pady=(SPACING["sm"], SPACING["xs"]))
 
         tk.Label(
@@ -820,6 +831,7 @@ class MainWindow:
 
     def _create_status_bar(self) -> None:
         status_frame = tk.Frame(self._root, bg=_c("surface"))
+        status_frame._bg_key = "surface"
         status_frame.grid(row=1, column=0, sticky="ew", padx=SPACING["md"], pady=SPACING["sm"])
         status_frame.columnconfigure(0, weight=1)
 
@@ -835,6 +847,7 @@ class MainWindow:
         self._status_label.grid(row=0, column=0, sticky="w")
 
         progress_frame = tk.Frame(status_frame, bg=_c("surface"), height=6)
+        progress_frame._bg_key = "surface"
         progress_frame.grid(row=1, column=0, sticky="ew", pady=(SPACING["sm"], 0))
         progress_frame.columnconfigure(0, weight=1)
 
@@ -846,6 +859,7 @@ class MainWindow:
             highlightthickness=0,
             relief="flat",
         )
+        self._progress_bar._bg_key = "bg"
         self._progress_bar.pack(fill="x")
         self._progress_rect = self._progress_bar.create_rectangle(
             0, 0, 0, 6, fill=_c("primary"), outline=""
@@ -1491,6 +1505,8 @@ class MainWindow:
         configure_styles(self._root, self._theme_manager.colors)
         self._style_treeview()
         self._apply_theme_colors()
+        if self._log_terminal:
+            self._log_terminal.set_dark_mode(new_theme == "dark")
         if self._config:
             self._config.set("theme", new_theme)
 
@@ -1511,9 +1527,14 @@ class MainWindow:
             return key if key.startswith("#") else getattr(colors, _COLOR_MAP.get(key, key.upper()), "#000000")
         try:
             if cls in ("Frame", "Labelframe"):
-                widget.configure(bg=colors.BACKGROUND)
+                bg_key = getattr(widget, "_bg_key", "bg")
+                widget.configure(bg=_cv(bg_key))
             elif cls == "Label":
-                widget.configure(bg=colors.BACKGROUND, fg=colors.TEXT)
+                try:
+                    parent_bg = widget.master.cget("bg")
+                    widget.configure(bg=parent_bg, fg=colors.TEXT)
+                except tk.TclError:
+                    widget.configure(bg=colors.BACKGROUND, fg=colors.TEXT)
             elif cls == "Button":
                 theme = getattr(widget, '_theme', None)
                 if theme:
@@ -1530,12 +1551,18 @@ class MainWindow:
                 widget.configure(bg=colors.SURFACE, fg=colors.TEXT,
                                  insertbackground=colors.TEXT)
             elif cls in ("Checkbutton", "Radiobutton"):
-                widget.configure(bg=colors.SURFACE, fg=colors.TEXT,
-                                 selectcolor=colors.SURFACE,
-                                 activebackground=colors.SURFACE,
-                                 activeforeground=colors.TEXT)
+                try:
+                    parent_bg = widget.master.cget("bg")
+                    widget.configure(bg=parent_bg, fg=colors.TEXT,
+                                     selectcolor=parent_bg,
+                                     activebackground=parent_bg, activeforeground=colors.TEXT)
+                except tk.TclError:
+                    widget.configure(bg=colors.SURFACE, fg=colors.TEXT,
+                                     selectcolor=colors.SURFACE,
+                                     activebackground=colors.SURFACE, activeforeground=colors.TEXT)
             elif cls == "Canvas":
-                widget.configure(bg=colors.SURFACE)
+                bg_key = getattr(widget, "_bg_key", "bg")
+                widget.configure(bg=_cv(bg_key))
             elif cls == "Menu":
                 widget.configure(bg=colors.SURFACE, fg=colors.TEXT)
         except tk.TclError:

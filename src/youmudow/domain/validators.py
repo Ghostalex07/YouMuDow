@@ -250,11 +250,12 @@ def get_all_browser_profiles() -> dict[str, list[BrowserProfile]]:
     """
     browser_paths = _get_browser_profile_paths()
     result: dict[str, list[BrowserProfile]] = {}
+    system = _platform.system()
     
     for browser, paths in browser_paths.items():
         profiles = []
         for raw_path in paths:
-            expanded = os.path.expanduser(raw_path)
+            expanded = os.path.expanduser(raw_path) if system == "Linux" else raw_path
             if not os.path.isdir(expanded):
                 continue
             
@@ -308,18 +309,19 @@ def check_browser_profile(browser: str) -> tuple[bool, str]:
         (exists, message)
     """
     browser = browser.lower()
+    system = _platform.system()
     browser_paths = _get_browser_profile_paths()
     paths = browser_paths.get(browser, [])
     
     for raw_path in paths:
-        expanded = os.path.expanduser(raw_path)
+        expanded = os.path.expanduser(raw_path) if system == "Linux" else raw_path
         if os.path.isdir(expanded):
             return True, expanded
     
     available = []
     for br, paths_list in browser_paths.items():
         for p in paths_list:
-            ep = os.path.expanduser(p)
+            ep = os.path.expanduser(p) if system == "Linux" else p
             if os.path.isdir(ep):
                 available.append(br)
                 break
