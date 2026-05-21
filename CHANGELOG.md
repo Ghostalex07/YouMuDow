@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.0] - 2026-05-21
+
+### Added
+- **Multi-site support**: Now accepts any URL (YouTube, SoundCloud, Vimeo, Twitter, 1000+ sites)
+- **Light/Dark theme toggle**: Ctrl+T toggles between themes; preference saved to config
+- **App icon**: Base64-encoded PNG icon with download arrow
+- **GitHub Pages**: Project website at docs/index.html
+- **Dependabot**: Weekly updates for pip and GitHub Actions
+- **Bump version script**: scripts/bump_version.py for automated versioning
+- **CI badge**: Dynamic badge in README
+
+### Changed
+- **Widget architecture restored**: search_bar.py, results_table.py, detail_panel.py, status_bar.py extracted from window.py (623 lines vs 1666)
+- Updated placeholder text: "Search or paste URL (YouTube, SoundCloud, Vimeo...)"
+- Updated About dialog with multi-site description
+- Updated app description to "Music & Video Downloader"
+- `check_browser_profile`/`get_fallback_browser` restored in ytdlp adapter
+
+### Fixed
+- `is_supported_url` replaces `is_valid_youtube_url` for clipboard detection on startup
+- Search now validates URLs using multi-site validator
+
 ## [1.0.0] - 2026-05-20
 
 ### Added

@@ -1,4 +1,4 @@
-"""YouTube Music Downloader - A modern desktop application."""
+"""Music & Video Downloader - A modern desktop application."""
 
 try:
     from importlib.metadata import version, PackageNotFoundError

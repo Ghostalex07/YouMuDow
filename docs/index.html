@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YouMuDow - Music & Video Downloader</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    line-height: 1.6;
+  }
+  .container { max-width: 800px; width: 100%; padding: 2rem 1.5rem; }
+  header { text-align: center; padding: 4rem 0 3rem; }
+  h1 { font-size: 3rem; color: #fff; letter-spacing: -1px; }
+  h1 span { color: #e94560; }
+  .tagline { font-size: 1.1rem; color: #888; margin-top: 0.5rem; }
+  h2 { font-size: 1.5rem; color: #fff; margin: 2rem 0 1rem; }
+  .features { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; list-style: none; }
+  .features li {
+    background: #16213e;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    border-left: 3px solid #e94560;
+    font-size: 0.95rem;
+  }
+  .features li::before { content: "▸ "; color: #e94560; }
+  .btn {
+    display: inline-block;
+    background: #e94560;
+    color: #fff;
+    padding: 0.9rem 2rem;
+    border-radius: 8px;
+    text-decoration: none;
+    font-size: 1.05rem;
+    font-weight: 600;
+    transition: background 0.2s;
+    margin: 1rem 0;
+  }
+  .btn:hover { background: #d63851; }
+  .section { background: #16213e; border-radius: 10px; padding: 1.5rem; margin: 1.5rem 0; }
+  code {
+    background: #1a1a2e;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    color: #e94560;
+  }
+  pre {
+    background: #0f0f23;
+    padding: 1rem;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-size: 0.9rem;
+    margin: 1rem 0;
+  }
+  .req-list { list-style: none; margin: 0.5rem 0; }
+  .req-list li { padding: 0.3rem 0; }
+  .req-list li::before { content: "• "; color: #e94560; }
+  footer { text-align: center; padding: 3rem 0; color: #666; }
+  footer a { color: #e94560; text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+  @media (max-width: 600px) {
+    h1 { font-size: 2.2rem; }
+    .features { grid-template-columns: 1fr; }
+    .container { padding: 1rem; }
+    header { padding: 2.5rem 0 1.5rem; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1><span>You</span>Mu<span>Dow</span></h1>
+    <p class="tagline">Music &amp; Video Downloader</p>
+  </header>
+
+  <div class="section">
+    <h2>Features</h2>
+    <ul class="features">
+      <li>Multi-site downloads (YouTube, SoundCloud, Vimeo, Twitter +1000 sites)</li>
+      <li>Real-time progress</li>
+      <li>Queue management</li>
+      <li>Embedded metadata</li>
+      <li>Cookie auth</li>
+      <li>Light/Dark theme</li>
+      <li>Keyboard shortcuts</li>
+      <li>Cross-platform</li>
+      <li>yt-dlp powered</li>
+    </ul>
+  </div>
+
+  <div class="section" style="text-align:center;">
+    <h2>Download</h2>
+    <p>Get the latest release for your platform.</p>
+    <a class="btn" href="https://github.com/Ghostalex07/YouMuDow/releases/latest">Download Now</a>
+  </div>
+
+  <div class="section">
+    <h2>Requirements</h2>
+    <ul class="req-list">
+      <li><code>ffmpeg</code> – required for media processing</li>
+      <li><code>Python 3.10+</code> – optional (required for source install)</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <h2>Install from Source</h2>
+    <pre>git clone https://github.com/Ghostalex07/YouMuDow.git
+cd YouMuDow
+pip install -r requirements.txt
+python -m youmudow.main</pre>
+  </div>
+
+  <footer>
+    <a href="https://github.com/Ghostalex07/YouMuDow">GitHub</a>
+  </footer>
+</div>
+</body>
+</html>

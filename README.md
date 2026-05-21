@@ -2,12 +2,14 @@
 
 ![Python](https://img.shields.io/badge/python-3.10+-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Version](https://img.shields.io/badge/version-1.0.0-green.svg)
+![Version](https://img.shields.io/badge/version-1.1.0-green.svg)
+[![CI](https://github.com/Ghostalex07/YouMuDow/actions/workflows/ci.yml/badge.svg)](https://github.com/Ghostalex07/YouMuDow/actions/workflows/ci.yml)
 
-A modern YouTube music downloader with real-time progress, embedded metadata, and a clean desktop interface.
+A modern music & video downloader with real-time progress, embedded metadata, and a clean desktop interface.
 
 ## Features
 
+- **Multi-site support**: YouTube, SoundCloud, Vimeo, Twitter and 1000+ sites via yt-dlp
 - **Multi-format downloads**: MP3, MP4, WAV, M4A, FLAC, AAC, OGG
 - **Embedded metadata and thumbnails**: Title, artist, thumbnail automatically added to files
 - **Real-time progress bar and download log**: See progress as it happens
@@ -15,12 +17,13 @@ A modern YouTube music downloader with real-time progress, embedded metadata, an
 - **Thumbnail preview in detail panel**: See video thumbnails using Pillow
 - **Persistent configuration**: Remembers output folder, format, cookies, window geometry
 - **System notifications on completion**: Desktop notification when download finishes
+- **Light/Dark theme**: Toggle between light and dark themes (Ctrl+T)
 - **Cookie authentication**: Chrome, Firefox, Edge, Brave, Opera, Vivaldi, multi-profile support
 - **Rate limiting, chapter splitting, subtitle download**: Advanced download options
 - **yt-dlp auto-updater built in**: Help > Update yt-dlp keeps it current
 - **Export download logs to file**: File > Export Logs saves session logs
 - **Retry failed downloads**: One-click retry for errored downloads
-- **Clipboard URL detection on startup**: Automatically detects YouTube URLs in clipboard
+- **Clipboard URL detection on startup**: Automatically detects URLs in clipboard
 - **Cross-platform**: Linux, macOS, Windows
 - **Keyboard shortcuts**: Ctrl+D to download, Ctrl+Q to queue, and more
 
@@ -67,7 +70,7 @@ Download from [ffmpeg.org](https://ffmpeg.org/download.html) and add to PATH.
 
 ## Usage
 
-1. **Search**: Enter a song name or paste a YouTube URL
+1. **Search**: Enter a song name or paste a URL (YouTube, SoundCloud, etc.)
 2. **Select**: Click on a result
 3. **Choose format**: Select MP3, MP4, WAV, or M4A
 4. **Download options** (optional):
@@ -89,6 +92,7 @@ Download from [ffmpeg.org](https://ffmpeg.org/download.html) and add to PATH.
 | `Ctrl+N` | Clear search field |
 | `Escape` | Cancel operation |
 | `Ctrl+V` | Paste URL (auto-replaces field) |
+| `Ctrl+T` | Toggle light/dark theme |
 
 ## Building from source
 

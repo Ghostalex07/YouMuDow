@@ -33,6 +33,17 @@ def is_valid_youtube_url(url: str) -> bool:
     return bool(YOUTUBE_REGEX.match(url.strip()))
 
 
+def is_valid_url(url: str) -> bool:
+    """Accept any valid http/https URL."""
+    url = url.strip()
+    return url.startswith(("http://", "https://")) and "." in url
+
+
+def is_supported_url(url: str) -> bool:
+    """True if the URL looks downloadable (not just YouTube)."""
+    return is_valid_url(url) and len(url) > 10
+
+
 def is_playlist_url(url: str) -> bool:
     """Check if URL is a YouTube playlist."""
     if not url or not isinstance(url, str):
