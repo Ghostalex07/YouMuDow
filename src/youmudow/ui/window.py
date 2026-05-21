@@ -201,7 +201,7 @@ class MainWindow:
             return None
         
         self._search_entry.bind("<Return>", lambda _: self._on_search())
-        self._search_entry.bind("<Control-Return>", lambda _: self._on_search())
+        self._search_entry.bind("<Control-Return>", lambda _: self._on_download_now() if self._selected_video else self._on_search())
         self._search_entry.bind("<Control-v>", _on_paste)
         self._search_entry.bind("<Control-V>", _on_paste)
         self._search_entry.bind("<Control-a>", self._on_select_all)
@@ -283,7 +283,7 @@ class MainWindow:
         self._results_tree.grid(row=0, column=0, sticky="nsew", padx=(0, SPACING["xs"]))
         scrollbar.grid(row=0, column=1, sticky="ns")
         self._results_tree.bind("<<TreeviewSelect>>", self._on_result_select)
-        self._results_tree.bind("<Double-Button-1>", lambda _: self._on_enqueue())
+        self._results_tree.bind("<Double-Button-1>", lambda _: self._on_download_now())
         self._results_tree.bind("<Button-3>", self._on_open_in_browser)
 
         self._style_treeview()
@@ -847,6 +847,7 @@ class MainWindow:
         file_menu = tk.Menu(menubar, tearoff=0, bg=COLORS["surface"], fg=COLORS["text"], bd=1)
         menubar.add_cascade(label="File", menu=file_menu)
         file_menu.add_command(label="Set Output Folder", command=self._on_set_output)
+        file_menu.add_command(label="Open Output Folder    Ctrl+O", command=self._on_open_folder)
         file_menu.add_command(label="Export Logs...", command=self._on_export_logs)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self._root.quit)
@@ -909,6 +910,8 @@ class MainWindow:
         self._root.bind("<Control-l>", lambda _: self._search_entry.focus_set())
         self._root.bind("<Control-n>", lambda _: self._search_var.set(""))
         self._root.bind("<Escape>", lambda _: self._on_cancel_search())
+        self._root.bind("<Control-o>", lambda _: self._on_open_folder())
+        self._root.bind("<Control-Shift-C>", lambda _: self._log_terminal.clear() if self._log_terminal else None)
 
     def _setup_controller_callbacks(self) -> None:
         def on_search_complete(results: list[Video]) -> None:
@@ -957,7 +960,9 @@ class MainWindow:
             if snapshot.active_downloads:
                 active = snapshot.active_downloads[0]
                 self._progress_var.set(active.progress)
-                self._set_status(f"Downloading: {active.progress:.1f}%")
+                speed_info = f" · {active.speed}" if active.speed and active.speed != "Calculating..." else ""
+                eta_info = f" · ETA {active.eta}" if active.eta and active.eta != "00:00" else ""
+                self._set_status(f"Downloading: {active.progress:.1f}%{speed_info}{eta_info}")
                 self._progress_bar.itemconfig(self._progress_rect, fill=COLORS["primary"])
             else:
                 self._progress_var.set(0)
@@ -993,7 +998,7 @@ class MainWindow:
             self._results_tree.delete(item)
 
         for video in results:
-            duration = self._format_duration(video.duration)
+            duration = video.format_duration()
             self._results_tree.insert("", "end", values=(video.title, video.uploader, duration))
 
         self._playlist_videos = results
@@ -1005,15 +1010,6 @@ class MainWindow:
                 self._set_status(f"Found {len(results)} results - select one to download")
             else:
                 self._set_status(f"Found: {results[0].title}")
-
-    def _format_duration(self, seconds: int) -> str:
-        if seconds == 0:
-            return "-"
-        minutes, secs = divmod(seconds, 60)
-        hours, minutes = divmod(minutes, 60)
-        if hours > 0:
-            return f"{hours}:{minutes:02d}:{secs:02d}"
-        return f"{minutes}:{secs:02d}"
 
     def _on_select_all(self, event: tk.Event) -> None:
         self._search_entry.select_range(0, "end")
@@ -1275,7 +1271,7 @@ class MainWindow:
         self._detail_title.configure(text=video.title or "-")
         self._detail_uploader.configure(text=video.uploader or "-")
         self._load_thumbnail(video)
-        self._format_var.set(video.options.format)
+        self._format_var.set(video.options.file_format)
         self._quality_var.set(video.options.quality)
         self._subtitles_var.set(video.options.subtitles)
         self._subtitle_lang_var.set(video.options.subtitle_lang)
@@ -1378,7 +1374,7 @@ class MainWindow:
             return None
 
         opts = DownloadOptions(
-            format=self._format_var.get(),
+            file_format=self._format_var.get(),
             quality=self._quality_var.get(),
             subtitles=self._subtitles_var.get(),
             subtitle_lang=self._subtitle_lang_var.get(),

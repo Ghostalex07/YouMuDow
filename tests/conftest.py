@@ -5,11 +5,20 @@ from youmudow.domain.models import Video, DownloadOptions
 from youmudow.domain.enums import DownloadStatus
 
 
+@pytest.fixture(autouse=True)
+def reset_event_bus():
+    """Reset the global EventBus between tests to avoid state leakage."""
+    from youmudow.app.events import EventBus
+    EventBus.reset()
+    yield
+    EventBus.reset()
+
+
 @pytest.fixture
 def sample_options() -> DownloadOptions:
     """A standard DownloadOptions instance for testing."""
     return DownloadOptions(
-        format="mp3",
+        file_format="mp3",
         quality="best",
         subtitles=False,
         subtitle_lang="en",

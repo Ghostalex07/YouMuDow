@@ -111,24 +111,24 @@ class YtdlpAdapter:
         args = self._build_base_args(video, skip_cookies)
         
         opts = video.options
-        format_selector = self._get_format_selector(opts.format, opts.quality)
+        format_selector = self._get_format_selector(opts.file_format, opts.quality)
         args.extend([
             "-f", format_selector,
             "-o", str(self._config.output_template),
         ])
         
-        if opts.format in ("mp3", "m4a", "opus", "ogg", "flac", "wav"):
+        if opts.file_format in ("mp3", "m4a", "opus", "ogg", "flac", "wav"):
             audio_quality = self._get_audio_quality(opts.quality)
             args.extend([
                 "--extract-audio",
-                "--audio-format", opts.format,
+                "--audio-format", opts.file_format,
                 "--audio-quality", audio_quality,
             ])
         
         if self._config.embed_metadata:
             args.append("--embed-metadata")
         
-        if self._config.embed_thumbnail and opts.format in ("mp3", "m4a", "opus"):
+        if self._config.embed_thumbnail and opts.file_format in ("mp3", "m4a", "opus"):
             args.append("--embed-thumbnail")
         
         if self._config.add_chapters:
@@ -217,8 +217,8 @@ class YtdlpAdapter:
             self._log(f"[SEARCH] Found {len(videos)} results")
             return videos
             
-        except (subprocess.TimeoutExpired, subprocess.SubprocessError) as e:
-            self._log(f"[SEARCH] Error: {e}")
+        except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError, OSError) as e:
+            self._log(f"[SEARCH] yt-dlp not found or error: {e}")
             return []
 
     def get_metadata(self, url: str) -> Video | None:
@@ -250,7 +250,7 @@ class YtdlpAdapter:
                     thumbnail=data.get("thumbnail", ""),
                 )
                 
-        except (subprocess.TimeoutExpired, subprocess.SubprocessError, json.JSONDecodeError) as e:
+        except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError, OSError, json.JSONDecodeError) as e:
             self._log(f"[METADATA] Error: {e}")
 
         return None
@@ -294,8 +294,8 @@ class YtdlpAdapter:
             self._log(f"[PLAYLIST] Found {min(total, limit)} videos")
             return videos[:limit]
 
-        except (subprocess.TimeoutExpired, subprocess.SubprocessError) as e:
-            self._log(f"[PLAYLIST] Error: {e}")
+        except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError, OSError) as e:
+            self._log(f"[PLAYLIST] yt-dlp not found or error: {e}")
             return []
 
     def download(
@@ -315,7 +315,7 @@ class YtdlpAdapter:
         video.path = output_path
 
         opts = video.options
-        fmt = opts.format
+        fmt = opts.file_format
         qty = opts.quality
 
         is_valid, warning = validate_format_quality(fmt, qty)
@@ -446,7 +446,7 @@ class YtdlpAdapter:
                         if attempt < max_retries and not cookie_failed:
                             self._log(f"[RETRY] Will retry in {attempt}s...")
 
-                except subprocess.SubprocessError as e:
+                except (subprocess.SubprocessError, FileNotFoundError, OSError) as e:
                     last_error = str(e)
                     self._log(f"[ERROR] {e}")
                     if attempt < max_retries and not cookie_failed:

@@ -1,6 +1,7 @@
 """Input validation utilities."""
 
 import os
+import platform as _platform
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -71,23 +72,23 @@ def get_unique_filename(directory: Path, filename: str, max_attempts: int = 999)
     )
 
 
-def validate_format_quality(format: str, quality: str) -> tuple[bool, str]:
+def validate_format_quality(file_format: str, quality: str) -> tuple[bool, str]:
     """Validate format and quality combination.
     
     Returns:
         (is_valid, warning_message)
     """
-    format = format.lower()
+    file_format = file_format.lower()
     quality = quality.lower()
     
     audio_formats = {"mp3", "m4a", "opus", "ogg", "flac", "wav"}
     video_qualities = {"1080p", "720p", "480p", "360p"}
     audio_qualities = {"320kbps", "256kbps", "192kbps", "128kbps", "96kbps"}
     
-    if format in audio_formats and quality in video_qualities:
+    if file_format in audio_formats and quality in video_qualities:
         return True, f"[WARNING] Video quality '{quality}' not applicable to audio format '{format}', using audio quality instead"
     
-    if format == "mp4" and quality in audio_qualities:
+    if file_format == "mp4" and quality in audio_qualities:
         return True, f"[WARNING] Audio quality '{quality}' not applicable to video format 'mp4', using best video"
     
     return True, ""
@@ -145,35 +146,92 @@ def parse_cookie_error(error_output: str) -> str:
     return "Cookie authentication failed"
 
 
-BROWSER_PROFILE_PATHS = {
-    "chrome": [
-        "~/.config/google-chrome",
-        "~/.config/google-chrome-stable",
-    ],
-    "chromium": [
-        "~/.config/chromium",
-    ],
-    "firefox": [
-        "~/.mozilla/firefox",
-        "~/.librewolf",
-    ],
-    "edge": [
-        "~/.config/microsoft-edge",
-    ],
-    "brave": [
-        "~/.config/Brave-Browser",
-        "~/.config/Brave-Browser-Beta",
-        "~/.config/Brave-Browser-Dev",
-    ],
-    "opera": [
-        "~/.config/opera",
-        "~/.config/opera-developer",
-    ],
-    "vivaldi": [
-        "~/.config/vivaldi",
-        "~/.config/vivaldi-snapshot",
-    ],
-}
+def _get_browser_profile_paths() -> dict[str, list[str]]:
+    """Return browser profile paths for the current platform."""
+    system = _platform.system()
+
+    if system == "Windows":
+        local = os.path.expandvars("%LOCALAPPDATA%")
+        roaming = os.path.expandvars("%APPDATA%")
+        return {
+            "chrome": [
+                os.path.join(local, "Google", "Chrome", "User Data"),
+            ],
+            "chromium": [
+                os.path.join(local, "Chromium", "User Data"),
+            ],
+            "firefox": [
+                os.path.join(roaming, "Mozilla", "Firefox", "Profiles"),
+            ],
+            "edge": [
+                os.path.join(local, "Microsoft", "Edge", "User Data"),
+            ],
+            "brave": [
+                os.path.join(local, "BraveSoftware", "Brave-Browser", "User Data"),
+            ],
+            "opera": [
+                os.path.join(roaming, "Opera Software", "Opera Stable"),
+            ],
+            "vivaldi": [
+                os.path.join(local, "Vivaldi", "User Data"),
+            ],
+        }
+    elif system == "Darwin":
+        home = os.path.expanduser("~")
+        app_support = os.path.join(home, "Library", "Application Support")
+        return {
+            "chrome": [
+                os.path.join(app_support, "Google", "Chrome"),
+            ],
+            "chromium": [
+                os.path.join(app_support, "Chromium"),
+            ],
+            "firefox": [
+                os.path.join(home, "Library", "Application Support", "Firefox", "Profiles"),
+            ],
+            "edge": [
+                os.path.join(app_support, "Microsoft Edge"),
+            ],
+            "brave": [
+                os.path.join(app_support, "BraveSoftware", "Brave-Browser"),
+            ],
+            "opera": [
+                os.path.join(app_support, "com.operasoftware.Opera"),
+            ],
+            "vivaldi": [
+                os.path.join(app_support, "Vivaldi"),
+            ],
+        }
+    else:
+        return {
+            "chrome": [
+                "~/.config/google-chrome",
+                "~/.config/google-chrome-stable",
+            ],
+            "chromium": [
+                "~/.config/chromium",
+            ],
+            "firefox": [
+                "~/.mozilla/firefox",
+                "~/.librewolf",
+            ],
+            "edge": [
+                "~/.config/microsoft-edge",
+            ],
+            "brave": [
+                "~/.config/Brave-Browser",
+                "~/.config/Brave-Browser-Beta",
+                "~/.config/Brave-Browser-Dev",
+            ],
+            "opera": [
+                "~/.config/opera",
+                "~/.config/opera-developer",
+            ],
+            "vivaldi": [
+                "~/.config/vivaldi",
+                "~/.config/vivaldi-snapshot",
+            ],
+        }
 
 
 @dataclass
@@ -190,13 +248,18 @@ def get_all_browser_profiles() -> dict[str, list[BrowserProfile]]:
     Returns:
         Dict mapping browser name to list of BrowserProfile objects
     """
-    import os
+    browser_paths = _get_browser_profile_paths()
     result: dict[str, list[BrowserProfile]] = {}
+    system = _platform.system()
     
-    for browser, paths in BROWSER_PROFILE_PATHS.items():
+    for browser, paths in browser_paths.items():
         profiles = []
         for path_pattern in paths:
             expanded = os.path.expanduser(path_pattern)
+            if system == "Linux":
+                expanded = os.path.expanduser(path_pattern)
+            else:
+                expanded = path_pattern
             if not os.path.isdir(expanded):
                 continue
             
@@ -252,18 +315,21 @@ def check_browser_profile(browser: str) -> tuple[bool, str]:
         (exists, message)
     """
     browser = browser.lower()
-    paths = BROWSER_PROFILE_PATHS.get(browser, [])
+    browser_paths = _get_browser_profile_paths()
+    paths = browser_paths.get(browser, [])
     
-    import os
     for path_pattern in paths:
         expanded = os.path.expanduser(path_pattern)
         if os.path.isdir(expanded):
             return True, expanded
     
     available = []
-    for br, paths_list in BROWSER_PROFILE_PATHS.items():
+    for br, paths_list in browser_paths.items():
         for p in paths_list:
-            expanded = os.path.expanduser(p)
+            if _platform.system() == "Linux":
+                expanded = os.path.expanduser(p)
+            else:
+                expanded = p
             if os.path.isdir(expanded):
                 available.append(br)
                 break
@@ -318,6 +384,5 @@ def is_valid_rate_limit(rate: str) -> bool:
     rate = rate.strip()
     if not rate:
         return True  # Empty is valid (no limit)
-    import re
     pattern = r'^\d+[KMG]?$'
     return bool(re.match(pattern, rate, re.IGNORECASE)) and len(rate) > 0

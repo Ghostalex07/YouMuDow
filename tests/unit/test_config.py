@@ -33,11 +33,11 @@ class TestAppConfig:
         cfg = AppConfig()
         opts = cfg.to_download_options()
         assert isinstance(opts, DownloadOptions)
-        assert opts.format == "mp3"
+        assert opts.file_format == "mp3"
 
     def test_from_download_options(self):
         cfg = AppConfig()
-        opts = DownloadOptions(format="mp4", quality="1080p")
+        opts = DownloadOptions(file_format="mp4", quality="1080p")
         cfg.from_download_options(opts)
         assert cfg.get("format") == "mp4"
         assert cfg.get("quality") == "1080p"

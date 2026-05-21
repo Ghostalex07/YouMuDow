@@ -240,7 +240,7 @@ class AppController:
 
         def on_progress(progress: DownloadProgress) -> None:
             if progress.video:
-                self._state_manager.update_progress(progress.video, progress.progress)
+                self._state_manager.update_progress(progress.video, progress.progress, progress.speed, progress.eta)
             if self._debug_mode and progress.video:
                 emit_log(f"[download] {progress.progress:.1f}% - {progress.video.title}", level="debug")
 
@@ -271,9 +271,9 @@ class AppController:
     def _setup_log_callback(self) -> None:
         def on_log_message(message: str) -> None:
             level = "info"
-            if "Error" in message or "error" in message.lower() or "[ERROR]" in message:
+            if "[ERROR]" in message or "[FATAL]" in message:
                 level = "error"
-            elif "warning" in message.lower() or "[WARNING]" in message:
+            elif "[WARNING]" in message or "[RETRY]" in message:
                 level = "warning"
             elif "[DONE]" in message:
                 level = "success"
@@ -281,10 +281,5 @@ class AppController:
                 level = "info"
             emit_log(message, level)
 
-        search_adapter = getattr(self._search_service, '_adapter', None)
-        if search_adapter:
-            search_adapter.set_log_callback(on_log_message)
-
-        download_adapter = getattr(self._download_service, '_adapter', None)
-        if download_adapter:
-            download_adapter.set_log_callback(on_log_message)
+        self._search_service.set_log_callback(on_log_message)
+        self._download_service.set_log_callback(on_log_message)

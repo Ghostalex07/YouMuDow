@@ -24,6 +24,20 @@ def update_ytdlp(
     def _do_update() -> None:
         try:
             result = subprocess.run(
+                ["yt-dlp", "-U"],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            if result.returncode == 0:
+                new_version = get_ytdlp_version()
+                on_success(new_version)
+                return
+        except (FileNotFoundError, OSError, subprocess.SubprocessError):
+            pass
+
+        try:
+            result = subprocess.run(
                 [sys.executable, "-m", "pip", "install", "--upgrade", "yt-dlp"],
                 capture_output=True,
                 text=True,

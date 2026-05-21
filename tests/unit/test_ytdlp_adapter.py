@@ -27,7 +27,7 @@ def sample_video():
         url="https://youtube.com/watch?v=test123",
         uploader="Test Artist",
         duration=180,
-        options=DownloadOptions(format="mp3"),
+        options=DownloadOptions(file_format="mp3"),
     )
 
 
@@ -77,7 +77,7 @@ class TestBuildArgs:
             url="https://youtube.com/watch?v=test",
             uploader="Test",
             duration=60,
-            options=DownloadOptions(format="mp3"),
+            options=DownloadOptions(file_format="mp3"),
         )
         args = adapter._build_base_args(video)
         assert "yt-dlp" in args
@@ -189,7 +189,7 @@ class TestBuildDownloadArgs:
             url="https://youtube.com/watch?v=test",
             uploader="Test",
             duration=60,
-            options=DownloadOptions(format="mp3", quality="320kbps"),
+            options=DownloadOptions(file_format="mp3", quality="320kbps"),
         )
         args = adapter._build_download_args(video)
         assert "--extract-audio" in args
@@ -202,7 +202,7 @@ class TestBuildDownloadArgs:
             url="https://youtube.com/watch?v=test",
             uploader="Test",
             duration=60,
-            options=DownloadOptions(format="mp4", quality="1080p"),
+            options=DownloadOptions(file_format="mp4", quality="1080p"),
         )
         args = adapter._build_download_args(video)
         assert "-f" in args
@@ -213,7 +213,7 @@ class TestBuildDownloadArgs:
             url="https://youtube.com/watch?v=test",
             uploader="Test",
             duration=60,
-            options=DownloadOptions(format="mp3", rate_limit="1M"),
+            options=DownloadOptions(file_format="mp3", rate_limit="1M"),
         )
         args = adapter._build_download_args(video)
         assert "--limit-rate" in args
@@ -225,7 +225,7 @@ class TestBuildDownloadArgs:
             url="https://youtube.com/watch?v=test",
             uploader="Test",
             duration=60,
-            options=DownloadOptions(format="mp4", split_chapters=True),
+            options=DownloadOptions(file_format="mp4", split_chapters=True),
         )
         args = adapter._build_download_args(video)
         assert "--split-chapters" in args
@@ -237,7 +237,7 @@ class TestBuildDownloadArgs:
             uploader="Test",
             duration=60,
             options=DownloadOptions(
-                format="mp3",
+                file_format="mp3",
                 subtitles=True,
                 subtitle_lang="en,es",
                 embed_subtitles=True,

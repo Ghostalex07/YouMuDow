@@ -81,7 +81,7 @@ class AppConfig:
 
     def to_download_options(self) -> DownloadOptions:
         return DownloadOptions(
-            format=str(self._data.get("format", "mp3")),
+            file_format=str(self._data.get("format", "mp3")),
             quality=str(self._data.get("quality", "best")),
             subtitles=bool(self._data.get("subtitles", False)),
             subtitle_lang=str(self._data.get("subtitle_lang", "en")),
@@ -95,7 +95,7 @@ class AppConfig:
         )
 
     def from_download_options(self, opts: DownloadOptions) -> None:
-        self._data["format"] = opts.format or "mp3"
+        self._data["format"] = opts.file_format or "mp3"
         self._data["quality"] = opts.quality or "best"
         self._data["subtitles"] = opts.subtitles
         self._data["subtitle_lang"] = opts.subtitle_lang or "en"

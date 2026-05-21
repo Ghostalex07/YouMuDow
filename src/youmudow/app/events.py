@@ -177,6 +177,14 @@ class EventBus:
     def get_instance(cls) -> "EventBus":
         return cls()
 
+    @classmethod
+    def reset(cls) -> None:
+        """Reset singleton for testing. Do not use in production code."""
+        with cls._lock:
+            if cls._instance is not None:
+                cls._instance.clear()
+                cls._instance = None
+
 
 def get_event_bus() -> EventBus:
     """Get the global event bus instance."""

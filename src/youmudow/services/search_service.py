@@ -25,6 +25,10 @@ class SearchService:
     def __init__(self, adapter: YtdlpAdapterProtocol | None = None) -> None:
         self._adapter = adapter or YtdlpAdapter()
 
+    def set_log_callback(self, callback) -> None:
+        if hasattr(self._adapter, 'set_log_callback'):
+            self._adapter.set_log_callback(callback)
+
     def search(self, query: str, limit: int = 10) -> list[Video]:
         if not query or not query.strip():
             return []

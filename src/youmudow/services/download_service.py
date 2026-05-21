@@ -228,6 +228,10 @@ class DownloadService:
     def max_concurrent(self) -> int:
         return self._max_concurrent
 
+    def set_log_callback(self, callback) -> None:
+        if hasattr(self._adapter, 'set_log_callback'):
+            self._adapter.set_log_callback(callback)
+
     def set_output_path(self, path: Path) -> None:
         self._output_path = path
 

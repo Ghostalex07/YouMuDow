@@ -199,7 +199,7 @@ class LogTerminal(ttk.Frame):
             pass
 
     def _get_level_tag(self, message: str, level: str) -> str:
-        if "[ERROR]" in message or "error" in message.lower():
+        if "[ERROR]" in message or "[FATAL]" in message:
             return "error"
         if "[DOWNLOAD]" in message:
             return "download"
@@ -207,11 +207,11 @@ class LogTerminal(ttk.Frame):
             return "debug"
         if "[DONE]" in message:
             return "success"
-        if "[METADATA]" in message:
+        if "[METADATA]" in message or "[AUTH]" in message or "[SUB]" in message:
             return "metadata"
-        if "warning" in message.lower():
+        if "[WARNING]" in message or "[RETRY]" in message:
             return "warning"
-        if "info" in message.lower():
+        if "[CANCEL]" in message or "[INFO]" in message or "[PLAYLIST]" in message or "[SEARCH]" in message:
             return "info"
         return level
 
@@ -248,11 +248,13 @@ class LogTerminal(ttk.Frame):
         self.after_idle(do_clear)
 
     def get_logs(self) -> str:
-        return "\n".join(self._log_buffer)
+        with self._lock:
+            return "\n".join(self._log_buffer)
 
     def export_to_file(self, path: Path) -> None:
-        with open(path, "w") as f:
-            f.write(self.get_logs())
+        content = self.get_logs()
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(content)
             f.write("\n")
 
     def _trim_lines(self) -> None:
@@ -260,6 +262,7 @@ class LogTerminal(ttk.Frame):
         lines_to_remove = self._max_lines // 10
         for _ in range(lines_to_remove):
             self._text.delete("1.0", "2.0")
+        self._line_count = max(0, self._line_count - lines_to_remove)
 
     def set_auto_scroll(self, enabled: bool) -> None:
         """Enable or disable auto-scrolling."""

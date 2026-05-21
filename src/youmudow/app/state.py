@@ -138,9 +138,11 @@ class StateManager:
                 self._state = AppState.DOWNLOADING
         self._notify_change()
 
-    def update_progress(self, video: Video, progress: float) -> None:
+    def update_progress(self, video: Video, progress: float, speed: str = "", eta: str = "") -> None:
         with self._lock:
             video.progress = progress
+            video.speed = speed
+            video.eta = eta
         self._notify_change()
 
     def finish_download(self, video: Video) -> None:

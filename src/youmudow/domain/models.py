@@ -10,7 +10,7 @@ from youmudow.domain.enums import DownloadStatus
 class DownloadOptions:
     """Options for downloading a video."""
 
-    format: str = "mp3"
+    file_format: str = "mp3"
     quality: str = "best"
     subtitles: bool = False
     subtitle_lang: str = "en"
@@ -36,7 +36,18 @@ class Video:
     path: Path | None = None
     error_message: str = ""
     progress: float = 0.0
+    speed: str = ""
+    eta: str = ""
     options: DownloadOptions = field(default_factory=DownloadOptions)
+
+    def format_duration(self) -> str:
+        if self.duration == 0:
+            return "-"
+        minutes, secs = divmod(self.duration, 60)
+        hours, minutes = divmod(minutes, 60)
+        if hours > 0:
+            return f"{hours}:{minutes:02d}:{secs:02d}"
+        return f"{minutes}:{secs:02d}"
 
     def __post_init__(self) -> None:
         if isinstance(self.path, str):
