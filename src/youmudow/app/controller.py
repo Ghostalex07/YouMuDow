@@ -6,13 +6,14 @@ Handles user actions and state management.
 
 import threading
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 from youmudow.domain.models import Video
 from youmudow.services.search_service import SearchService
 from youmudow.services.download_service import DownloadService
 from youmudow.services.metadata_service import MetadataService
 from youmudow.services.thumbnail_service import ThumbnailService
+from youmudow.services.history_service import HistoryService
 from youmudow.app.state import StateManager, AppState
 from youmudow.app.events import emit_log
 
@@ -52,12 +53,17 @@ class AppController:
         metadata_service: MetadataService | None = None,
         thumbnail_service: ThumbnailService | None = None,
         state_manager: StateManager | None = None,
+        history_service: HistoryService | None = None,
+        config: Any | None = None,
     ) -> None:
+        self._config = config
         self._search_service = search_service or SearchService()
-        self._download_service = download_service or DownloadService()
+        concurrent = self._config.get("concurrent_downloads", 1) if self._config else 1
+        self._download_service = download_service or DownloadService(max_concurrent=concurrent)
         self._metadata_service = metadata_service or MetadataService()
         self._thumbnail_service = thumbnail_service or ThumbnailService()
         self._state_manager = state_manager or StateManager()
+        self._history = history_service or HistoryService()
 
         self._search_thread: threading.Thread | None = None
         self._url_search_thread: threading.Thread | None = None
@@ -74,6 +80,10 @@ class AppController:
     @property
     def state(self) -> StateManager:
         return self._state_manager
+
+    @property
+    def history(self) -> HistoryService:
+        return self._history
 
     def set_output_path(self, path: Path) -> None:
         self._download_service.set_output_path(path)
@@ -249,6 +259,13 @@ class AppController:
             emit_log(f"[DONE] {video.title} - Download completed", level="success")
             from youmudow.services.notification_service import notify
             notify("YouMuDow", f"Downloaded: {video.title}")
+            output_str = str(self._download_service.get_output_path() / (video.title or "unknown"))
+            fmt = video.options.file_format if video.options else "mp3"
+            self._history.add(
+                video=video,
+                output_path=output_str,
+                file_format=fmt,
+            )
             if self._download_complete_callback:
                 self._download_complete_callback(video)
 

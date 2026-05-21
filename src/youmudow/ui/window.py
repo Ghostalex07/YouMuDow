@@ -30,6 +30,7 @@ from youmudow.ui.widgets.search_bar import SearchBar
 from youmudow.ui.widgets.results_table import ResultsTable
 from youmudow.ui.widgets.detail_panel import DetailPanel
 from youmudow.ui.widgets.status_bar import StatusBar
+from youmudow.ui.widgets.history_panel import HistoryPanel
 from youmudow import __version__
 
 if TYPE_CHECKING:
@@ -89,12 +90,31 @@ class MainWindow:
         self._root.columnconfigure(0, weight=1)
         self._root.rowconfigure(0, weight=1)
 
-        self._paned_window = ttk.PanedWindow(self._root, orient=tk.VERTICAL)
-        self._paned_window.grid(row=0, column=0, sticky="nsew")
+        self._notebook = ttk.Notebook(self._root, style="Modern.Notebook")
+        self._notebook.grid(row=0, column=0, sticky="nsew", padx=0, pady=0)
+
+        self._main_tab = tk.Frame(self._notebook, bg=_c("bg"))
+        self._notebook.add(self._main_tab, text="  Search  ")
+
+        self._history_tab = tk.Frame(self._notebook, bg=_c("bg"))
+        self._notebook.add(self._history_tab, text="  History  ")
+
+        self._main_tab.columnconfigure(0, weight=3)
+        self._main_tab.columnconfigure(1, weight=2)
+        self._main_tab.rowconfigure(1, weight=1)
+        self._main_tab.rowconfigure(2, weight=0)
+
+        self._paned_window = ttk.PanedWindow(self._main_tab, orient=tk.VERTICAL)
+        self._paned_window.grid(row=0, column=0, columnspan=2, sticky="nsew")
 
         self._create_main_content()
         self._create_log_panel()
         self._create_menu()
+
+        self._history_panel = HistoryPanel(self._history_tab, self)
+        self._history_panel.pack(fill="both", expand=True)
+
+        self._notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
 
         self._update_debug_visibility()
 
@@ -111,7 +131,11 @@ class MainWindow:
         self._search_bar = SearchBar(main_frame, self)
         self._results_table = ResultsTable(main_frame, self)
         self._detail_panel = DetailPanel(main_frame, self)
-        self._status_bar = StatusBar(self._root, self)
+        self._status_bar = StatusBar(self._main_tab, self)
+
+        history = self._config.get_search_history() if self._config else []
+        if history:
+            self._search_bar.update_history(history)
 
     def _create_log_panel(self) -> None:
         self._log_frame = tk.Frame(self._paned_window, bg=_c("bg"))
@@ -281,6 +305,13 @@ class MainWindow:
         if self._detail_panel:
             self._detail_panel.update_button_states(self._is_searching, self._is_downloading)
 
+    def _on_tab_changed(self, event: tk.Event | None = None) -> None:
+        if not hasattr(self, "_notebook"):
+            return
+        current = self._notebook.index(self._notebook.select())
+        if current == 1 and self._history_panel:
+            self._history_panel.refresh()
+
     def _on_search(self) -> None:
         query = self._search_bar.get_query()
         if not query or self._is_searching:
@@ -292,6 +323,10 @@ class MainWindow:
         self._results_table.is_playlist = False
         self._results_table.playlist_videos = []
         self._results_table.clear_results()
+
+        if self._config:
+            self._config.add_search(query)
+            self._search_bar.update_history(self._config.get_search_history())
 
         if is_supported_url(query):
             if is_playlist_url(query):
@@ -549,6 +584,7 @@ class MainWindow:
                 self._config.set("rate_limit", rate)
                 self._config.set("split_chapters", dp._split_chapters_var.get())
                 self._config.set("options_panel_open", dp._options_frame.winfo_ismapped())
+                self._config.set("concurrent_downloads", dp._concurrent_var.get())
                 self._config.output_path = self._controller.get_output_path()
                 self._config.save()
             except Exception:
@@ -588,6 +624,7 @@ class MainWindow:
                 dp._profile_var.set("Default")
             dp._rate_limit_var.set(self._config.get("rate_limit", ""))
             dp._split_chapters_var.set(self._config.get("split_chapters", False))
+            dp._concurrent_var.set(self._config.get("concurrent_downloads", 1))
 
             if self._config.get("options_panel_open", False):
                 dp._options_frame.pack(fill="both", expand=True, padx=SPACING["md"], pady=(0, SPACING["md"]))

@@ -210,6 +210,19 @@ class TestPlaylistURL:
         assert not is_playlist_url("")
         assert not is_playlist_url(None)
 
+    def test_soundcloud_set_is_playlist(self):
+        assert is_playlist_url("https://soundcloud.com/user/sets/set-name")
+
+    def test_bandcamp_album_is_playlist(self):
+        assert is_playlist_url("https://artist.bandcamp.com/album/album-name")
+
+    def test_generic_playlist_path(self):
+        assert is_playlist_url("https://example.com/playlist/abc123")
+
+    def test_youtube_channel_videos(self):
+        assert is_playlist_url("https://www.youtube.com/@channelname/videos")
+        assert is_playlist_url("https://www.youtube.com/channel/UC123/videos")
+
 
 class TestValidateFormatQuality:
     """Tests for validate_format_quality."""

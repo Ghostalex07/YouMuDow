@@ -147,6 +147,21 @@ class DetailPanel(tk.Frame):
                                      state="readonly", width=10, font=FONT["body"])
         quality_combo.pack(side="left")
 
+        concurrent_row = tk.Frame(of, bg=_c("surface"))
+        concurrent_row._bg_key = "surface"
+        concurrent_row.pack(fill="x", pady=(SPACING["sm"], SPACING["md"]))
+        tk.Label(concurrent_row, text="Concurrent DL:", bg=_c("surface"), fg=_c("text_secondary"),
+                 font=FONT["body"], width=12, anchor="w").pack(side="left")
+        self._concurrent_var = tk.IntVar(value=1)
+        concurrent_spin = tk.Spinbox(
+            concurrent_row, from_=1, to=4, textvariable=self._concurrent_var,
+            bg=_c("input_bg"), fg=_c("text"), relief="flat", width=3,
+            font=FONT["body"], command=self._on_concurrent_change,
+        )
+        concurrent_spin.pack(side="left", padx=(0, SPACING["sm"]))
+        tk.Label(concurrent_row, text="(1-4)", bg=_c("surface"), fg=_c("text_secondary"),
+                 font=("Segoe UI", 8)).pack(side="left")
+
         subtitles_row = tk.Frame(of, bg=_c("surface"))
         subtitles_row._bg_key = "surface"
         subtitles_row.pack(fill="x", pady=(SPACING["sm"], SPACING["md"]))
@@ -353,6 +368,12 @@ class DetailPanel(tk.Frame):
         else:
             self._options_frame.pack(fill="both", expand=True, padx=SPACING["md"], pady=(0, SPACING["md"]))
             self._detail_toggle_btn.configure(text="▼ OPTIONS")
+
+    def _on_concurrent_change(self) -> None:
+        val = self._concurrent_var.get()
+        if hasattr(self._mw, '_controller') and self._mw._controller:
+            ds = self._mw._controller._download_service
+            ds._max_concurrent = val
 
     def _on_subtitles_toggle(self) -> None:
         state = "normal" if self._subtitles_var.get() else "disabled"

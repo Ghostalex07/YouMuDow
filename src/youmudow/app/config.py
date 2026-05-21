@@ -28,6 +28,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "debug_mode": False,
     "options_panel_open": False,
     "theme": "dark",
+    "concurrent_downloads": 1,
+    "search_history": [],
 }
 
 
@@ -79,6 +81,17 @@ class AppConfig:
     @output_path.setter
     def output_path(self, value: Path | str) -> None:
         self._data["output_path"] = str(value)
+
+    def add_search(self, query: str) -> None:
+        history = self.get("search_history", [])
+        if query in history:
+            history.remove(query)
+        history.insert(0, query)
+        self.set("search_history", history[:10])
+        self.save()
+
+    def get_search_history(self) -> list[str]:
+        return self.get("search_history", [])
 
     def to_download_options(self) -> DownloadOptions:
         return DownloadOptions(

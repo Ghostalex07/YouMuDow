@@ -45,10 +45,25 @@ def is_supported_url(url: str) -> bool:
 
 
 def is_playlist_url(url: str) -> bool:
-    """Check if URL is a YouTube playlist."""
+    """Check if URL is a playlist (YouTube, SoundCloud, Bandcamp, etc.)."""
     if not url or not isinstance(url, str):
         return False
-    return bool(PLAYLIST_REGEX.match(url.strip()))
+    url = url.strip()
+    if PLAYLIST_REGEX.match(url):
+        return True
+    # SoundCloud sets
+    if re.search(r'(?:https?://)?(?:www\.)?soundcloud\.com/.+/sets/.+', url, re.IGNORECASE):
+        return True
+    # Bandcamp album
+    if re.search(r'(?:https?://)?(?:[\w-]+\.)?bandcamp\.com/album/.+', url, re.IGNORECASE):
+        return True
+    # Generic /playlist in path
+    if re.search(r'/playlist(?:/|\?|$)', url, re.IGNORECASE):
+        return True
+    # YouTube channel / user
+    if re.search(r'(?:https?://)?(?:www\.)?youtube\.com/(?:@[\w-]+|channel/[\w-]+|c/[\w-]+|user/[\w-]+)/videos', url, re.IGNORECASE):
+        return True
+    return False
 
 
 def sanitize_filename(name: str, replacement: str = "_") -> str:

@@ -1,6 +1,7 @@
 """Search bar widget for YouMuDow."""
 
 import tkinter as tk
+from tkinter import ttk
 
 from youmudow.ui.styles.constants import SPACING, FONT, _c, add_hover_effect
 from youmudow.domain.validators import is_supported_url
@@ -22,12 +23,13 @@ class SearchBar(tk.Frame):
         entry_frame.columnconfigure(0, weight=1)
 
         self._search_var = tk.StringVar()
-        self._search_entry = tk.Entry(
-            entry_frame, textvariable=self._search_var,
-            bg=_c("surface"), fg=_c("text"), insertbackground=_c("text"),
-            font=("Segoe UI", 12), relief="flat", bd=0,
+        self._search_combo = ttk.Combobox(
+            entry_frame,
+            textvariable=self._search_var,
+            font=("Segoe UI", 12),
+            style="Search.TCombobox",
         )
-        self._search_entry.grid(row=0, column=0, sticky="ew", padx=SPACING["md"], pady=SPACING["md"])
+        self._search_combo.grid(row=0, column=0, sticky="ew", padx=SPACING["md"], pady=SPACING["md"])
 
         def _on_paste(event) -> str | None:
             try:
@@ -39,13 +41,13 @@ class SearchBar(tk.Frame):
                 return "break"
             return None
 
-        self._search_entry.bind("<Return>", lambda _: self._mw._on_search())
-        self._search_entry.bind("<Control-Return>", lambda _: self._mw._on_download_now() if self._mw._selected_video else self._mw._on_search())
-        self._search_entry.bind("<Control-v>", _on_paste)
-        self._search_entry.bind("<Control-V>", _on_paste)
-        self._search_entry.bind("<Control-a>", self._on_select_all)
-        self._search_entry.bind("<Control-A>", self._on_select_all)
-        self._search_entry.bind("<Control-BackSpace>", self._on_delete_word)
+        self._search_combo.bind("<Return>", lambda _: self._mw._on_search())
+        self._search_combo.bind("<Control-Return>", lambda _: self._mw._on_download_now() if self._mw._selected_video else self._mw._on_search())
+        self._search_combo.bind("<Control-v>", _on_paste)
+        self._search_combo.bind("<Control-V>", _on_paste)
+        self._search_combo.bind("<Control-a>", self._on_select_all)
+        self._search_combo.bind("<Control-A>", self._on_select_all)
+        self._search_combo.bind("<Control-BackSpace>", self._on_delete_word)
 
         self._search_btn = tk.Button(
             self, text="Search",
@@ -83,30 +85,42 @@ class SearchBar(tk.Frame):
         add_hover_effect(self._cancel_dl_btn, "warning", "error")
 
         self._placeholder = "Search or paste URL (YouTube, SoundCloud, Vimeo...)"
-        self._search_entry.insert(0, self._placeholder)
-        self._search_entry.configure(fg=_c("text_secondary"))
+        self._search_combo.set("")
 
         def _on_focus_in(event: tk.Event) -> None:
             if self._search_var.get() == self._placeholder:
-                self._search_entry.delete(0, "end")
-                self._search_entry.configure(fg=_c("text"))
+                self._search_var.set("")
 
         def _on_focus_out(event: tk.Event) -> None:
             if not self._search_var.get().strip():
-                self._search_entry.insert(0, self._placeholder)
-                self._search_entry.configure(fg=_c("text_secondary"))
+                self._search_combo.set(self._placeholder)
 
-        self._search_entry.bind("<FocusIn>", _on_focus_in)
-        self._search_entry.bind("<FocusOut>", _on_focus_out)
-        self._search_entry.focus()
+        self._search_combo.bind("<FocusIn>", _on_focus_in)
+        self._search_combo.bind("<FocusOut>", _on_focus_out)
+        self._search_combo.focus()
 
     @property
     def search_var(self) -> tk.StringVar:
         return self._search_var
 
     @property
-    def search_entry(self) -> tk.Entry:
-        return self._search_entry
+    def search_entry(self) -> ttk.Combobox:
+        return self._search_combo
+
+    def update_history(self, history: list[str]) -> None:
+        self._search_combo["values"] = history
+
+    def _on_select_all(self, event: tk.Event) -> str | None:
+        self._search_combo.select_range(0, "end")
+        return "break"
+
+    def _on_delete_word(self, event: tk.Event) -> str | None:
+        current = self._search_var.get()
+        if current:
+            words = current.split()
+            if words:
+                self._search_var.set(" ".join(words[:-1]))
+        return "break"
 
     def get_query(self) -> str:
         text = self._search_var.get().strip()
@@ -120,14 +134,4 @@ class SearchBar(tk.Frame):
         self._cancel_btn.configure(state="normal" if is_searching else "disabled")
         self._cancel_dl_btn.configure(state="normal" if is_downloading else "disabled")
 
-    def _on_select_all(self, event: tk.Event) -> str | None:
-        self._search_entry.select_range(0, "end")
-        return "break"
 
-    def _on_delete_word(self, event: tk.Event) -> str | None:
-        current = self._search_var.get()
-        if current:
-            words = current.split()
-            if words:
-                self._search_var.set(" ".join(words[:-1]))
-        return "break"
