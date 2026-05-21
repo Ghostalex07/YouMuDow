@@ -16,6 +16,8 @@ import webbrowser
 
 from youmudow.domain.validators import get_all_browser_profiles, get_available_browsers, is_valid_rate_limit
 from youmudow.services.updater_service import get_ytdlp_version, update_ytdlp
+from youmudow.ui.styles.styles import configure_styles
+from youmudow.ui.styles.theme import ThemeManager, ThemeName, get_theme_manager
 
 from youmudow.domain.models import Video, DownloadOptions
 from youmudow.domain.enums import DownloadStatus
@@ -46,23 +48,27 @@ FONT = {
     "mono": ("Cascadia Code", 10, "normal"),
 }
 
-COLORS = {
-    "bg": "#121218",
-    "surface": "#1E1E26",
-    "primary": "#7C5CFC",
-    "secondary": "#9B85FD",
-    "accent": "#A78BFA",
-    "text": "#ECECF1",
-    "text_secondary": "#8A8A99",
-    "border": "#2E2E38",
-    "success": "#34D399",
-    "warning": "#FBBF24",
-    "error": "#F87171",
-    "info": "#60A5FA",
-    "hover": "#2A2A36",
-    "selection": "#4C3D8C",
-    "input_bg": "#2A2A36",
-}
+def _c(key: str) -> str:
+    """Get color from active theme via module-level theme manager."""
+    _COLOR_MAP = {
+        "bg": "BACKGROUND",
+        "surface": "SURFACE",
+        "primary": "PRIMARY",
+        "secondary": "SECONDARY",
+        "accent": "ACCENT",
+        "text": "TEXT",
+        "text_secondary": "TEXT_SECONDARY",
+        "border": "BORDER",
+        "success": "SUCCESS",
+        "warning": "WARNING",
+        "error": "ERROR",
+        "info": "DOWNLOADING",
+        "hover": "HOVER",
+        "selection": "SELECTION",
+        "input_bg": "SURFACE",
+    }
+    colors = get_theme_manager().colors
+    return getattr(colors, _COLOR_MAP.get(key, key.upper()), "#000000")
 
 
 class MainWindow:
@@ -88,7 +94,10 @@ class MainWindow:
         self._root.title(f"YouMuDow v{__version__}")
         self._root.withdraw()
         self._root.minsize(800, 600)
-        self._root.configure(bg=COLORS["bg"])
+        saved_theme = self._config.get("theme", "dark") if self._config else "dark"
+        self._theme_manager = ThemeManager(saved_theme)
+        configure_styles(self._root, self._theme_manager.colors)
+        self._root.configure(bg=_c("bg"))
 
         self._selected_video: Video | None = None
         self._is_searching = False
@@ -130,7 +139,7 @@ class MainWindow:
         self._update_debug_visibility()
 
     def _create_main_content(self) -> None:
-        main_frame = tk.Frame(self._paned_window, bg=COLORS["bg"])
+        main_frame = tk.Frame(self._paned_window, bg=_c("bg"))
         self._main_content_frame = main_frame
         self._paned_window.add(main_frame, weight=3)
 
@@ -146,33 +155,33 @@ class MainWindow:
         self._queue_panel_visible = False
 
     def _create_log_panel(self) -> None:
-        self._log_frame = tk.Frame(self._paned_window, bg=COLORS["bg"])
+        self._log_frame = tk.Frame(self._paned_window, bg=_c("bg"))
         
         label = tk.Label(
             self._log_frame,
             text="  OUTPUT",
-            bg=COLORS["bg"],
-            fg=COLORS["text_secondary"],
+            bg=_c("bg"),
+            fg=_c("text_secondary"),
             font=FONT["label"],
             anchor="w",
         )
         label.pack(fill="x", pady=(SPACING["sm"], SPACING["xs"]))
         
-        log_container = tk.Frame(self._log_frame, bg=COLORS["bg"])
+        log_container = tk.Frame(self._log_frame, bg=_c("bg"))
         log_container.pack(fill="both", expand=True, padx=SPACING["sm"], pady=(0, SPACING["sm"]))
         
         self._log_terminal = LogTerminal(log_container)
         self._log_terminal.pack(fill="both", expand=True)
 
     def _create_search_bar(self, parent: tk.Frame) -> None:
-        search_frame = tk.Frame(parent, bg=COLORS["bg"])
+        search_frame = tk.Frame(parent, bg=_c("bg"))
         search_frame.grid(row=0, column=0, columnspan=2, sticky="ew", padx=SPACING["md"], pady=SPACING["md"])
         
         entry_frame = tk.Frame(
             search_frame,
-            bg=COLORS["surface"],
+            bg=_c("surface"),
             highlightthickness=1,
-            highlightbackground=COLORS["border"],
+            highlightbackground=_c("border"),
         )
         entry_frame.pack(side="left", fill="both", expand=True, padx=(0, SPACING["sm"]))
         entry_frame.columnconfigure(0, weight=1)
@@ -181,9 +190,9 @@ class MainWindow:
         self._search_entry = tk.Entry(
             entry_frame,
             textvariable=self._search_var,
-            bg=COLORS["surface"],
-            fg=COLORS["text"],
-            insertbackground=COLORS["text"],
+            bg=_c("surface"),
+            fg=_c("text"),
+            insertbackground=_c("text"),
             font=("Segoe UI", 12),
             relief="flat",
             bd=0,
@@ -211,9 +220,9 @@ class MainWindow:
         self._search_btn = tk.Button(
             search_frame,
             text="Search",
-            bg=COLORS["primary"],
+            bg=_c("primary"),
             fg="#FFFFFF",
-            activebackground=COLORS["secondary"],
+            activebackground=_c("secondary"),
             activeforeground="#FFFFFF",
             relief="flat",
             bd=0,
@@ -221,15 +230,15 @@ class MainWindow:
             command=self._on_search,
         )
         self._search_btn.pack(side="left", padx=(SPACING["sm"], 0))
-        self._add_hover_effect(self._search_btn, COLORS["secondary"], COLORS["primary"])
+        self._add_hover_effect(self._search_btn, _c("secondary"), _c("primary"))
 
         self._cancel_btn = tk.Button(
             search_frame,
             text="Cancel",
-            bg=COLORS["surface"],
-            fg=COLORS["text"],
-            activebackground=COLORS["hover"],
-            activeforeground=COLORS["text"],
+            bg=_c("surface"),
+            fg=_c("text"),
+            activebackground=_c("hover"),
+            activeforeground=_c("text"),
             relief="flat",
             bd=0,
             font=FONT["body"],
@@ -241,9 +250,9 @@ class MainWindow:
         self._cancel_dl_btn = tk.Button(
             search_frame,
             text="Stop DL",
-            bg=COLORS["error"],
+            bg=_c("error"),
             fg="#FFFFFF",
-            activebackground=COLORS["warning"],
+            activebackground=_c("warning"),
             activeforeground="#000000",
             relief="flat",
             bd=0,
@@ -256,7 +265,7 @@ class MainWindow:
         self._search_entry.focus()
 
     def _create_results_panel(self, parent: tk.Frame) -> None:
-        container = tk.Frame(parent, bg=COLORS["bg"])
+        container = tk.Frame(parent, bg=_c("bg"))
         container.grid(row=1, column=0, sticky="nsew", padx=(SPACING["md"], SPACING["sm"]), pady=(0, SPACING["md"]))
         container.columnconfigure(0, weight=1)
         container.rowconfigure(0, weight=1)
@@ -292,48 +301,48 @@ class MainWindow:
         style = ttk.Style()
         style.configure(
             "Modern.Treeview",
-            background=COLORS["surface"],
-            foreground=COLORS["text"],
-            fieldbackground=COLORS["surface"],
+            background=_c("surface"),
+            foreground=_c("text"),
+            fieldbackground=_c("surface"),
             borderwidth=0,
             rowheight=44,
             font=FONT["body"],
         )
         style.configure(
             "Modern.Treeview.Heading",
-            background=COLORS["bg"],
-            foreground=COLORS["text_secondary"],
+            background=_c("bg"),
+            foreground=_c("text_secondary"),
             borderwidth=0,
             padding=(12, 8),
             font=FONT["label"],
         )
         style.configure(
             "Modern.Treeview.Row",
-            background=COLORS["surface"],
+            background=_c("surface"),
         )
         style.configure(
             "Modern.Treeview.Selected",
-            background=COLORS["primary"],
+            background=_c("primary"),
             foreground="#FFFFFF",
         )
         style.map(
             "Modern.Treeview",
-            background=[("selected", COLORS["primary"])],
+            background=[("selected", _c("primary"))],
             foreground=[("selected", "#FFFFFF")],
         )
 
     def _create_detail_panel(self, parent: tk.Frame) -> None:
-        detail_container = tk.Frame(parent, bg=COLORS["bg"])
+        detail_container = tk.Frame(parent, bg=_c("bg"))
         detail_container.grid(row=1, column=1, sticky="nsew", padx=(SPACING["sm"], SPACING["md"]), pady=(0, SPACING["md"]))
 
-        header_frame = tk.Frame(detail_container, bg=COLORS["bg"])
+        header_frame = tk.Frame(detail_container, bg=_c("bg"))
         header_frame.pack(fill="x", pady=(0, SPACING["xs"]))
 
         self._detail_toggle_btn = tk.Button(
             header_frame,
             text="▶ OPTIONS",
-            bg=COLORS["bg"],
-            fg=COLORS["text_secondary"],
+            bg=_c("bg"),
+            fg=_c("text_secondary"),
             font=FONT["label"],
             relief="flat",
             bd=0,
@@ -344,21 +353,21 @@ class MainWindow:
         self._thumbnail_label = tk.Label(
             detail_container,
             text="[No thumbnail]",
-            bg=COLORS["surface"],
-            fg=COLORS["text_secondary"],
+            bg=_c("surface"),
+            fg=_c("text_secondary"),
             font=FONT["small"],
             anchor="center",
             height=8,
         )
         self._thumbnail_label.pack(fill="x", pady=(0, SPACING["sm"]))
 
-        row_title = tk.Frame(detail_container, bg=COLORS["surface"])
+        row_title = tk.Frame(detail_container, bg=_c("surface"))
         row_title.pack(fill="x", pady=(0, SPACING["xs"]))
         tk.Label(
             row_title,
             text="Title:",
-            bg=COLORS["surface"],
-            fg=COLORS["text_secondary"],
+            bg=_c("surface"),
+            fg=_c("text_secondary"),
             font=FONT["body"],
             width=10,
             anchor="w",
@@ -366,21 +375,21 @@ class MainWindow:
         self._detail_title = tk.Label(
             row_title,
             text="-",
-            bg=COLORS["surface"],
-            fg=COLORS["text"],
+            bg=_c("surface"),
+            fg=_c("text"),
             font=FONT["body"],
             anchor="w",
             wraplength=180,
         )
         self._detail_title.pack(side="left", fill="x", expand=True)
 
-        row_uploader = tk.Frame(detail_container, bg=COLORS["surface"])
+        row_uploader = tk.Frame(detail_container, bg=_c("surface"))
         row_uploader.pack(fill="x", pady=(0, SPACING["sm"]))
         tk.Label(
             row_uploader,
             text="Uploader:",
-            bg=COLORS["surface"],
-            fg=COLORS["text_secondary"],
+            bg=_c("surface"),
+            fg=_c("text_secondary"),
             font=FONT["body"],
             width=10,
             anchor="w",
@@ -388,95 +397,95 @@ class MainWindow:
         self._detail_uploader = tk.Label(
             row_uploader,
             text="-",
-            bg=COLORS["surface"],
-            fg=COLORS["text"],
+            bg=_c("surface"),
+            fg=_c("text"),
             font=FONT["body"],
             anchor="w",
         )
         self._detail_uploader.pack(side="left")
 
-        tk.Frame(detail_container, height=2, bg=COLORS["bg"]).pack(fill="x", pady=(0, SPACING["md"]))
+        tk.Frame(detail_container, height=2, bg=_c("bg")).pack(fill="x", pady=(0, SPACING["md"]))
 
         self._download_btn = tk.Button(
             detail_container,
             text="Download",
-            bg=COLORS["primary"],
+            bg=_c("primary"),
             fg="#FFFFFF",
-            activebackground=COLORS["secondary"],
+            activebackground=_c("secondary"),
             activeforeground="#FFFFFF",
             relief="flat",
             font=FONT["body"],
             command=self._on_download_now,
         )
         self._download_btn.pack(fill="x", pady=(0, SPACING["xs"]))
-        self._add_hover_effect(self._download_btn, COLORS["secondary"], COLORS["primary"])
+        self._add_hover_effect(self._download_btn, _c("secondary"), _c("primary"))
 
         self._retry_btn = tk.Button(
             detail_container,
             text="↺ Retry",
-            bg=COLORS["warning"],
+            bg=_c("warning"),
             fg="#000000",
-            activebackground=COLORS["secondary"],
+            activebackground=_c("secondary"),
             activeforeground="#000000",
             relief="flat",
             font=FONT["body"],
             command=self._on_retry_download,
         )
 
-        btn_row = tk.Frame(detail_container, bg=COLORS["bg"])
+        btn_row = tk.Frame(detail_container, bg=_c("bg"))
         btn_row.pack(fill="x", pady=(0, SPACING["md"]))
 
         self._open_folder_btn = tk.Button(
             btn_row,
             text="Open Folder",
-            bg=COLORS["surface"],
-            fg=COLORS["text"],
-            activebackground=COLORS["hover"],
-            activeforeground=COLORS["text"],
+            bg=_c("surface"),
+            fg=_c("text"),
+            activebackground=_c("hover"),
+            activeforeground=_c("text"),
             relief="flat",
             font=FONT["body"],
             command=self._on_open_folder,
         )
         self._open_folder_btn.pack(side="left", fill="x", expand=True, padx=(0, SPACING["xs"]))
-        self._add_hover_effect(self._open_folder_btn, COLORS["hover"], COLORS["surface"])
+        self._add_hover_effect(self._open_folder_btn, _c("hover"), _c("surface"))
 
         self._add_all_btn = tk.Button(
             btn_row,
             text="Add All",
-            bg=COLORS["surface"],
-            fg=COLORS["text"],
-            activebackground=COLORS["hover"],
-            activeforeground=COLORS["text"],
+            bg=_c("surface"),
+            fg=_c("text"),
+            activebackground=_c("hover"),
+            activeforeground=_c("text"),
             relief="flat",
             font=FONT["body"],
             command=self._add_all_to_queue,
         )
         self._add_all_btn.pack(side="left", fill="x", expand=True, padx=(SPACING["xs"], 0))
-        self._add_hover_effect(self._add_all_btn, COLORS["hover"], COLORS["surface"])
+        self._add_hover_effect(self._add_all_btn, _c("hover"), _c("surface"))
 
         self._queue_toggle_btn = tk.Button(
             btn_row,
             text="Queue ▾",
-            bg=COLORS["surface"],
-            fg=COLORS["text"],
-            activebackground=COLORS["hover"],
-            activeforeground=COLORS["text"],
+            bg=_c("surface"),
+            fg=_c("text"),
+            activebackground=_c("hover"),
+            activeforeground=_c("text"),
             relief="flat",
             font=FONT["body"],
             command=self._toggle_queue_panel,
         )
         self._queue_toggle_btn.pack(side="left", fill="x", expand=True, padx=(SPACING["xs"], 0))
-        self._add_hover_effect(self._queue_toggle_btn, COLORS["hover"], COLORS["surface"])
+        self._add_hover_effect(self._queue_toggle_btn, _c("hover"), _c("surface"))
 
-        self._options_frame = tk.Frame(detail_container, bg=COLORS["surface"])
+        self._options_frame = tk.Frame(detail_container, bg=_c("surface"))
 
-        format_row = tk.Frame(self._options_frame, bg=COLORS["surface"])
+        format_row = tk.Frame(self._options_frame, bg=_c("surface"))
         format_row.pack(fill="x", pady=(0, SPACING["md"]))
         tk.Label(
             format_row,
             text="Format:",
-            bg=COLORS["surface"],
-            fg=COLORS["text_secondary"],
+            bg=_c("surface"),
+            fg=_c("text_secondary"),
             font=FONT["body"],
             width=10,
             anchor="w",
@@ -493,13 +502,13 @@ class MainWindow:
         )
         format_combo.pack(side="left", padx=(0, SPACING["sm"]))
 
-        quality_row = tk.Frame(self._options_frame, bg=COLORS["surface"])
+        quality_row = tk.Frame(self._options_frame, bg=_c("surface"))
         quality_row.pack(fill="x", pady=(SPACING["sm"], SPACING["md"]))
         tk.Label(
             quality_row,
             text="Quality:",
-            bg=COLORS["surface"],
-            fg=COLORS["text_secondary"],
+            bg=_c("surface"),
+            fg=_c("text_secondary"),
             font=FONT["body"],
             width=10,
             anchor="w",
@@ -516,7 +525,7 @@ class MainWindow:
         )
         quality_combo.pack(side="left")
 
-        subtitles_row = tk.Frame(self._options_frame, bg=COLORS["surface"])
+        subtitles_row = tk.Frame(self._options_frame, bg=_c("surface"))
         subtitles_row.pack(fill="x", pady=(SPACING["sm"], SPACING["md"]))
 
         self._subtitles_var = tk.BooleanVar(value=False)
@@ -524,11 +533,11 @@ class MainWindow:
             subtitles_row,
             text="Download subtitles",
             variable=self._subtitles_var,
-            bg=COLORS["surface"],
-            fg=COLORS["text"],
-            activebackground=COLORS["surface"],
-            activeforeground=COLORS["text"],
-            selectcolor=COLORS["surface"],
+            bg=_c("surface"),
+            fg=_c("text"),
+            activebackground=_c("surface"),
+            activeforeground=_c("text"),
+            selectcolor=_c("surface"),
             relief="flat",
             font=FONT["body"],
             command=self._on_subtitles_toggle,
@@ -539,8 +548,8 @@ class MainWindow:
         self._subtitle_lang_entry = tk.Entry(
             subtitles_row,
             textvariable=self._subtitle_lang_var,
-            bg=COLORS["input_bg"],
-            fg=COLORS["text"],
+            bg=_c("input_bg"),
+            fg=_c("text"),
             relief="flat",
             font=("Segoe UI", 9),
             width=10,
@@ -549,8 +558,8 @@ class MainWindow:
         tk.Label(
             subtitles_row,
             text="(en,es,fr...)",
-            bg=COLORS["surface"],
-            fg=COLORS["text_secondary"],
+            bg=_c("surface"),
+            fg=_c("text_secondary"),
             font=("Segoe UI", 8),
         ).pack(side="left", padx=(2, 0))
 
@@ -559,24 +568,24 @@ class MainWindow:
             subtitles_row,
             text="Embed",
             variable=self._embed_subs_var,
-            bg=COLORS["surface"],
-            fg=COLORS["text_secondary"],
-            activebackground=COLORS["surface"],
-            activeforeground=COLORS["text"],
-            selectcolor=COLORS["surface"],
+            bg=_c("surface"),
+            fg=_c("text_secondary"),
+            activebackground=_c("surface"),
+            activeforeground=_c("text"),
+            selectcolor=_c("surface"),
             relief="flat",
             font=("Segoe UI", 9),
         )
         self._embed_subs_check.pack(side="left", padx=(SPACING["sm"], 0))
 
-        auth_row = tk.Frame(self._options_frame, bg=COLORS["surface"])
+        auth_row = tk.Frame(self._options_frame, bg=_c("surface"))
         auth_row.pack(fill="x", pady=(SPACING["sm"], SPACING["md"]))
 
         tk.Label(
             auth_row,
             text="Auth:",
-            bg=COLORS["surface"],
-            fg=COLORS["text_secondary"],
+            bg=_c("surface"),
+            fg=_c("text_secondary"),
             font=("Segoe UI", 9),
             width=10,
             anchor="w",
@@ -589,11 +598,11 @@ class MainWindow:
             auth_row,
             text="Cookies",
             variable=self._use_cookies_var,
-            bg=COLORS["surface"],
-            fg=COLORS["text"],
-            activebackground=COLORS["surface"],
-            activeforeground=COLORS["text"],
-            selectcolor=COLORS["surface"],
+            bg=_c("surface"),
+            fg=_c("text"),
+            activebackground=_c("surface"),
+            activeforeground=_c("text"),
+            selectcolor=_c("surface"),
             relief="flat",
             font=("Segoe UI", 9),
             command=self._on_cookies_toggle,
@@ -628,24 +637,24 @@ class MainWindow:
         self._cookies_file_btn = tk.Button(
             auth_row,
             text="📁",
-            bg=COLORS["surface"],
-            fg=COLORS["text"],
+            bg=_c("surface"),
+            fg=_c("text"),
             relief="flat",
             font=("Segoe UI", 10),
             width=2,
             command=self._on_select_cookies_file,
         )
         self._cookies_file_btn.pack(side="left", padx=(SPACING["sm"], 0))
-        self._add_hover_effect(self._cookies_file_btn, COLORS["hover"], COLORS["surface"])
+        self._add_hover_effect(self._cookies_file_btn, _c("hover"), _c("surface"))
 
-        extra_options_row = tk.Frame(self._options_frame, bg=COLORS["surface"])
+        extra_options_row = tk.Frame(self._options_frame, bg=_c("surface"))
         extra_options_row.pack(fill="x", pady=(SPACING["sm"], SPACING["md"]))
 
         tk.Label(
             extra_options_row,
             text="Options:",
-            bg=COLORS["surface"],
-            fg=COLORS["text_secondary"],
+            bg=_c("surface"),
+            fg=_c("text_secondary"),
             font=("Segoe UI", 9),
             width=10,
             anchor="w",
@@ -655,8 +664,8 @@ class MainWindow:
         rate_entry = tk.Entry(
             extra_options_row,
             textvariable=self._rate_limit_var,
-            bg=COLORS["input_bg"],
-            fg=COLORS["text"],
+            bg=_c("input_bg"),
+            fg=_c("text"),
             relief="flat",
             font=("Segoe UI", 9),
             width=8,
@@ -665,8 +674,8 @@ class MainWindow:
         tk.Label(
             extra_options_row,
             text="Rate (e.g. 1M)",
-            bg=COLORS["surface"],
-            fg=COLORS["text_secondary"],
+            bg=_c("surface"),
+            fg=_c("text_secondary"),
             font=("Segoe UI", 8),
         ).pack(side="left", padx=(0, SPACING["md"]))
 
@@ -675,11 +684,11 @@ class MainWindow:
             extra_options_row,
             text="Split chapters",
             variable=self._split_chapters_var,
-            bg=COLORS["surface"],
-            fg=COLORS["text"],
-            activebackground=COLORS["surface"],
-            activeforeground=COLORS["text"],
-            selectcolor=COLORS["surface"],
+            bg=_c("surface"),
+            fg=_c("text"),
+            activebackground=_c("surface"),
+            activeforeground=_c("text"),
+            selectcolor=_c("surface"),
             relief="flat",
             font=("Segoe UI", 9),
         )
@@ -689,25 +698,25 @@ class MainWindow:
         self._on_subtitles_toggle()
 
     def _create_queue_panel(self, parent: tk.Frame) -> None:
-        self._queue_frame = tk.Frame(parent, bg=COLORS["surface"])
+        self._queue_frame = tk.Frame(parent, bg=_c("surface"))
         self._queue_frame.grid(row=2, column=0, columnspan=2, sticky="ew", padx=SPACING["md"], pady=(0, SPACING["md"]))
 
-        qheader = tk.Frame(self._queue_frame, bg=COLORS["surface"])
+        qheader = tk.Frame(self._queue_frame, bg=_c("surface"))
         qheader.pack(fill="x", pady=(SPACING["sm"], SPACING["xs"]))
 
         tk.Label(
             qheader,
             text="QUEUE",
-            bg=COLORS["surface"],
-            fg=COLORS["text_secondary"],
+            bg=_c("surface"),
+            fg=_c("text_secondary"),
             font=FONT["label"],
         ).pack(side="left", padx=SPACING["sm"])
 
         self._queue_count_label = tk.Label(
             qheader,
             text="0 queued",
-            bg=COLORS["surface"],
-            fg=COLORS["text_secondary"],
+            bg=_c("surface"),
+            fg=_c("text_secondary"),
             font=FONT["small"],
         )
         self._queue_count_label.pack(side="right", padx=SPACING["sm"])
@@ -748,7 +757,7 @@ class MainWindow:
         if not video:
             return
 
-        menu = tk.Menu(self._root, tearoff=0, bg=COLORS["surface"], fg=COLORS["text"])
+        menu = tk.Menu(self._root, tearoff=0, bg=_c("surface"), fg=_c("text"))
         menu.add_command(label="Remove from queue", command=lambda: self._controller.remove_from_queue(video))
         menu.add_command(label="Open in browser", command=lambda: webbrowser.open(video.url))
         menu.tk_popup(event.x_root, event.y_root)
@@ -797,7 +806,7 @@ class MainWindow:
             self._set_status(f"Output: {path}")
 
     def _create_status_bar(self) -> None:
-        status_frame = tk.Frame(self._root, bg=COLORS["surface"])
+        status_frame = tk.Frame(self._root, bg=_c("surface"))
         status_frame.grid(row=1, column=0, sticky="ew", padx=SPACING["md"], pady=SPACING["sm"])
         status_frame.columnconfigure(0, weight=1)
 
@@ -805,28 +814,28 @@ class MainWindow:
         self._status_label = tk.Label(
             status_frame,
             textvariable=self._status_var,
-            bg=COLORS["surface"],
-            fg=COLORS["text_secondary"],
+            bg=_c("surface"),
+            fg=_c("text_secondary"),
             font=FONT["small"],
             anchor="w",
         )
         self._status_label.grid(row=0, column=0, sticky="w")
 
-        progress_frame = tk.Frame(status_frame, bg=COLORS["surface"], height=6)
+        progress_frame = tk.Frame(status_frame, bg=_c("surface"), height=6)
         progress_frame.grid(row=1, column=0, sticky="ew", pady=(SPACING["sm"], 0))
         progress_frame.columnconfigure(0, weight=1)
 
         self._progress_var = tk.DoubleVar(value=0)
         self._progress_bar = tk.Canvas(
             progress_frame,
-            bg=COLORS["surface"],
+            bg=_c("surface"),
             height=6,
             highlightthickness=0,
             relief="flat",
         )
         self._progress_bar.pack(fill="x")
         self._progress_rect = self._progress_bar.create_rectangle(
-            0, 0, 0, 6, fill=COLORS["primary"], outline=""
+            0, 0, 0, 6, fill=_c("primary"), outline=""
         )
 
     def _update_progress_bar(self) -> None:
@@ -841,10 +850,10 @@ class MainWindow:
             pass
 
     def _create_menu(self) -> None:
-        menubar = tk.Menu(self._root, bg=COLORS["bg"], fg=COLORS["text"], bd=0, relief="flat")
+        menubar = tk.Menu(self._root, bg=_c("bg"), fg=_c("text"), bd=0, relief="flat")
         self._root.configure(menu=menubar)
 
-        file_menu = tk.Menu(menubar, tearoff=0, bg=COLORS["surface"], fg=COLORS["text"], bd=1)
+        file_menu = tk.Menu(menubar, tearoff=0, bg=_c("surface"), fg=_c("text"), bd=1)
         menubar.add_cascade(label="File", menu=file_menu)
         file_menu.add_command(label="Set Output Folder", command=self._on_set_output)
         file_menu.add_command(label="Open Output Folder    Ctrl+O", command=self._on_open_folder)
@@ -852,12 +861,12 @@ class MainWindow:
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self._root.quit)
 
-        queue_menu = tk.Menu(menubar, tearoff=0, bg=COLORS["surface"], fg=COLORS["text"], bd=1)
+        queue_menu = tk.Menu(menubar, tearoff=0, bg=_c("surface"), fg=_c("text"), bd=1)
         menubar.add_cascade(label="Queue", menu=queue_menu)
         queue_menu.add_command(label="Start Downloads", command=self._on_start_queue)
         queue_menu.add_command(label="Clear Queue", command=self._on_clear_queue)
 
-        view_menu = tk.Menu(menubar, tearoff=0, bg=COLORS["surface"], fg=COLORS["text"], bd=1)
+        view_menu = tk.Menu(menubar, tearoff=0, bg=_c("surface"), fg=_c("text"), bd=1)
         menubar.add_cascade(label="View", menu=view_menu)
         self._debug_var = tk.BooleanVar(value=self._debug_mode)
         view_menu.add_checkbutton(
@@ -865,8 +874,13 @@ class MainWindow:
             variable=self._debug_var,
             command=self._on_toggle_debug,
         )
+        view_menu.add_separator()
+        view_menu.add_command(
+            label="Toggle Light/Dark Theme    Ctrl+T",
+            command=self._on_toggle_theme,
+        )
 
-        help_menu = tk.Menu(menubar, tearoff=0, bg=COLORS["surface"], fg=COLORS["text"], bd=1)
+        help_menu = tk.Menu(menubar, tearoff=0, bg=_c("surface"), fg=_c("text"), bd=1)
         menubar.add_cascade(label="Help", menu=help_menu)
         help_menu.add_command(label="Update yt-dlp", command=self._on_update_ytdlp)
         help_menu.add_command(label="yt-dlp version", command=self._on_show_ytdlp_version)
@@ -912,6 +926,7 @@ class MainWindow:
         self._root.bind("<Escape>", lambda _: self._on_cancel_search())
         self._root.bind("<Control-o>", lambda _: self._on_open_folder())
         self._root.bind("<Control-Shift-C>", lambda _: self._log_terminal.clear() if self._log_terminal else None)
+        self._root.bind("<Control-t>", lambda _: self._on_toggle_theme())
 
     def _setup_controller_callbacks(self) -> None:
         def on_search_complete(results: list[Video]) -> None:
@@ -963,24 +978,24 @@ class MainWindow:
                 speed_info = f" · {active.speed}" if active.speed and active.speed != "Calculating..." else ""
                 eta_info = f" · ETA {active.eta}" if active.eta and active.eta != "00:00" else ""
                 self._set_status(f"Downloading: {active.progress:.1f}%{speed_info}{eta_info}")
-                self._progress_bar.itemconfig(self._progress_rect, fill=COLORS["primary"])
+                self._progress_bar.itemconfig(self._progress_rect, fill=_c("primary"))
             else:
                 self._progress_var.set(0)
-                self._progress_bar.itemconfig(self._progress_rect, fill=COLORS["primary"])
+                self._progress_bar.itemconfig(self._progress_rect, fill=_c("primary"))
                 self._set_status("Downloading...")
         elif snapshot.state.name == "ERROR":
             self._is_searching = False
             self._is_downloading = False
             self._set_status(f"Error: {snapshot.error_message}" if snapshot.error_message else "Error occurred")
             self._progress_var.set(0)
-            self._progress_bar.itemconfig(self._progress_rect, fill=COLORS["error"])
+            self._progress_bar.itemconfig(self._progress_rect, fill=_c("error"))
         else:
             self._is_searching = False
             self._is_downloading = False
             self._set_status("Ready" if snapshot.state.name == "IDLE" else snapshot.state.name)
             if not snapshot.active_downloads:
                 self._progress_var.set(0)
-                self._progress_bar.itemconfig(self._progress_rect, fill=COLORS["border"])
+                self._progress_bar.itemconfig(self._progress_rect, fill=_c("border"))
         
         self._update_button_states()
         if self._queue_panel_visible:
@@ -1300,7 +1315,7 @@ class MainWindow:
             self._retry_btn.pack_forget()
         if video.status == DownloadStatus.ERROR:
             self._retry_btn.pack(fill="x", pady=(0, SPACING["xs"]))
-            self._add_hover_effect(self._retry_btn, COLORS["warning"], COLORS["warning"])
+            self._add_hover_effect(self._retry_btn, _c("warning"), _c("warning"))
 
     def _on_subtitles_toggle(self) -> None:
         state = "normal" if self._subtitles_var.get() else "disabled"
@@ -1454,6 +1469,14 @@ class MainWindow:
         self._debug_mode = self._debug_var.get()
         self._controller.set_debug_mode(self._debug_mode)
         self._update_debug_visibility()
+
+    def _on_toggle_theme(self) -> None:
+        current = self._theme_manager.current.name
+        new_theme: ThemeName = "light" if current == "dark" else "dark"
+        self._theme_manager.set_theme(new_theme)
+        configure_styles(self._root, self._theme_manager.colors)
+        if self._config:
+            self._config.set("theme", new_theme)
 
     def _on_close(self) -> None:
         if self._config:

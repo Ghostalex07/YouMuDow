@@ -27,6 +27,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "split_chapters": False,
     "debug_mode": False,
     "options_panel_open": False,
+    "theme": "dark",
 }
 
 
@@ -38,7 +39,7 @@ class AppConfig:
     def _load(self) -> None:
         try:
             if CONFIG_FILE.exists():
-                with open(CONFIG_FILE) as f:
+                with open(CONFIG_FILE, encoding="utf-8") as f:
                     stored = json.load(f)
                 self._data = {**DEFAULT_CONFIG, **stored}
         except json.JSONDecodeError:
@@ -51,7 +52,7 @@ class AppConfig:
     def save(self) -> None:
         try:
             CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-            with open(CONFIG_FILE, "w") as f:
+            with open(CONFIG_FILE, "w", encoding="utf-8") as f:
                 json.dump(self._data, f, indent=2)
         except OSError as e:
             import sys

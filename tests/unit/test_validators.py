@@ -6,6 +6,7 @@ from youmudow.domain.validators import (
     sanitize_filename,
     is_valid_format,
     is_playlist_url,
+    validate_format_quality,
 )
 
 
@@ -208,3 +209,28 @@ class TestPlaylistURL:
     def test_empty_string_not_playlist(self):
         assert not is_playlist_url("")
         assert not is_playlist_url(None)
+
+
+class TestValidateFormatQuality:
+    """Tests for validate_format_quality."""
+
+    def test_audio_format_with_video_quality_returns_warning(self):
+        is_valid, warning = validate_format_quality("mp3", "1080p")
+        assert is_valid is True
+        assert "mp3" in warning
+        assert "1080p" in warning
+
+    def test_mp4_with_audio_quality_returns_warning(self):
+        is_valid, warning = validate_format_quality("mp4", "320kbps")
+        assert is_valid is True
+        assert "mp4" in warning
+
+    def test_valid_combination_no_warning(self):
+        is_valid, warning = validate_format_quality("mp3", "320kbps")
+        assert is_valid is True
+        assert warning == ""
+
+    def test_valid_video_combination_no_warning(self):
+        is_valid, warning = validate_format_quality("mp4", "1080p")
+        assert is_valid is True
+        assert warning == ""

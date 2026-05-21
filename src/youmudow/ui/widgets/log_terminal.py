@@ -238,6 +238,7 @@ class LogTerminal(ttk.Frame):
                 with self._lock:
                     self._pending_messages.clear()
                     self._processing = False
+                    self._log_buffer.clear()
                 self._text.configure(state="normal")
                 self._text.delete("1.0", "end")
                 self._text.configure(state="disabled")

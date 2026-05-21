@@ -1,4 +1,8 @@
 """YouTube Music Downloader - A modern desktop application."""
 
-__version__ = "1.0.0"
+try:
+    from importlib.metadata import version, PackageNotFoundError
+    __version__ = version("youmudow")
+except (PackageNotFoundError, ImportError):
+    __version__ = "dev"
 __author__ = "YouMuDow"
