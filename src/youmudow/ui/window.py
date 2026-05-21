@@ -17,7 +17,7 @@ import webbrowser
 from youmudow.domain.validators import get_all_browser_profiles, get_available_browsers, is_valid_rate_limit
 from youmudow.services.updater_service import get_ytdlp_version, update_ytdlp
 from youmudow.ui.styles.styles import configure_styles
-from youmudow.ui.styles.theme import ThemeManager, ThemeName, get_theme_manager
+from youmudow.ui.styles.theme import ThemeName, get_theme_manager
 
 from youmudow.domain.models import Video, DownloadOptions
 from youmudow.domain.enums import DownloadStatus
@@ -95,7 +95,8 @@ class MainWindow:
         self._root.withdraw()
         self._root.minsize(800, 600)
         saved_theme = self._config.get("theme", "dark") if self._config else "dark"
-        self._theme_manager = ThemeManager(saved_theme)
+        self._theme_manager = get_theme_manager()
+        self._theme_manager.set_theme(saved_theme)
         configure_styles(self._root, self._theme_manager.colors)
         self._root.configure(bg=_c("bg"))
 
