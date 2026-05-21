@@ -1476,8 +1476,45 @@ class MainWindow:
         new_theme: ThemeName = "light" if current == "dark" else "dark"
         self._theme_manager.set_theme(new_theme)
         configure_styles(self._root, self._theme_manager.colors)
+        self._apply_theme_colors()
         if self._config:
             self._config.set("theme", new_theme)
+
+    def _apply_theme_colors(self) -> None:
+        colors = self._theme_manager.colors
+        self._root.configure(bg=colors.BACKGROUND)
+        self._update_widget_colors(self._root, colors)
+        self._progress_bar.itemconfig(self._progress_rect, fill=colors.PRIMARY)
+
+    def _update_widget_colors(self, widget: tk.Widget, colors: any) -> None:
+        cls = widget.winfo_class()
+        try:
+            if cls in ("Frame", "Labelframe"):
+                widget.configure(bg=colors.BACKGROUND)
+            elif cls == "Label":
+                widget.configure(bg=colors.BACKGROUND, fg=colors.TEXT)
+            elif cls == "Button":
+                widget.configure(bg=colors.SURFACE, fg=colors.TEXT,
+                                 activebackground=colors.HOVER, activeforeground=colors.TEXT)
+            elif cls == "Entry":
+                widget.configure(bg=colors.SURFACE, fg=colors.TEXT,
+                                 insertbackground=colors.TEXT)
+            elif cls in ("Checkbutton", "Radiobutton"):
+                widget.configure(bg=colors.SURFACE, fg=colors.TEXT,
+                                 selectcolor=colors.SURFACE,
+                                 activebackground=colors.SURFACE,
+                                 activeforeground=colors.TEXT)
+            elif cls == "Canvas":
+                widget.configure(bg=colors.SURFACE)
+            elif cls == "Menu":
+                widget.configure(bg=colors.SURFACE, fg=colors.TEXT)
+        except tk.TclError:
+            pass
+        try:
+            for child in widget.winfo_children():
+                self._update_widget_colors(child, colors)
+        except tk.TclError:
+            pass
 
     def _on_close(self) -> None:
         if self._config:
