@@ -1,13 +1,19 @@
 """Download history service for YouMuDow."""
 
 import json
+import platform
 import threading
 from datetime import datetime
+from pathlib import Path
 
-from youmudow.app.config import CONFIG_DIR
 from youmudow.domain.models import HistoryEntry, Video
 
-HISTORY_FILE = CONFIG_DIR / "history.json"
+CONFIG_DIR: Path = (
+    Path.home() / ".config" / "youmudow"
+    if platform.system() != "Windows"
+    else Path.home() / "AppData" / "Local" / "YouMuDow"
+)
+HISTORY_FILE: Path = CONFIG_DIR / "history.json"
 MAX_HISTORY = 500
 
 
