@@ -10,7 +10,8 @@ class SearchBar(tk.Frame):
     def __init__(self, parent: tk.Widget, main_window: object) -> None:
         super().__init__(parent, bg=_c("bg"))
         self._mw = main_window
-        self.pack(fill="x", padx=SPACING["md"], pady=SPACING["md"])
+        self.grid(row=0, column=0, columnspan=2, sticky="ew",
+                  padx=SPACING["md"], pady=SPACING["md"])
 
         entry_frame = tk.Frame(
             self, bg=_c("surface"),
