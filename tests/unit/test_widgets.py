@@ -1,9 +1,12 @@
 """Tests for UI widgets."""
 
+import os
 import pytest
 from unittest.mock import Mock
 
 pytest.importorskip("tkinter")
+if not os.environ.get("DISPLAY"):
+    pytest.skip("No display server available, skipping Tk tests", allow_module_level=True)
 
 
 @pytest.fixture
