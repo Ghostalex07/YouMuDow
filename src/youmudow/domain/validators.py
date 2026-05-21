@@ -250,25 +250,23 @@ def get_all_browser_profiles() -> dict[str, list[BrowserProfile]]:
     """
     browser_paths = _get_browser_profile_paths()
     result: dict[str, list[BrowserProfile]] = {}
-    system = _platform.system()
     
     for browser, paths in browser_paths.items():
         profiles = []
         for raw_path in paths:
-            expanded = os.path.expanduser(raw_path) if system == "Linux" else raw_path
+            expanded = os.path.expanduser(raw_path)
             if not os.path.isdir(expanded):
                 continue
             
             if browser == "firefox":
                 profile_dirs = []
-                if os.path.isdir(expanded):
-                    try:
-                        for item in os.listdir(expanded):
-                            profile_dir = os.path.join(expanded, item)
-                            if os.path.isdir(profile_dir) and not item.startswith('.'):
-                                profile_dirs.append(item)
-                    except OSError:
-                        pass
+                try:
+                    for item in os.listdir(expanded):
+                        profile_dir = os.path.join(expanded, item)
+                        if os.path.isdir(profile_dir) and not item.startswith('.'):
+                            profile_dirs.append(item)
+                except OSError:
+                    pass
                 
                 for pdir in profile_dirs[:5]:
                     profiles.append(BrowserProfile(
@@ -277,26 +275,25 @@ def get_all_browser_profiles() -> dict[str, list[BrowserProfile]]:
                         browser=browser
                     ))
             else:
-                if os.path.isdir(expanded):
-                    base_name = os.path.basename(expanded)
-                    if base_name.lower() in ["default", "default release"]:
-                        profiles.append(BrowserProfile(
-                            name="Default",
-                            path=expanded,
-                            browser=browser
-                        ))
-                    
-                    try:
-                        for item in os.listdir(expanded):
-                            item_path = os.path.join(expanded, item)
-                            if os.path.isdir(item_path) and item.lower().startswith("profile"):
-                                profiles.append(BrowserProfile(
-                                    name=item,
-                                    path=item_path,
-                                    browser=browser
-                                ))
-                    except OSError:
-                        pass
+                base_name = os.path.basename(expanded)
+                if base_name.lower() in ["default", "default release"]:
+                    profiles.append(BrowserProfile(
+                        name="Default",
+                        path=expanded,
+                        browser=browser
+                    ))
+                
+                try:
+                    for item in os.listdir(expanded):
+                        item_path = os.path.join(expanded, item)
+                        if os.path.isdir(item_path) and item.lower().startswith("profile"):
+                            profiles.append(BrowserProfile(
+                                name=item,
+                                path=item_path,
+                                browser=browser
+                            ))
+                except OSError:
+                    pass
         
         if profiles:
             result[browser] = profiles[:5]
@@ -311,19 +308,18 @@ def check_browser_profile(browser: str) -> tuple[bool, str]:
         (exists, message)
     """
     browser = browser.lower()
-    system = _platform.system()
     browser_paths = _get_browser_profile_paths()
     paths = browser_paths.get(browser, [])
     
     for raw_path in paths:
-        expanded = os.path.expanduser(raw_path) if system == "Linux" else raw_path
+        expanded = os.path.expanduser(raw_path)
         if os.path.isdir(expanded):
             return True, expanded
     
     available = []
     for br, paths_list in browser_paths.items():
         for p in paths_list:
-            ep = os.path.expanduser(p) if system == "Linux" else p
+            ep = os.path.expanduser(p)
             if os.path.isdir(ep):
                 available.append(br)
                 break
@@ -379,4 +375,4 @@ def is_valid_rate_limit(rate: str) -> bool:
     if not rate:
         return True  # Empty is valid (no limit)
     pattern = r'^\d+[KMG]?$'
-    return bool(re.match(pattern, rate, re.IGNORECASE)) and len(rate) > 0
+    return bool(re.match(pattern, rate, re.IGNORECASE))

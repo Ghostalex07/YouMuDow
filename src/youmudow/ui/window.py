@@ -48,25 +48,26 @@ FONT = {
     "mono": ("Cascadia Code", 10, "normal"),
 }
 
+_COLOR_MAP = {
+    "bg": "BACKGROUND",
+    "surface": "SURFACE",
+    "primary": "PRIMARY",
+    "secondary": "SECONDARY",
+    "accent": "ACCENT",
+    "text": "TEXT",
+    "text_secondary": "TEXT_SECONDARY",
+    "border": "BORDER",
+    "success": "SUCCESS",
+    "warning": "WARNING",
+    "error": "ERROR",
+    "info": "DOWNLOADING",
+    "hover": "HOVER",
+    "selection": "SELECTION",
+    "input_bg": "SURFACE",
+}
+
 def _c(key: str) -> str:
     """Get color from active theme via module-level theme manager."""
-    _COLOR_MAP = {
-        "bg": "BACKGROUND",
-        "surface": "SURFACE",
-        "primary": "PRIMARY",
-        "secondary": "SECONDARY",
-        "accent": "ACCENT",
-        "text": "TEXT",
-        "text_secondary": "TEXT_SECONDARY",
-        "border": "BORDER",
-        "success": "SUCCESS",
-        "warning": "WARNING",
-        "error": "ERROR",
-        "info": "DOWNLOADING",
-        "hover": "HOVER",
-        "selection": "SELECTION",
-        "input_bg": "SURFACE",
-    }
     colors = get_theme_manager().colors
     return getattr(colors, _COLOR_MAP.get(key, key.upper()), "#000000")
 
@@ -74,14 +75,14 @@ def _c(key: str) -> str:
 class MainWindow:
     """Main application window using tkinter with modern styling."""
 
-    def _add_hover_effect(self, widget: tk.Widget, enter_color: str, leave_color: str, enter_fg: str | None = None, leave_fg: str | None = None) -> None:
-        """Add hover effect to a widget."""
+    def _add_hover_effect(self, widget: tk.Widget, enter_key: str, leave_key: str, enter_fg: str | None = None, leave_fg: str | None = None) -> None:
+        """Add hover effect to a widget using dynamic color keys."""
         def on_enter(e: tk.Event) -> None:
-            widget.configure(bg=enter_color)
+            widget.configure(bg=_c(enter_key))
             if enter_fg:
                 widget.configure(fg=enter_fg)
         def on_leave(e: tk.Event) -> None:
-            widget.configure(bg=leave_color)
+            widget.configure(bg=_c(leave_key))
             if leave_fg:
                 widget.configure(fg=leave_fg)
         widget.bind("<Enter>", on_enter)
@@ -115,6 +116,7 @@ class MainWindow:
         self._log_frame: tk.Frame | None = None
         self._paned_window: ttk.PanedWindow | None = None
         self._main_content_frame: tk.Frame | None = None
+        self._menubar: tk.Menu | None = None
 
         self._setup_ui()
         self._apply_config()
@@ -230,8 +232,9 @@ class MainWindow:
             font=FONT["h2"],
             command=self._on_search,
         )
+        self._search_btn._theme = {"bg": "primary", "fg": "#FFFFFF", "activebg": "secondary", "activefg": "#FFFFFF"}
         self._search_btn.pack(side="left", padx=(SPACING["sm"], 0))
-        self._add_hover_effect(self._search_btn, _c("secondary"), _c("primary"))
+        self._add_hover_effect(self._search_btn, "secondary", "primary")
 
         self._cancel_btn = tk.Button(
             search_frame,
@@ -245,6 +248,7 @@ class MainWindow:
             font=FONT["body"],
             command=self._on_cancel_search,
         )
+        self._cancel_btn._theme = {"bg": "surface", "fg": "text", "activebg": "hover", "activefg": "text"}
         self._cancel_btn.pack(side="left", padx=(SPACING["xs"], 0))
         self._cancel_btn.configure(state="disabled")
 
@@ -260,6 +264,7 @@ class MainWindow:
             font=FONT["body"],
             command=self._on_cancel_download,
         )
+        self._cancel_dl_btn._theme = {"bg": "error", "fg": "#FFFFFF", "activebg": "warning", "activefg": "#000000"}
         self._cancel_dl_btn.pack(side="left", padx=(SPACING["xs"], 0))
         self._cancel_dl_btn.configure(state="disabled")
 
@@ -349,6 +354,7 @@ class MainWindow:
             bd=0,
             command=self._toggle_detail_panel,
         )
+        self._detail_toggle_btn._theme = {"bg": "bg", "fg": "text_secondary"}
         self._detail_toggle_btn.pack(side="left")
 
         self._thumbnail_label = tk.Label(
@@ -418,8 +424,9 @@ class MainWindow:
             font=FONT["body"],
             command=self._on_download_now,
         )
+        self._download_btn._theme = {"bg": "primary", "fg": "#FFFFFF", "activebg": "secondary", "activefg": "#FFFFFF"}
         self._download_btn.pack(fill="x", pady=(0, SPACING["xs"]))
-        self._add_hover_effect(self._download_btn, _c("secondary"), _c("primary"))
+        self._add_hover_effect(self._download_btn, "secondary", "primary")
 
         self._retry_btn = tk.Button(
             detail_container,
@@ -432,6 +439,7 @@ class MainWindow:
             font=FONT["body"],
             command=self._on_retry_download,
         )
+        self._retry_btn._theme = {"bg": "warning", "fg": "#000000", "activebg": "secondary", "activefg": "#000000"}
 
         btn_row = tk.Frame(detail_container, bg=_c("bg"))
         btn_row.pack(fill="x", pady=(0, SPACING["md"]))
@@ -447,8 +455,9 @@ class MainWindow:
             font=FONT["body"],
             command=self._on_open_folder,
         )
+        self._open_folder_btn._theme = {"bg": "surface", "fg": "text", "activebg": "hover", "activefg": "text"}
         self._open_folder_btn.pack(side="left", fill="x", expand=True, padx=(0, SPACING["xs"]))
-        self._add_hover_effect(self._open_folder_btn, _c("hover"), _c("surface"))
+        self._add_hover_effect(self._open_folder_btn, "hover", "surface")
 
         self._add_all_btn = tk.Button(
             btn_row,
@@ -461,8 +470,9 @@ class MainWindow:
             font=FONT["body"],
             command=self._add_all_to_queue,
         )
+        self._add_all_btn._theme = {"bg": "surface", "fg": "text", "activebg": "hover", "activefg": "text"}
         self._add_all_btn.pack(side="left", fill="x", expand=True, padx=(SPACING["xs"], 0))
-        self._add_hover_effect(self._add_all_btn, _c("hover"), _c("surface"))
+        self._add_hover_effect(self._add_all_btn, "hover", "surface")
 
         self._queue_toggle_btn = tk.Button(
             btn_row,
@@ -475,8 +485,9 @@ class MainWindow:
             font=FONT["body"],
             command=self._toggle_queue_panel,
         )
+        self._queue_toggle_btn._theme = {"bg": "surface", "fg": "text", "activebg": "hover", "activefg": "text"}
         self._queue_toggle_btn.pack(side="left", fill="x", expand=True, padx=(SPACING["xs"], 0))
-        self._add_hover_effect(self._queue_toggle_btn, _c("hover"), _c("surface"))
+        self._add_hover_effect(self._queue_toggle_btn, "hover", "surface")
 
         self._options_frame = tk.Frame(detail_container, bg=_c("surface"))
 
@@ -645,8 +656,9 @@ class MainWindow:
             width=2,
             command=self._on_select_cookies_file,
         )
+        self._cookies_file_btn._theme = {"bg": "surface", "fg": "text"}
         self._cookies_file_btn.pack(side="left", padx=(SPACING["sm"], 0))
-        self._add_hover_effect(self._cookies_file_btn, _c("hover"), _c("surface"))
+        self._add_hover_effect(self._cookies_file_btn, "hover", "surface")
 
         extra_options_row = tk.Frame(self._options_frame, bg=_c("surface"))
         extra_options_row.pack(fill="x", pady=(SPACING["sm"], SPACING["md"]))
@@ -851,8 +863,9 @@ class MainWindow:
             pass
 
     def _create_menu(self) -> None:
-        menubar = tk.Menu(self._root, bg=_c("bg"), fg=_c("text"), bd=0, relief="flat")
-        self._root.configure(menu=menubar)
+        self._menubar = tk.Menu(self._root, bg=_c("bg"), fg=_c("text"), bd=0, relief="flat")
+        self._root.configure(menu=self._menubar)
+        menubar = self._menubar
 
         file_menu = tk.Menu(menubar, tearoff=0, bg=_c("surface"), fg=_c("text"), bd=1)
         menubar.add_cascade(label="File", menu=file_menu)
@@ -1316,7 +1329,7 @@ class MainWindow:
             self._retry_btn.pack_forget()
         if video.status == DownloadStatus.ERROR:
             self._retry_btn.pack(fill="x", pady=(0, SPACING["xs"]))
-            self._add_hover_effect(self._retry_btn, _c("warning"), _c("warning"))
+            self._add_hover_effect(self._retry_btn, "warning", "warning")
 
     def _on_subtitles_toggle(self) -> None:
         state = "normal" if self._subtitles_var.get() else "disabled"
@@ -1476,6 +1489,7 @@ class MainWindow:
         new_theme: ThemeName = "light" if current == "dark" else "dark"
         self._theme_manager.set_theme(new_theme)
         configure_styles(self._root, self._theme_manager.colors)
+        self._style_treeview()
         self._apply_theme_colors()
         if self._config:
             self._config.set("theme", new_theme)
@@ -1484,18 +1498,34 @@ class MainWindow:
         colors = self._theme_manager.colors
         self._root.configure(bg=colors.BACKGROUND)
         self._update_widget_colors(self._root, colors)
-        self._progress_bar.itemconfig(self._progress_rect, fill=colors.PRIMARY)
+        if self._menubar:
+            self._update_widget_colors(self._menubar, colors)
+        try:
+            self._progress_bar.itemconfig(self._progress_rect, fill=colors.PRIMARY)
+        except tk.TclError:
+            pass
 
-    def _update_widget_colors(self, widget: tk.Widget, colors: any) -> None:
+    def _update_widget_colors(self, widget: tk.Widget, colors: Any) -> None:
         cls = widget.winfo_class()
+        def _cv(key: str) -> str:
+            return key if key.startswith("#") else getattr(colors, _COLOR_MAP.get(key, key.upper()), "#000000")
         try:
             if cls in ("Frame", "Labelframe"):
                 widget.configure(bg=colors.BACKGROUND)
             elif cls == "Label":
                 widget.configure(bg=colors.BACKGROUND, fg=colors.TEXT)
             elif cls == "Button":
-                widget.configure(bg=colors.SURFACE, fg=colors.TEXT,
-                                 activebackground=colors.HOVER, activeforeground=colors.TEXT)
+                theme = getattr(widget, '_theme', None)
+                if theme:
+                    widget.configure(
+                        bg=_cv(theme.get("bg", "surface")),
+                        fg=_cv(theme.get("fg", "text")),
+                        activebackground=_cv(theme.get("activebg", theme.get("bg", "surface"))),
+                        activeforeground=_cv(theme.get("activefg", theme.get("fg", "text"))),
+                    )
+                else:
+                    widget.configure(bg=colors.SURFACE, fg=colors.TEXT,
+                                     activebackground=colors.HOVER, activeforeground=colors.TEXT)
             elif cls == "Entry":
                 widget.configure(bg=colors.SURFACE, fg=colors.TEXT,
                                  insertbackground=colors.TEXT)
@@ -1562,8 +1592,16 @@ class MainWindow:
                 self._browser_var.set(browser_to_use)
             else:
                 self._browser_var.set("chrome")
+            self._on_browser_changed()
 
-            self._profile_var.set(self._config.get("profile", "Default"))
+            current_profiles = list(self._profile_combo["values"])
+            saved_profile = self._config.get("profile", "Default")
+            if saved_profile in current_profiles:
+                self._profile_var.set(saved_profile)
+            elif current_profiles:
+                self._profile_var.set(current_profiles[0])
+            else:
+                self._profile_var.set("Default")
             self._rate_limit_var.set(self._config.get("rate_limit", ""))
             self._split_chapters_var.set(self._config.get("split_chapters", False))
 

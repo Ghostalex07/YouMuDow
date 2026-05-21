@@ -3,6 +3,7 @@
 Handles thumbnail URL generation and caching.
 """
 
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -21,7 +22,6 @@ class ThumbnailService:
         return f"https://img.youtube.com/vi/{video_id}/{quality}.jpg"
 
     def extract_video_id(self, url: str) -> str | None:
-        import re
         patterns = [
             r"(?:v=|/v/)([\w-]{11})",
             r"youtu\.be/([\w-]{11})",

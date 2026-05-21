@@ -1,7 +1,7 @@
 """Theme management for YouMuDow."""
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Callable, Literal
 
 from youmudow.ui.styles.colors import Colors, LIGHT_COLORS, DARK_COLORS
 
@@ -27,7 +27,7 @@ class ThemeManager:
 
     def __init__(self, theme_name: ThemeName = "light") -> None:
         self._current_theme = self._themes[theme_name]
-        self._change_callbacks: list[callable] = []
+        self._change_callbacks: list[Callable[[Theme], None]] = []
 
     @property
     def current(self) -> Theme:
@@ -42,7 +42,7 @@ class ThemeManager:
             self._current_theme = self._themes[theme_name]
             self._notify_change()
 
-    def on_change(self, callback: callable) -> None:
+    def on_change(self, callback: Callable[[Theme], None]) -> None:
         self._change_callbacks.append(callback)
 
     def _notify_change(self) -> None:
