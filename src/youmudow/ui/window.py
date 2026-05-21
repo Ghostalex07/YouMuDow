@@ -90,7 +90,7 @@ class MainWindow:
         self._root.columnconfigure(0, weight=1)
         self._root.rowconfigure(0, weight=1)
 
-        self._notebook = ttk.Notebook(self._root, style="Modern.Notebook")
+        self._notebook = ttk.Notebook(self._root, style="Modern.TNotebook")
         self._notebook.grid(row=0, column=0, sticky="nsew", padx=0, pady=0)
 
         self._main_tab = tk.Frame(self._notebook, bg=_c("bg"))

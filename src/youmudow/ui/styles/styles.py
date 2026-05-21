@@ -184,9 +184,42 @@ class StyleManager:
         )
 
         self._style.configure(
+            "Search.TCombobox",
+            fieldbackground=c.SURFACE,
+            foreground=c.TEXT,
+            background=c.SURFACE,
+            arrowcolor=c.TEXT,
+            borderwidth=1,
+            relief="solid",
+        )
+        self._style.map(
+            "Search.TCombobox",
+            fieldbackground=[("focus", c.SURFACE)],
+            foreground=[("focus", c.TEXT)],
+        )
+
+        self._style.configure(
             "Card.TFrame",
             background=c.SURFACE,
             relief="flat",
+        )
+
+        self._style.configure(
+            "Modern.TNotebook",
+            background=c.BACKGROUND,
+            borderwidth=0,
+        )
+        self._style.configure(
+            "Modern.TNotebook.Tab",
+            background=c.SURFACE,
+            foreground=c.TEXT_SECONDARY,
+            padding=(20, 6),
+            font=("Segoe UI", 10),
+        )
+        self._style.map(
+            "Modern.TNotebook.Tab",
+            background=[("selected", c.BACKGROUND), ("active", c.HOVER)],
+            foreground=[("selected", c.TEXT)],
         )
 
 
