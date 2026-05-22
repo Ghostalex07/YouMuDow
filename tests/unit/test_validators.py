@@ -165,6 +165,32 @@ class TestRateLimit:
         assert not is_valid_rate_limit(None)
 
 
+class TestBrowsersCache:
+    def test_get_available_browsers_cached(self):
+        from youmudow.domain import validators
+        validators.invalidate_browsers_cache()
+
+        call_count = [0]
+        original = validators.check_browser_profile
+        def counting_check(browser):
+            call_count[0] += 1
+            return original(browser)
+
+        validators.check_browser_profile = counting_check
+        try:
+            r1 = validators.get_available_browsers()
+            call_count[0] = 0
+
+            r2 = validators.get_available_browsers()
+            calls_second = call_count[0]
+
+            assert r1 == r2
+            assert calls_second == 0, f"Cache not used: {calls_second} calls"
+        finally:
+            validators.check_browser_profile = original
+            validators.invalidate_browsers_cache()
+
+
 class TestPlaylistURL:
     """Tests for playlist URL detection."""
 

@@ -5,6 +5,7 @@ and application status.
 """
 
 import threading
+import time
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Callable
@@ -55,6 +56,8 @@ class StateManager:
         self._mode = AppMode.NORMAL
         self._error_message = ""
         self._change_callbacks: list[Callable[[AppStateData], None]] = []
+        self._last_progress_notify: float = 0.0
+        self._PROGRESS_THROTTLE_S: float = 0.25
 
     @property
     def state(self) -> AppState:
@@ -143,7 +146,10 @@ class StateManager:
             video.progress = progress
             video.speed = speed
             video.eta = eta
-        self._notify_change()
+        now = time.monotonic()
+        if now - self._last_progress_notify >= self._PROGRESS_THROTTLE_S:
+            self._last_progress_notify = now
+            self._notify_change()
 
     def finish_download(self, video: Video) -> None:
         with self._lock:

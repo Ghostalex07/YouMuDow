@@ -3,6 +3,7 @@
 import os
 import platform as _platform
 import re
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -348,18 +349,29 @@ def get_fallback_browser() -> str | None:
     return None
 
 
+_browsers_cache: list[str] | None = None
+_browsers_cache_time: float = 0.0
+_BROWSERS_CACHE_TTL: float = 30.0
+
+
 def get_available_browsers() -> list[str]:
-    """Get list of browsers with at least one profile.
-    
-    Returns:
-        List of browser names
-    """
+    global _browsers_cache, _browsers_cache_time
+    now = time.monotonic()
+    if _browsers_cache is not None and (now - _browsers_cache_time) < _BROWSERS_CACHE_TTL:
+        return list(_browsers_cache)
     browsers = []
     for browser in SUPPORTED_BROWSERS:
         exists, _ = check_browser_profile(browser)
         if exists:
             browsers.append(browser)
-    return browsers
+    _browsers_cache = browsers
+    _browsers_cache_time = now
+    return list(browsers)
+
+
+def invalidate_browsers_cache() -> None:
+    global _browsers_cache
+    _browsers_cache = None
 
 
 def is_valid_rate_limit(rate: str) -> bool:

@@ -472,16 +472,34 @@ class DetailPanel(tk.Frame):
             self._update_queue_display()
 
     def _update_queue_display(self, snapshot: AppStateData | None = None) -> None:
-        for item in self._queue_tree.get_children():
-            self._queue_tree.delete(item)
         if snapshot is None:
             snapshot = self._mw._controller.state.get_snapshot()
+
+        desired: list[tuple[str, tuple]] = []
         for v in snapshot.queue:
-            self._queue_tree.insert("", "end", iid=v.url, values=("Queued", v.title, "-"))
+            desired.append((v.url, ("Queued", v.title[:60], "-")))
         for v in snapshot.active_downloads:
-            self._queue_tree.insert("", "end", iid=v.url, values=("Downloading", v.title, f"{v.progress:.0f}%"))
+            desired.append((v.url, ("Downloading", v.title[:60], f"{v.progress:.0f}%")))
         for v in snapshot.completed_downloads:
-            self._queue_tree.insert("", "end", iid=v.url, values=("Completed", v.title, "100%"))
+            desired.append((v.url, ("Completed", v.title[:60], "100%")))
+
+        desired_iids = {iid for iid, _ in desired}
+        existing_iids = set(self._queue_tree.get_children())
+
+        for iid in existing_iids - desired_iids:
+            self._queue_tree.delete(iid)
+
+        for iid, values in desired:
+            if iid in existing_iids:
+                current = self._queue_tree.item(iid, "values")
+                if current != values:
+                    self._queue_tree.item(iid, values=values)
+            else:
+                self._queue_tree.insert("", "end", iid=iid, values=values)
+
+        for i, (iid, _) in enumerate(desired):
+            self._queue_tree.move(iid, "", i)
+
         total = len(snapshot.queue) + len(snapshot.active_downloads) + len(snapshot.completed_downloads)
         self._queue_count_label.configure(text=f"{total} items")
 

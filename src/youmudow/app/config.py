@@ -88,7 +88,6 @@ class AppConfig:
             history.remove(query)
         history.insert(0, query)
         self.set("search_history", history[:10])
-        self.save()
 
     def get_search_history(self) -> list[str]:
         return self.get("search_history", [])

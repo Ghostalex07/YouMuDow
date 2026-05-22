@@ -120,6 +120,20 @@ class TestStateManager:
         assert sm.state == AppState.IDLE
         assert sm.get_queue() == []
 
+    def test_update_progress_throttled(self):
+        import time
+        sm = StateManager()
+        calls = []
+        sm.on_change(lambda s: calls.append(time.monotonic()))
+        v = Video(title="T", url="u")
+        sm.add_to_queue(v)
+        calls.clear()
+
+        for i in range(20):
+            sm.update_progress(v, float(i), "1MB/s", "10s")
+
+        assert len(calls) <= 3, f"Too many callbacks: {len(calls)}"
+
 
 class TestAppStateData:
     def test_defaults(self):
