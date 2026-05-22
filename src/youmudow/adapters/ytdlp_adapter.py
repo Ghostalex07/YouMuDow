@@ -315,7 +315,7 @@ class YtdlpAdapter:
         progress_callback: ProgressCallback | None = None,
         cancel_event: threading.Event | None = None,
     ) -> Video:
-        from youmudow.domain.validators import sanitize_filename, get_unique_filename, validate_format_quality, parse_yt_dlp_error
+        from youmudow.domain.validators import sanitize_filename, get_unique_filename, parse_yt_dlp_error
         
         output_path.mkdir(parents=True, exist_ok=True)
         
@@ -328,10 +328,6 @@ class YtdlpAdapter:
         fmt = opts.file_format
         qty = opts.quality
 
-        is_valid, warning = validate_format_quality(fmt, qty)
-        if warning:
-            self._log(warning)
-        
         safe_title = sanitize_filename(video.title)
         
         self._log(f"[DOWNLOAD] Starting: {video.title}")

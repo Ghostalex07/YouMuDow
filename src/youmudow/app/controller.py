@@ -9,9 +9,9 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from youmudow.domain.models import Video
+from youmudow.domain.validators import is_valid_youtube_url
 from youmudow.services.search_service import SearchService
 from youmudow.services.download_service import DownloadService
-from youmudow.services.metadata_service import MetadataService
 from youmudow.services.thumbnail_service import ThumbnailService
 from youmudow.services.history_service import HistoryService
 from youmudow.app.state import StateManager, AppState
@@ -50,7 +50,6 @@ class AppController:
         self,
         search_service: SearchService | None = None,
         download_service: DownloadService | None = None,
-        metadata_service: MetadataService | None = None,
         thumbnail_service: ThumbnailService | None = None,
         state_manager: StateManager | None = None,
         history_service: HistoryService | None = None,
@@ -60,7 +59,6 @@ class AppController:
         self._search_service = search_service or SearchService()
         concurrent = self._config.get("concurrent_downloads", 1) if self._config else 1
         self._download_service = download_service or DownloadService(max_concurrent=concurrent)
-        self._metadata_service = metadata_service or MetadataService()
         self._thumbnail_service = thumbnail_service or ThumbnailService()
         self._state_manager = state_manager or StateManager()
         self._history = history_service or HistoryService()
@@ -118,8 +116,8 @@ class AppController:
             for video in results:
                 if video.thumbnail:
                     continue
-                thumb_url = self._thumbnail_service.get_thumbnail_url(video.url)
-                video.thumbnail = thumb_url
+                if is_valid_youtube_url(video.url):
+                    video.thumbnail = self._thumbnail_service.get_thumbnail_url(video.url)
 
             self._state_manager.set_search_results(results)
             self._state_manager.set_state(AppState.IDLE)
@@ -161,8 +159,8 @@ class AppController:
                     self._state_manager.set_state(AppState.IDLE)
                     return
             
-            if video:
-                video.thumbnail = self._thumbnail_service.get_thumbnail_url(base_url)
+            if video and not video.thumbnail and is_valid_youtube_url(video.url):
+                video.thumbnail = self._thumbnail_service.get_thumbnail_url(video.url)
             self._state_manager.set_state(AppState.IDLE)
             if self._search_complete_callback:
                 self._search_complete_callback([video] if video else [])
@@ -186,7 +184,8 @@ class AppController:
             for video in videos:
                 if video.thumbnail:
                     continue
-                video.thumbnail = self._thumbnail_service.get_thumbnail_url(video.url)
+                if is_valid_youtube_url(video.url):
+                    video.thumbnail = self._thumbnail_service.get_thumbnail_url(video.url)
             self._state_manager.set_search_results(videos)
             self._state_manager.set_state(AppState.IDLE)
             return videos

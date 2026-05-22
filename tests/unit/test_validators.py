@@ -1,12 +1,9 @@
 """Tests for domain validators."""
 
-import pytest
 from youmudow.domain.validators import (
     is_valid_youtube_url,
     sanitize_filename,
-    is_valid_format,
     is_playlist_url,
-    validate_format_quality,
 )
 
 
@@ -88,24 +85,6 @@ class TestSanitizeFilename:
 
     def test_custom_replacement(self):
         assert sanitize_filename("video/test.mp3", replacement="-") == "video-test.mp3"
-
-
-class TestIsValidFormat:
-    """Tests for format validation."""
-
-    @pytest.mark.parametrize("fmt", ["mp3", "MP3", "mp4", "MP4", "wav", "flac", "aac", "m4a", "ogg"])
-    def test_valid_formats(self, fmt):
-        assert is_valid_format(fmt)
-
-    @pytest.mark.parametrize("fmt", ["avi", "mkv", "mov", "wmv"])
-    def test_invalid_formats(self, fmt):
-        assert not is_valid_format(fmt)
-
-    def test_empty_string(self):
-        assert not is_valid_format("")
-
-    def test_none_input(self):
-        assert not is_valid_format(None)
 
 
 class TestBrowserSupport:
@@ -224,26 +203,3 @@ class TestPlaylistURL:
         assert is_playlist_url("https://www.youtube.com/channel/UC123/videos")
 
 
-class TestValidateFormatQuality:
-    """Tests for validate_format_quality."""
-
-    def test_audio_format_with_video_quality_returns_warning(self):
-        is_valid, warning = validate_format_quality("mp3", "1080p")
-        assert is_valid is True
-        assert "mp3" in warning
-        assert "1080p" in warning
-
-    def test_mp4_with_audio_quality_returns_warning(self):
-        is_valid, warning = validate_format_quality("mp4", "320kbps")
-        assert is_valid is True
-        assert "mp4" in warning
-
-    def test_valid_combination_no_warning(self):
-        is_valid, warning = validate_format_quality("mp3", "320kbps")
-        assert is_valid is True
-        assert warning == ""
-
-    def test_valid_video_combination_no_warning(self):
-        is_valid, warning = validate_format_quality("mp4", "1080p")
-        assert is_valid is True
-        assert warning == ""

@@ -98,28 +98,6 @@ def get_unique_filename(directory: Path, filename: str, max_attempts: int = 999)
     )
 
 
-def validate_format_quality(file_format: str, quality: str) -> tuple[bool, str]:
-    """Validate format and quality combination.
-    
-    Returns:
-        (is_valid, warning_message)
-    """
-    file_format = file_format.lower()
-    quality = quality.lower()
-    
-    audio_formats = {"mp3", "m4a", "opus", "ogg", "flac", "wav"}
-    video_qualities = {"1080p", "720p", "480p", "360p"}
-    audio_qualities = {"320kbps", "256kbps", "192kbps", "128kbps", "96kbps"}
-    
-    if file_format in audio_formats and quality in video_qualities:
-        return True, f"[WARNING] Video quality '{quality}' not applicable to audio format '{file_format}', using audio quality instead"
-    
-    if file_format == "mp4" and quality in audio_qualities:
-        return True, f"[WARNING] Audio quality '{quality}' not applicable to video format 'mp4', using best video"
-    
-    return True, ""
-
-
 def parse_yt_dlp_error(error_output: str) -> str:
     """Parse yt-dlp error output to return user-friendly message."""
     error_lower = error_output.lower()
@@ -382,14 +360,6 @@ def get_available_browsers() -> list[str]:
         if exists:
             browsers.append(browser)
     return browsers
-
-
-def is_valid_format(fmt: str) -> bool:
-    """Check if the format is supported."""
-    if not fmt or not isinstance(fmt, str):
-        return False
-    valid_formats = {"mp3", "mp4", "wav", "flac", "aac", "m4a", "ogg"}
-    return fmt.lower() in valid_formats
 
 
 def is_valid_rate_limit(rate: str) -> bool:

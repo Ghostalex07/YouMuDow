@@ -21,7 +21,6 @@ class TestAppController:
         dl.is_running = False
         ts = Mock()
         ts.get_thumbnail_url.return_value = ""
-        ms = Mock()
         sm = Mock()
         sm.state = AppState.IDLE
         sm.mode = AppMode.NORMAL
@@ -31,7 +30,6 @@ class TestAppController:
         c = AppController(
             search_service=svc,
             download_service=dl,
-            metadata_service=ms,
             thumbnail_service=ts,
             state_manager=sm,
         )
