@@ -364,3 +364,45 @@ class TestBuildDownloadArgsSubtitles:
 
         assert "--write-subs" in args
         assert "--embed-subs" in args
+
+
+class TestSearchErrorHandling:
+    def test_search_logs_error_on_nonzero_returncode(self):
+        from unittest.mock import patch, Mock
+        from youmudow.adapters.ytdlp_adapter import YtdlpAdapter
+
+        adapter = YtdlpAdapter()
+        logs = []
+        adapter.set_log_callback(logs.append)
+
+        mock_result = Mock()
+        mock_result.returncode = 1
+        mock_result.stdout = ""
+        mock_result.stderr = "ERROR: SSL certificate failed"
+
+        with patch("subprocess.run", return_value=mock_result):
+            results = adapter.search("test query")
+
+        assert results == []
+        assert any("error" in log.lower() or "SSL" in log for log in logs), \
+            f"Error not logged. Logs: {logs}"
+
+    def test_get_metadata_logs_error_on_nonzero_returncode(self):
+        from unittest.mock import patch, Mock
+        from youmudow.adapters.ytdlp_adapter import YtdlpAdapter
+
+        adapter = YtdlpAdapter()
+        logs = []
+        adapter.set_log_callback(logs.append)
+
+        mock_result = Mock()
+        mock_result.returncode = 1
+        mock_result.stdout = ""
+        mock_result.stderr = "ERROR: Video unavailable"
+
+        with patch("subprocess.run", return_value=mock_result):
+            result = adapter.get_metadata("https://youtube.com/watch?v=test")
+
+        assert result is None
+        assert any("error" in log.lower() or "unavailable" in log.lower()
+                   for log in logs), f"Error not logged. Logs: {logs}"

@@ -210,6 +210,11 @@ class YtdlpAdapter:
                 text=True,
                 timeout=30,
             )
+
+            if result.returncode != 0:
+                error_msg = result.stderr.strip() if result.stderr else "Unknown error"
+                first_line = error_msg.split("\n")[0][:120]
+                self._log(f"[SEARCH] yt-dlp error (code {result.returncode}): {first_line}")
             
             videos = []
             if result.stdout:
@@ -259,6 +264,10 @@ class YtdlpAdapter:
                     duration=data.get("duration", 0) or 0,
                     thumbnail=data.get("thumbnail", ""),
                 )
+            elif result.returncode != 0:
+                error_msg = result.stderr.strip() if result.stderr else "Unknown error"
+                first_line = error_msg.split("\n")[0][:120]
+                self._log(f"[METADATA] yt-dlp error (code {result.returncode}): {first_line}")
                 
         except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError, OSError, json.JSONDecodeError) as e:
             self._log(f"[METADATA] Error: {e}")

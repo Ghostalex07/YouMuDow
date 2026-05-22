@@ -105,7 +105,7 @@ class HistoryEntry:
     def format_size(self) -> str:
         if self.file_size_bytes <= 0:
             return ""
-        size = float(self.file_size_bytes)
+        size = self.file_size_bytes
         for unit in ("B", "KB", "MB", "GB"):
             if size < 1024:
                 return f"{size:.1f} {unit}"
