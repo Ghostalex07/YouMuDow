@@ -99,55 +99,57 @@ def get_unique_filename(directory: Path, filename: str, max_attempts: int = 999)
     )
 
 
+_ERROR_PATTERNS: list[tuple[tuple[str, ...], str]] = [
+    (("private video", "video is private"),   "Video is private"),
+    (("not available", "unavailable"),        "Video not available"),
+    (("removed", "deleted"),                  "Video has been removed"),
+    (("connection", "network", "http error"), "Connection error"),
+    (("permission denied", "permission"),     "Permission denied"),
+    (("auth", "login", "sign in"),            "Authentication required"),
+    (("captcha", "verification"),             "CAPTCHA required"),
+]
+
+
 def parse_yt_dlp_error(error_output: str) -> str:
-    """Parse yt-dlp error output to return user-friendly message."""
+    """Parse yt-dlp error output and return a user-friendly message."""
+    if not error_output:
+        return "Download failed"
     error_lower = error_output.lower()
-    
-    if "private video" in error_lower or "video is private" in error_lower:
-        return "Video is private"
-    if "not available" in error_lower or "unavailable" in error_lower:
-        return "Video not available"
-    if "removed" in error_lower or "deleted" in error_lower:
-        return "Video has been removed"
-    if "connection" in error_lower or "network" in error_lower or "http error" in error_lower:
-        return "Connection error"
-    if "permission denied" in error_lower or "permission" in error_lower:
-        return "Permission denied"
-    if "auth" in error_lower or "login" in error_lower or "sign in" in error_lower:
-        return "Authentication required"
-    if "captcha" in error_lower or "verification" in error_lower:
-        return "CAPTCHA required"
     if "地域" in error_output or "region" in error_lower:
         return "Video not available in your region"
     if "cookies" in error_lower or "cookie" in error_lower:
         return parse_cookie_error(error_output)
-    
+    for keywords, message in _ERROR_PATTERNS:
+        if any(kw in error_lower for kw in keywords):
+            return message
     return "Download failed"
 
 
+_COOKIE_BROWSER_NAMES: tuple[str, ...] = ("chrome", "firefox", "edge", "brave", "opera", "vivaldi")
+
+_COOKIE_ERROR_PATTERNS: list[tuple[tuple[str, ...], str]] = [
+    (("locked", "lock"),                              "Cookies locked - browser may be running"),
+    (("profile",),                                    "Browser profile not accessible"),
+    (("database",),                                   "Cookies database corrupted or inaccessible"),
+    (("no such file", "directory"),                   "Browser profile directory not found"),
+]
+
+
 def parse_cookie_error(error_output: str) -> str:
-    """Parse cookie-related errors and return user-friendly message."""
+    """Parse cookie-related errors and return a user-friendly message."""
     error_lower = error_output.lower()
-    
-    if "locked" in error_lower or "lock" in error_lower:
-        return "Cookies locked - browser may be running"
+
+    # Detectar browser específico cuando no se encuentra
     if "could not find" in error_lower or "not found" in error_lower:
-        if "chrome" in error_lower:
-            return "Chrome cookies not found - is Chrome installed?"
-        if "firefox" in error_lower:
-            return "Firefox cookies not found - is Firefox installed?"
-        if "edge" in error_lower:
-            return "Edge cookies not found - is Edge installed?"
-        if "brave" in error_lower:
-            return "Brave cookies not found - is Brave installed?"
+        for browser in _COOKIE_BROWSER_NAMES:
+            if browser in error_lower:
+                return f"{browser.capitalize()} cookies not found - is {browser.capitalize()} installed?"
         return "Browser cookies not found"
-    if "profile" in error_lower:
-        return "Browser profile not accessible"
-    if "database" in error_lower:
-        return "Cookies database corrupted or inaccessible"
-    if "no such file" in error_lower or "directory" in error_lower:
-        return "Browser profile directory not found"
-    
+
+    for keywords, message in _COOKIE_ERROR_PATTERNS:
+        if any(kw in error_lower for kw in keywords):
+            return message
+
     return "Cookie authentication failed"
 
 

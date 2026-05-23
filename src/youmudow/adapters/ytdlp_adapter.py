@@ -9,13 +9,27 @@ import json
 import re
 import subprocess
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
 from youmudow.domain.models import Video
 from youmudow.domain.enums import DownloadStatus
-from youmudow.domain.validators import check_browser_profile, get_fallback_browser
+from youmudow.domain.validators import (
+    check_browser_profile, get_fallback_browser,
+    sanitize_filename, get_unique_filename, parse_yt_dlp_error,
+)
+
+AUDIO_FORMATS: frozenset[str] = frozenset({"mp3", "m4a", "opus", "ogg", "flac", "wav", "aac"})
+THUMBNAIL_EMBED_FORMATS: frozenset[str] = frozenset({"mp3", "m4a", "opus"})
+
+_VIDEO_QUALITY_SELECTORS: dict[str, str] = {
+    "1080p": "bestvideo[height<=1080]+bestaudio/best",
+    "720p":  "bestvideo[height<=720]+bestaudio/best",
+    "480p":  "bestvideo[height<=480]+bestaudio/best",
+    "360p":  "bestvideo[height<=360]+bestaudio/best",
+}
 
 
 LogCallback = Callable[[str], None]
@@ -127,7 +141,7 @@ class YtdlpAdapter:
             "-o", str(self._config.output_template),
         ])
         
-        if opts.file_format in ("mp3", "m4a", "opus", "ogg", "flac", "wav"):
+        if opts.file_format in AUDIO_FORMATS:
             audio_quality = self._get_audio_quality(opts.quality)
             args.extend([
                 "--extract-audio",
@@ -138,7 +152,7 @@ class YtdlpAdapter:
         if self._config.embed_metadata:
             args.append("--embed-metadata")
         
-        if self._config.embed_thumbnail and opts.file_format in ("mp3", "m4a", "opus"):
+        if self._config.embed_thumbnail and opts.file_format in THUMBNAIL_EMBED_FORMATS:
             args.append("--embed-thumbnail")
         
         if self._config.add_chapters:
@@ -317,6 +331,114 @@ class YtdlpAdapter:
             self._log(f"[PLAYLIST] yt-dlp not found or error: {e}")
             return []
 
+    def _log_download_start(self, video: Video, fmt: str) -> None:
+        """Log download start information."""
+        self._log(f"[DOWNLOAD] Starting: {video.title}")
+        self._log(f"[DOWNLOAD] Format: {fmt}")
+        self._log(f"[DOWNLOAD] Output: {video.path.name if video.path else 'unknown'}")
+
+        metadata_parts = []
+        if self._config.embed_metadata:
+            metadata_parts.append("metadata")
+        if self._config.embed_thumbnail and fmt in THUMBNAIL_EMBED_FORMATS:
+            metadata_parts.append("thumbnail")
+        if self._config.add_chapters:
+            metadata_parts.append("chapters")
+        if metadata_parts:
+            self._log(f"[METADATA] Embedding: {', '.join(metadata_parts)}")
+
+        if video.options and video.options.subtitles:
+            lang = video.options.subtitle_lang or "en"
+            self._log(f"[SUB] Downloading subtitles ({lang})")
+            if video.options.embed_subtitles:
+                self._log("[SUB] Embedding subtitles in file")
+
+        self._log("-" * 50)
+
+    def _log_download_success(self, video: Video, fmt: str) -> None:
+        """Log successful download completion."""
+        self._log("-" * 50)
+        self._log(f"[DONE] {video.title}")
+        if self._config.embed_metadata:
+            self._log(f"[METADATA] {video.title} tags applied")
+        if self._config.embed_thumbnail and fmt in THUMBNAIL_EMBED_FORMATS:
+            self._log(f"[METADATA] {video.title} artwork embedded")
+
+    def _run_process(
+        self,
+        args: list[str],
+        output_path: Path,
+        video: Video,
+        cancel_event: threading.Event | None,
+        progress_callback: ProgressCallback | None,
+    ) -> tuple[int, list[str]]:
+        """
+        Run yt-dlp subprocess, stream output, return (returncode, error_lines).
+        Returns (-1, []) if cancelled before process starts.
+        """
+        error_lines: list[str] = []
+        output_lock = threading.Lock()
+
+        process = subprocess.Popen(
+            args,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            cwd=str(output_path),
+        )
+
+        def read_output() -> None:
+            try:
+                for line in process.stdout:
+                    if cancel_event and cancel_event.is_set():
+                        process.terminate()
+                        break
+                    if line:
+                        stripped = line.strip()
+                        with output_lock:
+                            if "error" in stripped.lower() or "warning" in stripped.lower():
+                                error_lines.append(stripped)
+                        self._log(stripped)
+                        if progress_callback:
+                            info = self._parse_progress(stripped)
+                            if info:
+                                video.progress = info.progress
+                                progress_callback(info.progress, info.speed)
+            except Exception:
+                pass
+
+        reader = threading.Thread(target=read_output, daemon=True)
+        reader.start()
+
+        try:
+            process.wait(timeout=self._config.download_timeout)
+        except subprocess.TimeoutExpired:
+            self._log("[ERROR] Download timed out")
+            process.kill()
+            reader.join(timeout=1)
+            return -2, error_lines
+        finally:
+            if process.poll() is None:
+                process.terminate()
+                try:
+                    process.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+
+        reader.join(timeout=1)
+        return process.returncode, error_lines
+
+    def _is_cookie_error(self, error_output: str) -> bool:
+        """Check if error output indicates a cookie/auth problem."""
+        keywords = (
+            "could not find", "cookies", "database", "chrome", "firefox",
+            "edge", "brave", "opera", "vivaldi", "profile", "not found", "locked",
+        )
+        lower = error_output.lower()
+        return any(kw in lower for kw in keywords)
+
     def download(
         self,
         video: Video,
@@ -324,198 +446,86 @@ class YtdlpAdapter:
         progress_callback: ProgressCallback | None = None,
         cancel_event: threading.Event | None = None,
     ) -> Video:
-        from youmudow.domain.validators import sanitize_filename, get_unique_filename, parse_yt_dlp_error
-        
         output_path.mkdir(parents=True, exist_ok=True)
-        
-        args = self._build_download_args(video)
-        
         video.status = DownloadStatus.DOWNLOADING
         video.path = output_path
 
         opts = video.options
-        fmt = opts.file_format
-        qty = opts.quality
-
+        fmt = opts.file_format if opts else "mp3"
         safe_title = sanitize_filename(video.title)
-        
-        self._log(f"[DOWNLOAD] Starting: {video.title}")
-        self._log(f"[DOWNLOAD] Format: {fmt} ({qty})")
-        self._log(f"[DOWNLOAD] Output: {output_path.name}")
-        
-        metadata_parts = []
-        if self._config.embed_metadata:
-            metadata_parts.append("metadata")
-        if self._config.embed_thumbnail and fmt in ("mp3", "m4a", "opus"):
-            metadata_parts.append("thumbnail")
-        if self._config.add_chapters:
-            metadata_parts.append("chapters")
-        
-        if metadata_parts:
-            self._log(f"[METADATA] Embedding: {', '.join(metadata_parts)}")
-        
-        if opts.subtitles:
-            self._log(f"[SUB] Downloading subtitles ({opts.subtitle_lang})")
-            if opts.embed_subtitles:
-                self._log("[SUB] Embedding subtitles in file")
-        
-        self._log("-" * 50)
+        args = self._build_download_args(video)
 
-        max_retries = self._config.max_retries
+        self._log_download_start(video, fmt)
+
         last_error = ""
-        process = None
         cookie_failed = False
-        
+
         try:
-            for attempt in range(1, max_retries + 1):
+            for attempt in range(1, self._config.max_retries + 1):
                 if cancel_event and cancel_event.is_set():
                     self._log("[CANCEL] Download cancelled by user")
                     break
+
                 if attempt > 1:
-                    wait_time = attempt - 1
-                    self._log(f"[RETRY] Attempt {attempt}/{max_retries}, waiting {wait_time}s...")
-                    import time
-                    time.sleep(wait_time)
-                
-                try:
-                    process = subprocess.Popen(
-                        args,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.STDOUT,
-                        text=True,
-                        encoding='utf-8',
-                        errors='replace',
-                        cwd=str(output_path),
-                    )
+                    wait = attempt - 1
+                    self._log(f"[RETRY] Attempt {attempt}/{self._config.max_retries}, waiting {wait}s...")
+                    time.sleep(wait)
 
-                    error_lines = []
-                    
-                    output_lock = threading.Lock()
-                    
-                    def read_output():
-                        try:
-                            for line in process.stdout:
-                                if cancel_event and cancel_event.is_set():
-                                    process.terminate()
-                                    break
-                                if line:
-                                    stripped = line.strip()
-                                    with output_lock:
-                                        if "error" in stripped.lower() or "warning" in stripped.lower():
-                                            error_lines.append(stripped)
-                                    self._log(stripped)
-                                    if progress_callback:
-                                        progress_info = self._parse_progress(stripped)
-                                        if progress_info:
-                                            video.progress = progress_info.progress
-                                            progress_callback(progress_info.progress, progress_info.speed)
-                        except Exception:
-                            pass
-                    
-                    reader = threading.Thread(target=read_output, daemon=True)
-                    reader.start()
-                    
+                returncode, error_lines = self._run_process(
+                    args, output_path, video, cancel_event, progress_callback
+                )
+
+                if returncode == -2:  # timeout
+                    last_error = "Download timed out"
+                    break
+
+                if returncode == 0:
                     try:
-                        process.wait(timeout=self._config.download_timeout)
-                    except subprocess.TimeoutExpired:
-                        self._log("[ERROR] Download timed out")
-                        last_error = "Download timed out"
-                        process.kill()
-                        break
-                    reader.join(timeout=1)
+                        get_unique_filename(output_path, f"{safe_title}.{fmt}")
+                    except FileExistsError as e:
+                        self._log(f"[WARNING] {e}")
+                    video.status = DownloadStatus.DONE
+                    self._log_download_success(video, fmt)
+                    break
 
-                    if process.returncode == 0:
-                        try:
-                            final_path = get_unique_filename(output_path, f"{safe_title}.{fmt}")
-                        except FileExistsError as e:
-                            self._log(f"[WARNING] {e}")
-                            final_path = output_path / f"{safe_title}.{fmt}"
-                        if final_path.name != f"{safe_title}.{fmt}":
-                            self._log(f"[INFO] File renamed to: {final_path.name}")
-                        
-                        video.status = DownloadStatus.DONE
-                        self._log("-" * 50)
-                        self._log(f"[DONE] {video.title}")
-                        if self._config.embed_metadata:
-                            self._log(f"[METADATA] {video.title} tags applied")
-                        if self._config.embed_thumbnail and fmt in ("mp3", "m4a", "opus"):
-                            self._log(f"[METADATA] {video.title} artwork embedded")
-                        break
-                    else:
-                        error_output = "\n".join(error_lines[-10:])
-                        user_message = parse_yt_dlp_error(error_output)
-                        last_error = user_message
-                        self._log(f"[ERROR] {user_message} (code: {process.returncode})")
-                        
-                        is_cookie_error = any(x in error_output.lower() for x in [
-                            "could not find", "cookies", "database", "chrome", "firefox", 
-                            "edge", "brave", "opera", "profile", "not found", "locked"
-                        ])
-                        
-                        if is_cookie_error and opts.use_cookies and not cookie_failed and attempt == 1:
-                            cookie_failed = True
-                            self._log("[AUTH] Failed to load browser cookies, will retry without authentication")
-                            args = self._build_download_args(video, skip_cookies=True)
-                            continue
-                        
-                        if attempt < max_retries and not cookie_failed:
-                            self._log(f"[RETRY] Will retry in {attempt}s...")
+                # Error handling
+                error_output = "\n".join(error_lines[-10:])
+                user_message = parse_yt_dlp_error(error_output)
+                last_error = user_message
+                self._log(f"[ERROR] {user_message} (code: {returncode})")
 
-                except (subprocess.SubprocessError, FileNotFoundError, OSError) as e:
-                    last_error = str(e)
-                    self._log(f"[ERROR] {e}")
-                    if attempt < max_retries and not cookie_failed:
-                        self._log(f"[RETRY] Will retry in {attempt}s...")
-                finally:
-                    if process and process.poll() is None:
-                        process.terminate()
-                        try:
-                            process.wait(timeout=2)
-                        except subprocess.TimeoutExpired:
-                            process.kill()
+                if self._is_cookie_error(error_output) and opts and opts.use_cookies \
+                        and not cookie_failed and attempt == 1:
+                    cookie_failed = True
+                    self._log("[AUTH] Failed to load browser cookies, retrying without auth")
+                    args = self._build_download_args(video, skip_cookies=True)
+                    continue
 
-            if video.status != DownloadStatus.DONE:
-                video.status = DownloadStatus.ERROR
-                video.error_message = last_error or "Download failed"
+                if attempt < self._config.max_retries and not cookie_failed:
+                    self._log(f"[RETRY] Will retry in {attempt}s...")
 
         except Exception as e:
             video.status = DownloadStatus.ERROR
             video.error_message = str(e)
             self._log(f"[FATAL] {e}")
-        finally:
-            if process and process.poll() is None:
-                process.terminate()
-                try:
-                    process.wait(timeout=2)
-                except subprocess.TimeoutExpired:
-                    process.kill()
+
+        if video.status != DownloadStatus.DONE:
+            video.status = DownloadStatus.ERROR
+            video.error_message = last_error or "Download failed"
 
         return video
 
     def _get_format_selector(self, fmt: str, quality: str = "best") -> str:
         """Build yt-dlp format selector based on format and quality."""
-        quality = quality.lower()
-        
-        if fmt == "mp3":
+        if fmt in AUDIO_FORMATS:
             return "bestaudio/best"
-        
-        if fmt == "mp4":
-            if quality == "1080p":
-                return "bestvideo[height<=1080]+bestaudio/best"
-            elif quality == "720p":
-                return "bestvideo[height<=720]+bestaudio/best"
-            elif quality == "480p":
-                return "bestvideo[height<=480]+bestaudio/best"
-            return "bestvideo+bestaudio/best"
-        
-        if quality == "1080p":
-            return "bestvideo[height<=1080]+bestaudio/best"
-        elif quality == "720p":
-            return "bestvideo[height<=720]+bestaudio/best"
-        elif quality == "480p":
-            return "bestvideo[height<=480]+bestaudio/best"
-        
-        return "best"
+
+        # Formatos de vídeo: usar tabla de calidades
+        quality_selector = _VIDEO_QUALITY_SELECTORS.get(quality.lower())
+        if quality_selector:
+            return quality_selector
+
+        return "bestvideo+bestaudio/best"
 
     def _get_audio_quality(self, quality: str) -> str:
         """Get audio quality setting for yt-dlp."""
