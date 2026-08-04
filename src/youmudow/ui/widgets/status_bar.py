@@ -15,9 +15,12 @@ class StatusBar(tk.Frame):
 
         self._status_var = tk.StringVar(value="Ready")
         self._status_label = tk.Label(
-            self, textvariable=self._status_var,
-            bg=_c("surface"), fg=_c("text_secondary"),
-            font=FONT["small"], anchor="w",
+            self,
+            textvariable=self._status_var,
+            bg=_c("surface"),
+            fg=_c("text_secondary"),
+            font=FONT["small"],
+            anchor="w",
         )
         self._status_label.grid(row=0, column=0, sticky="w")
 
@@ -28,8 +31,11 @@ class StatusBar(tk.Frame):
 
         self._progress_var = tk.DoubleVar(value=0)
         self._progress_bar = tk.Canvas(
-            progress_frame, bg=_c("surface"), height=6,
-            highlightthickness=0, relief="flat",
+            progress_frame,
+            bg=_c("surface"),
+            height=6,
+            highlightthickness=0,
+            relief="flat",
         )
         self._progress_bar._bg_key = "bg"
         self._progress_bar.pack(fill="x")

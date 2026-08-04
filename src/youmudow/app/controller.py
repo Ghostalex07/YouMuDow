@@ -4,18 +4,21 @@ Coordinates between UI layer and services layer.
 Handles user actions and state management.
 """
 
+import logging
 import threading
 from pathlib import Path
 from typing import Any, Protocol
 
 from youmudow.domain.models import Video
-from youmudow.domain.validators import is_valid_youtube_url
+from youmudow.domain.validators import is_valid_youtube_url, sanitize_filename
 from youmudow.services.search_service import SearchService
 from youmudow.services.download_service import DownloadService
 from youmudow.services.thumbnail_service import ThumbnailService
 from youmudow.services.history_service import HistoryService
 from youmudow.app.state import StateManager, AppState
 from youmudow.app.events import emit_log
+
+logger = logging.getLogger(__name__)
 
 
 class ControllerProtocol(Protocol):
@@ -112,7 +115,7 @@ class AppController:
     def _perform_search(self, query: str) -> None:
         try:
             results = self._search_service.search(query)
-            
+
             for video in results:
                 if video.thumbnail:
                     continue
@@ -127,6 +130,7 @@ class AppController:
 
         except Exception as e:
             self._state_manager.set_error(f"Search failed: {e}")
+            logger.exception("Search failed for query %r", query)
 
     def search_url(self, url: str) -> None:
         if not url:
@@ -136,7 +140,7 @@ class AppController:
             self._search_epoch += 1
             epoch = self._search_epoch
         self._state_manager.set_state(AppState.SEARCHING)
-        
+
         self._url_search_thread = threading.Thread(
             target=self._perform_search_url,
             args=(url, epoch),
@@ -153,12 +157,12 @@ class AppController:
 
             base_url = url.split("&")[0] if "&" in url else url
             video = self._search_service.get_metadata(base_url)
-            
+
             with self._search_epoch_lock:
                 if epoch != self._search_epoch:
                     self._state_manager.set_state(AppState.IDLE)
                     return
-            
+
             if video and not video.thumbnail and is_valid_youtube_url(video.url):
                 video.thumbnail = self._thumbnail_service.get_thumbnail_url(video.url)
             self._state_manager.set_state(AppState.IDLE)
@@ -167,6 +171,7 @@ class AppController:
         except Exception as e:
             self._state_manager.set_error(f"Failed to fetch URL: {e}")
             self._state_manager.set_state(AppState.IDLE)
+            logger.exception("URL metadata fetch failed for %s", url)
 
     def cancel_search(self) -> None:
         with self._search_epoch_lock:
@@ -178,7 +183,7 @@ class AppController:
             return []
 
         self._state_manager.set_state(AppState.SEARCHING)
-        
+
         try:
             videos = self._search_service.get_playlist(url, limit)
             for video in videos:
@@ -192,6 +197,7 @@ class AppController:
         except Exception as e:
             self._state_manager.set_error(f"Failed to fetch playlist: {e}")
             self._state_manager.set_state(AppState.IDLE)
+            logger.exception("Playlist fetch failed for %s", url)
             return []
 
     def enqueue(self, video: Video) -> None:
@@ -233,9 +239,16 @@ class AppController:
 
     def set_debug_mode(self, enabled: bool) -> None:
         from youmudow.app.state import AppMode
+
         self._debug_mode = enabled
         mode = AppMode.DEBUG if enabled else AppMode.NORMAL
         self._state_manager.set_mode(mode)
+
+    def _resolve_history_path(self, video: Video, file_format: str) -> Path:
+        if video.path is not None and video.path.is_file():
+            return video.path
+        output_dir = self._download_service.get_output_path()
+        return output_dir / f"{sanitize_filename(video.title or 'unknown')}.{file_format}"
 
     def reset(self) -> None:
         self._search_thread = None
@@ -249,20 +262,24 @@ class AppController:
 
         def on_progress(progress: DownloadProgress) -> None:
             if progress.video:
-                self._state_manager.update_progress(progress.video, progress.progress, progress.speed, progress.eta)
+                self._state_manager.update_progress(
+                    progress.video, progress.progress, progress.speed, progress.eta
+                )
             if self._debug_mode and progress.video:
-                emit_log(f"[download] {progress.progress:.1f}% - {progress.video.title}", level="debug")
+                emit_log(
+                    f"[download] {progress.progress:.1f}% - {progress.video.title}", level="debug"
+                )
 
         def on_complete(video: Video) -> None:
             self._state_manager.finish_download(video)
             emit_log(f"[DONE] {video.title} - Download completed", level="success")
             from youmudow.services.notification_service import notify
+
             notify("YouMuDow", f"Downloaded: {video.title}")
-            output_str = str(self._download_service.get_output_path() / (video.title or "unknown"))
             fmt = video.options.file_format if video.options else "mp3"
             self._history.add(
                 video=video,
-                output_path=output_str,
+                output_path=str(self._resolve_history_path(video, fmt)),
                 file_format=fmt,
             )
             if self._download_complete_callback:
@@ -280,7 +297,9 @@ class AppController:
 
         self._download_service.on_progress(on_progress)
         self._download_service.on_complete(on_complete)
-        self._download_service.on_event(lambda e: on_started(e.video) if e.type.name == "STARTED" else None)
+        self._download_service.on_event(
+            lambda e: on_started(e.video) if e.type.name == "STARTED" else None
+        )
 
         self._download_service.on_error(on_error)
 

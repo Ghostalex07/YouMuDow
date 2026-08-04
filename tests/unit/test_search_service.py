@@ -62,12 +62,6 @@ class TestSearchService:
         search_service.search("test", limit=5)
         mock_adapter.search.assert_called_once_with("test", 5)
 
-    def test_search_by_url_calls_get_metadata(self, search_service, mock_adapter):
-        mock_adapter.get_metadata.return_value = Video(title="Test", url="url")
-        result = search_service.search_by_url("https://youtube.com/watch?v=abc")
-        assert result.title == "Test"
-        mock_adapter.get_metadata.assert_called_once()
-
     def test_get_metadata_calls_adapter(self, search_service, mock_adapter):
         expected = Video(title="Test", url="url")
         mock_adapter.get_metadata.return_value = expected

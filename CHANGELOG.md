@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2026-08-04
+
+### Added
+- Centralized logging (`logging_config.setup_logging`) with console + optional file handler
+- Custom exception hierarchy in `domain/exceptions.py` (`YouMuDowError`, `DownloadError`, `YtDlpError`, `YtDlpNotFoundError`, ...)
+- `DownloadStatus.CANCELLED` — cancelled downloads now report `cancelled` instead of `error`
+- Browser profile detection extracted to `adapters/browser_profiles.py`
+- yt-dlp error parsing moved into `adapters/ytdlp_adapter.py` (`parse_yt_dlp_error`, `parse_cookie_error`)
+- mypy type checking (strict on core layers) and ruff formatting added to quality gates
+- pytest/coverage configuration in `pyproject.toml`
+
+### Changed
+- EventBus trimmed to log events only (`LOG_OUTPUT`, `LOG_CLEAR`) with typed `LogEvent`
+- Removed dead code: `SearchService.search_by_url`, `get_unique_filename`, dead download events
+- History now stores the real output file path (with extension) instead of `output/title`
+- Playlist fetching no longer downloads the full playlist before applying the limit
+- Adapter raises `YtDlpNotFoundError` when the yt-dlp binary is missing
+- All `print`/`except Exception: pass` sites replaced with proper `logging`
+- `AppConfig.get`/`get_search_history` typed; `get_str` helper added
+- CI now runs mypy, ruff format check and coverage
+
+### Fixed
+- Cancellation could leave a download stuck in ERROR instead of CANCELLED
+- Downloaded file resolution (`_resolve_output_file`) picks the real file by mtime
+
 ## [1.1.0] - 2026-05-21
 
 ### Added

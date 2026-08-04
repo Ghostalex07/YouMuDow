@@ -9,6 +9,7 @@ from youmudow.domain.enums import DownloadStatus
 def reset_event_bus():
     """Reset the global EventBus between tests to avoid state leakage."""
     from youmudow.app.events import EventBus
+
     EventBus.reset()
     yield
     EventBus.reset()

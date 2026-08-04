@@ -30,9 +30,14 @@ class TestVideoFormatDuration:
 class TestHistoryEntryFormatSize:
     def test_format_size_does_not_mutate(self):
         from youmudow.domain.models import HistoryEntry
+
         e = HistoryEntry(
-            title="T", url="u", uploader="A", file_format="mp3",
-            output_path="/tmp/t.mp3", downloaded_at="2026-01-01T00:00:00",
+            title="T",
+            url="u",
+            uploader="A",
+            file_format="mp3",
+            output_path="/tmp/t.mp3",
+            downloaded_at="2026-01-01T00:00:00",
             file_size_bytes=4_200_000,
         )
         first = e.format_size()
@@ -42,14 +47,28 @@ class TestHistoryEntryFormatSize:
 
     def test_format_size_zero(self):
         from youmudow.domain.models import HistoryEntry
-        e = HistoryEntry(title="T", url="u", uploader="A", file_format="mp3",
-                         output_path="/t", downloaded_at="2026-01-01T00:00:00",
-                         file_size_bytes=0)
+
+        e = HistoryEntry(
+            title="T",
+            url="u",
+            uploader="A",
+            file_format="mp3",
+            output_path="/t",
+            downloaded_at="2026-01-01T00:00:00",
+            file_size_bytes=0,
+        )
         assert e.format_size() == ""
 
     def test_format_size_bytes(self):
         from youmudow.domain.models import HistoryEntry
-        e = HistoryEntry(title="T", url="u", uploader="A", file_format="mp3",
-                         output_path="/t", downloaded_at="2026-01-01T00:00:00",
-                         file_size_bytes=500)
+
+        e = HistoryEntry(
+            title="T",
+            url="u",
+            uploader="A",
+            file_format="mp3",
+            output_path="/t",
+            downloaded_at="2026-01-01T00:00:00",
+            file_size_bytes=500,
+        )
         assert "B" in e.format_size()

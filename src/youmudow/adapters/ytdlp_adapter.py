@@ -6,6 +6,7 @@ without affecting the rest of the application.
 """
 
 import json
+import logging
 import re
 import subprocess
 import threading
@@ -16,24 +17,76 @@ from typing import Any, Callable
 
 from youmudow.domain.models import Video
 from youmudow.domain.enums import DownloadStatus
-from youmudow.domain.validators import (
-    check_browser_profile, get_fallback_browser,
-    sanitize_filename, get_unique_filename, parse_yt_dlp_error,
-)
+from youmudow.domain.exceptions import YtDlpError, YtDlpNotFoundError
+from youmudow.domain.validators import sanitize_filename
+from youmudow.adapters.browser_profiles import check_browser_profile, get_fallback_browser
+
+logger = logging.getLogger(__name__)
 
 AUDIO_FORMATS: frozenset[str] = frozenset({"mp3", "m4a", "opus", "ogg", "flac", "wav", "aac"})
 THUMBNAIL_EMBED_FORMATS: frozenset[str] = frozenset({"mp3", "m4a", "opus"})
 
 _VIDEO_QUALITY_SELECTORS: dict[str, str] = {
     "1080p": "bestvideo[height<=1080]+bestaudio/best",
-    "720p":  "bestvideo[height<=720]+bestaudio/best",
-    "480p":  "bestvideo[height<=480]+bestaudio/best",
-    "360p":  "bestvideo[height<=360]+bestaudio/best",
+    "720p": "bestvideo[height<=720]+bestaudio/best",
+    "480p": "bestvideo[height<=480]+bestaudio/best",
+    "360p": "bestvideo[height<=360]+bestaudio/best",
 }
 
 
 LogCallback = Callable[[str], None]
 ProgressCallback = Callable[[float, str], None]
+
+_ERROR_PATTERNS: list[tuple[tuple[str, ...], str]] = [
+    (("private video", "video is private"), "Video is private"),
+    (("not available", "unavailable"), "Video not available"),
+    (("removed", "deleted"), "Video has been removed"),
+    (("connection", "network", "http error"), "Connection error"),
+    (("permission denied", "permission"), "Permission denied"),
+    (("auth", "login", "sign in"), "Authentication required"),
+    (("captcha", "verification"), "CAPTCHA required"),
+]
+
+_COOKIE_BROWSER_NAMES: tuple[str, ...] = ("chrome", "firefox", "edge", "brave", "opera", "vivaldi")
+
+_COOKIE_ERROR_PATTERNS: list[tuple[tuple[str, ...], str]] = [
+    (("locked", "lock"), "Cookies locked - browser may be running"),
+    (("profile",), "Browser profile not accessible"),
+    (("database",), "Cookies database corrupted or inaccessible"),
+    (("no such file", "directory"), "Browser profile directory not found"),
+]
+
+
+def parse_cookie_error(error_output: str) -> str:
+    """Parse cookie-related errors and return a user-friendly message."""
+    error_lower = error_output.lower()
+
+    if "could not find" in error_lower or "not found" in error_lower:
+        for browser in _COOKIE_BROWSER_NAMES:
+            if browser in error_lower:
+                return f"{browser.capitalize()} cookies not found - is {browser.capitalize()} installed?"
+        return "Browser cookies not found"
+
+    for keywords, message in _COOKIE_ERROR_PATTERNS:
+        if any(kw in error_lower for kw in keywords):
+            return message
+
+    return "Cookie authentication failed"
+
+
+def parse_yt_dlp_error(error_output: str) -> str:
+    """Parse yt-dlp error output and return a user-friendly message."""
+    if not error_output:
+        return "Download failed"
+    error_lower = error_output.lower()
+    if "地域" in error_output or "region" in error_lower:
+        return "Video not available in your region"
+    if "cookies" in error_lower or "cookie" in error_lower:
+        return parse_cookie_error(error_output)
+    for keywords, message in _ERROR_PATTERNS:
+        if any(kw in error_lower for kw in keywords):
+            return message
+    return "Download failed"
 
 
 @dataclass
@@ -49,7 +102,7 @@ class YtdlpConfig:
     user_agent: str | None = None
     download_timeout: int = 300
     max_retries: int = 2
-    
+
     embed_metadata: bool = True
     embed_thumbnail: bool = True
     add_chapters: bool = False
@@ -91,12 +144,12 @@ class YtdlpAdapter:
 
     def _build_base_args(self, video: Video | None = None, skip_cookies: bool = False) -> list[str]:
         args = ["yt-dlp", "--no-check-certificate"]
-        
+
         if self._config.ffmpeg_location:
             args.extend(["--ffmpeg-location", self._config.ffmpeg_location])
         if self._config.user_agent:
             args.extend(["--user-agent", self._config.user_agent])
-        
+
         if video and video.options and not skip_cookies:
             opts = video.options
             if opts.use_cookies:
@@ -116,7 +169,11 @@ class YtdlpAdapter:
                     if profile and profile.lower() not in ["default", "main"]:
                         cookie_arg = f"{browser}:{profile}"
                     args.extend(["--cookies-from-browser", cookie_arg])
-                    profile_msg = f" ({profile})" if profile and profile.lower() not in ["default", "main"] else ""
+                    profile_msg = (
+                        f" ({profile})"
+                        if profile and profile.lower() not in ["default", "main"]
+                        else ""
+                    )
                     self._log(f"[AUTH] Using {browser.capitalize()}{profile_msg} cookies")
                 elif opts.cookies_file:
                     cookie_path = Path(opts.cookies_file)
@@ -127,58 +184,66 @@ class YtdlpAdapter:
                         self._log(f"[WARNING] Cookies file not found: {opts.cookies_file}")
         elif self._config.cookies_file and not skip_cookies:
             args.extend(["--cookies", self._config.cookies_file])
-        
+
         return args
 
     def _build_download_args(self, video: Video, skip_cookies: bool = False) -> list[str]:
         """Build arguments for download including metadata options."""
         args = self._build_base_args(video, skip_cookies)
-        
+
         opts = video.options
         format_selector = self._get_format_selector(opts.file_format, opts.quality)
-        args.extend([
-            "-f", format_selector,
-            "-o", str(self._config.output_template),
-        ])
-        
+        args.extend(
+            [
+                "-f",
+                format_selector,
+                "-o",
+                str(self._config.output_template),
+            ]
+        )
+
         if opts.file_format in AUDIO_FORMATS:
             audio_quality = self._get_audio_quality(opts.quality)
-            args.extend([
-                "--extract-audio",
-                "--audio-format", opts.file_format,
-                "--audio-quality", audio_quality,
-            ])
-        
+            args.extend(
+                [
+                    "--extract-audio",
+                    "--audio-format",
+                    opts.file_format,
+                    "--audio-quality",
+                    audio_quality,
+                ]
+            )
+
         if self._config.embed_metadata:
             args.append("--embed-metadata")
-        
+
         if self._config.embed_thumbnail and opts.file_format in THUMBNAIL_EMBED_FORMATS:
             args.append("--embed-thumbnail")
-        
+
         if self._config.add_chapters:
             args.append("--embed-chapters")
-        
+
         if opts.subtitles:
             args.extend(["--write-subs", "--sub-langs", opts.subtitle_lang])
             if opts.embed_subtitles:
                 args.append("--embed-subs")
         elif self._config.embed_subs:
             args.extend(["--write-subs", "--embed-subs"])
-        
+
         if opts.rate_limit:
             args.extend(["--limit-rate", opts.rate_limit])
-        
+
         if opts.split_chapters:
             args.append("--split-chapters")
-        
+
         if self._config.parse_metadata:
             args.extend(["--parse-metadata", self._config.parse_metadata])
-        
+
         if self._config.metadata_from_title:
             args.extend(["--metadata-from-title", self._config.metadata_from_title])
-        
+
         args.append(video.url)
-        
+
         return args
 
     def _parse_progress(self, line: str) -> ProgressInfo | None:
@@ -209,11 +274,14 @@ class YtdlpAdapter:
 
     def search(self, query: str, limit: int = 10) -> list[Video]:
         args = self._build_base_args(None)
-        args.extend([
-            "--flat-playlist",
-            "--print", "%(url)s | %(title)s | %(uploader)s | %(duration)s",
-            f"ytsearch{limit}:{query}",
-        ])
+        args.extend(
+            [
+                "--flat-playlist",
+                "--print",
+                "%(url)s | %(title)s | %(uploader)s | %(duration)s",
+                f"ytsearch{limit}:{query}",
+            ]
+        )
 
         self._log(f"[SEARCH] Searching for: {query}")
 
@@ -229,34 +297,44 @@ class YtdlpAdapter:
                 error_msg = result.stderr.strip() if result.stderr else "Unknown error"
                 first_line = error_msg.split("\n")[0][:120]
                 self._log(f"[SEARCH] yt-dlp error (code {result.returncode}): {first_line}")
-            
+
             videos = []
             if result.stdout:
                 for line in result.stdout.strip().split("\n"):
                     if line and " | " in line:
                         parts = line.split(" | ", 3)
                         if len(parts) >= 4:
-                            videos.append(Video(
-                                title=parts[1].strip(),
-                                url=parts[0].strip(),
-                                uploader=parts[2].strip(),
-                                duration=self._parse_duration(parts[3]),
-                            ))
-            
+                            videos.append(
+                                Video(
+                                    title=parts[1].strip(),
+                                    url=parts[0].strip(),
+                                    uploader=parts[2].strip(),
+                                    duration=self._parse_duration(parts[3]),
+                                )
+                            )
+
             self._log(f"[SEARCH] Found {len(videos)} results")
             return videos
-            
-        except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError, OSError) as e:
+
+        except (
+            subprocess.TimeoutExpired,
+            subprocess.SubprocessError,
+            FileNotFoundError,
+            OSError,
+        ) as e:
             self._log(f"[SEARCH] yt-dlp not found or error: {e}")
+            logger.warning("Search failed: %s", e)
             return []
 
     def get_metadata(self, url: str) -> Video | None:
         args = self._build_base_args(None)
-        args.extend([
-            "--dump-json",
-            "--no-download",
-            url,
-        ])
+        args.extend(
+            [
+                "--dump-json",
+                "--no-download",
+                url,
+            ]
+        )
 
         self._log(f"[METADATA] Fetching: {url}")
 
@@ -282,20 +360,30 @@ class YtdlpAdapter:
                 error_msg = result.stderr.strip() if result.stderr else "Unknown error"
                 first_line = error_msg.split("\n")[0][:120]
                 self._log(f"[METADATA] yt-dlp error (code {result.returncode}): {first_line}")
-                
-        except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError, OSError, json.JSONDecodeError) as e:
+
+        except (
+            subprocess.TimeoutExpired,
+            subprocess.SubprocessError,
+            FileNotFoundError,
+            OSError,
+            json.JSONDecodeError,
+        ) as e:
             self._log(f"[METADATA] Error: {e}")
+            logger.warning("Metadata fetch failed for %s: %s", url, e)
 
         return None
 
     def get_playlist_videos(self, url: str, limit: int = 50) -> list[Video]:
         """Fetch all videos from a playlist."""
         args = self._build_base_args(None)
-        args.extend([
-            "--flat-playlist",
-            "--print", "%(url)s | %(title)s | %(uploader)s | %(duration)s",
-            f"https://www.youtube.com/playlist?list={url.split('list=')[-1].split('&')[0]}",
-        ])
+        args.extend(
+            [
+                "--flat-playlist",
+                "--print",
+                "%(url)s | %(title)s | %(uploader)s | %(duration)s",
+                f"https://www.youtube.com/playlist?list={url.split('list=')[-1].split('&')[0]}",
+            ]
+        )
 
         self._log(f"[PLAYLIST] Fetching: {url}")
 
@@ -313,22 +401,30 @@ class YtdlpAdapter:
                     if line and " | " in line:
                         parts = line.split(" | ", 3)
                         if len(parts) >= 4:
-                            videos.append(Video(
-                                title=parts[1].strip(),
-                                url=parts[0].strip(),
-                                uploader=parts[2].strip(),
-                                duration=self._parse_duration(parts[3]),
-                            ))
+                            videos.append(
+                                Video(
+                                    title=parts[1].strip(),
+                                    url=parts[0].strip(),
+                                    uploader=parts[2].strip(),
+                                    duration=self._parse_duration(parts[3]),
+                                )
+                            )
 
             total = len(videos)
             if total > limit:
                 self._log(f"[INFO] Playlist truncated to {limit} videos (found {total})")
-            
+
             self._log(f"[PLAYLIST] Found {min(total, limit)} videos")
             return videos[:limit]
 
-        except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError, OSError) as e:
+        except (
+            subprocess.TimeoutExpired,
+            subprocess.SubprocessError,
+            FileNotFoundError,
+            OSError,
+        ) as e:
             self._log(f"[PLAYLIST] yt-dlp not found or error: {e}")
+            logger.warning("Playlist fetch failed: %s", e)
             return []
 
     def _log_download_start(self, video: Video, fmt: str) -> None:
@@ -379,19 +475,27 @@ class YtdlpAdapter:
         error_lines: list[str] = []
         output_lock = threading.Lock()
 
-        process = subprocess.Popen(
-            args,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            cwd=str(output_path),
-        )
+        try:
+            process = subprocess.Popen(
+                args,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                cwd=str(output_path),
+            )
+        except FileNotFoundError as e:
+            raise YtDlpNotFoundError(
+                "yt-dlp binary not found. Install it with: pip install yt-dlp"
+            ) from e
 
         def read_output() -> None:
+            stdout = process.stdout
+            if stdout is None:
+                return
             try:
-                for line in process.stdout:
+                for line in stdout:
                     if cancel_event and cancel_event.is_set():
                         process.terminate()
                         break
@@ -433,8 +537,18 @@ class YtdlpAdapter:
     def _is_cookie_error(self, error_output: str) -> bool:
         """Check if error output indicates a cookie/auth problem."""
         keywords = (
-            "could not find", "cookies", "database", "chrome", "firefox",
-            "edge", "brave", "opera", "vivaldi", "profile", "not found", "locked",
+            "could not find",
+            "cookies",
+            "database",
+            "chrome",
+            "firefox",
+            "edge",
+            "brave",
+            "opera",
+            "vivaldi",
+            "profile",
+            "not found",
+            "locked",
         )
         lower = error_output.lower()
         return any(kw in lower for kw in keywords)
@@ -459,31 +573,35 @@ class YtdlpAdapter:
 
         last_error = ""
         cookie_failed = False
+        cancelled = False
 
         try:
             for attempt in range(1, self._config.max_retries + 1):
                 if cancel_event and cancel_event.is_set():
                     self._log("[CANCEL] Download cancelled by user")
+                    cancelled = True
                     break
 
                 if attempt > 1:
                     wait = attempt - 1
-                    self._log(f"[RETRY] Attempt {attempt}/{self._config.max_retries}, waiting {wait}s...")
+                    self._log(
+                        f"[RETRY] Attempt {attempt}/{self._config.max_retries}, waiting {wait}s..."
+                    )
                     time.sleep(wait)
 
                 returncode, error_lines = self._run_process(
                     args, output_path, video, cancel_event, progress_callback
                 )
 
+                if cancel_event and cancel_event.is_set():
+                    cancelled = True
+                    break
+
                 if returncode == -2:  # timeout
                     last_error = "Download timed out"
                     break
 
                 if returncode == 0:
-                    try:
-                        get_unique_filename(output_path, f"{safe_title}.{fmt}")
-                    except FileExistsError as e:
-                        self._log(f"[WARNING] {e}")
                     video.status = DownloadStatus.DONE
                     self._log_download_success(video, fmt)
                     break
@@ -494,8 +612,13 @@ class YtdlpAdapter:
                 last_error = user_message
                 self._log(f"[ERROR] {user_message} (code: {returncode})")
 
-                if self._is_cookie_error(error_output) and opts and opts.use_cookies \
-                        and not cookie_failed and attempt == 1:
+                if (
+                    self._is_cookie_error(error_output)
+                    and opts
+                    and opts.use_cookies
+                    and not cookie_failed
+                    and attempt == 1
+                ):
                     cookie_failed = True
                     self._log("[AUTH] Failed to load browser cookies, retrying without auth")
                     args = self._build_download_args(video, skip_cookies=True)
@@ -504,16 +627,38 @@ class YtdlpAdapter:
                 if attempt < self._config.max_retries and not cookie_failed:
                     self._log(f"[RETRY] Will retry in {attempt}s...")
 
+        except YtDlpError as e:
+            video.status = DownloadStatus.ERROR
+            video.error_message = str(e)
+            self._log(f"[FATAL] {e}")
         except Exception as e:
             video.status = DownloadStatus.ERROR
             video.error_message = str(e)
             self._log(f"[FATAL] {e}")
+            logger.exception("Unexpected error while downloading %s", video.url)
 
-        if video.status != DownloadStatus.DONE:
+        if cancelled:
+            video.status = DownloadStatus.CANCELLED
+            video.error_message = "Download cancelled"
+        elif video.status != DownloadStatus.DONE:
             video.status = DownloadStatus.ERROR
             video.error_message = last_error or "Download failed"
+        else:
+            video.path = self._resolve_output_file(output_path, safe_title)
 
         return video
+
+    def _resolve_output_file(self, output_path: Path, safe_title: str) -> Path | None:
+        """Best-effort resolution of the actual downloaded file."""
+        try:
+            matches = sorted(
+                output_path.glob(f"{safe_title}.*"),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )
+            return matches[0] if matches else None
+        except OSError:
+            return None
 
     def _get_format_selector(self, fmt: str, quality: str = "best") -> str:
         """Build yt-dlp format selector based on format and quality."""
@@ -530,7 +675,7 @@ class YtdlpAdapter:
     def _get_audio_quality(self, quality: str) -> str:
         """Get audio quality setting for yt-dlp."""
         quality = quality.lower()
-        
+
         quality_map = {
             "320kbps": "0",
             "256kbps": "1",
@@ -539,7 +684,7 @@ class YtdlpAdapter:
             "96kbps": "4",
             "64kbps": "5",
         }
-        
+
         return quality_map.get(quality, "0")
 
     def _parse_duration(self, duration_str: str) -> int:

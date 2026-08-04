@@ -1,11 +1,14 @@
 """History panel widget for YouMuDow."""
 
+import logging
 import tkinter as tk
 from tkinter import ttk, messagebox
 import webbrowser
 
 from youmudow.domain.models import HistoryEntry
 from youmudow.ui.styles.constants import SPACING, FONT, _c
+
+logger = logging.getLogger(__name__)
 
 
 class HistoryPanel(tk.Frame):
@@ -23,17 +26,27 @@ class HistoryPanel(tk.Frame):
         self._search_var = tk.StringVar()
         self._search_var.trace_add("write", self._on_filter_change)
         search_entry = tk.Entry(
-            search_frame, textvariable=self._search_var,
-            bg=_c("surface"), fg=_c("text"), insertbackground=_c("text"),
-            font=FONT["body"], relief="flat", bd=0,
+            search_frame,
+            textvariable=self._search_var,
+            bg=_c("surface"),
+            fg=_c("text"),
+            insertbackground=_c("text"),
+            font=FONT["body"],
+            relief="flat",
+            bd=0,
         )
         search_entry.pack(side="left", fill="x", expand=True, ipady=6, padx=SPACING["sm"])
 
         clear_btn = tk.Button(
-            search_frame, text="Clear History",
-            bg=_c("error"), fg="#FFFFFF",
-            activebackground=_c("warning"), activeforeground="#000000",
-            relief="flat", bd=0, font=FONT["label"],
+            search_frame,
+            text="Clear History",
+            bg=_c("error"),
+            fg="#FFFFFF",
+            activebackground=_c("warning"),
+            activeforeground="#000000",
+            relief="flat",
+            bd=0,
+            font=FONT["label"],
             command=self._on_clear_history,
         )
         clear_btn.pack(side="right", padx=(SPACING["sm"], 0))
@@ -45,8 +58,11 @@ class HistoryPanel(tk.Frame):
 
         columns = ("title", "format", "date", "size")
         self._tree = ttk.Treeview(
-            tree_frame, columns=columns, show="headings",
-            selectmode="browse", style="Modern.Treeview",
+            tree_frame,
+            columns=columns,
+            show="headings",
+            selectmode="browse",
+            style="Modern.Treeview",
         )
         self._tree.heading("title", text="TITLE")
         self._tree.heading("format", text="FORMAT")
@@ -74,7 +90,9 @@ class HistoryPanel(tk.Frame):
     def _apply_filter(self, query: str) -> None:
         q = query.strip().lower()
         if q:
-            self._filtered = [e for e in self._all_entries if q in e.title.lower() or q in e.uploader.lower()]
+            self._filtered = [
+                e for e in self._all_entries if q in e.title.lower() or q in e.uploader.lower()
+            ]
         else:
             self._filtered = list(self._all_entries)
         self._populate(self._filtered)
@@ -83,12 +101,16 @@ class HistoryPanel(tk.Frame):
         for item in self._tree.get_children():
             self._tree.delete(item)
         for entry in entries:
-            self._tree.insert("", "end", values=(
-                entry.title,
-                entry.file_format.upper(),
-                entry.format_date(),
-                entry.format_size() or "-",
-            ))
+            self._tree.insert(
+                "",
+                "end",
+                values=(
+                    entry.title,
+                    entry.file_format.upper(),
+                    entry.format_date(),
+                    entry.format_size() or "-",
+                ),
+            )
         if not entries:
             self._tree.insert("", "end", values=("No history yet", "", "", ""))
 
@@ -103,8 +125,8 @@ class HistoryPanel(tk.Frame):
             index = self._tree.index(selection[0])
             if 0 <= index < len(self._filtered):
                 return self._filtered[index]
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Could not resolve selected history entry: %s", e)
         return None
 
     def _on_right_click(self, event: tk.Event) -> None:
@@ -128,7 +150,7 @@ class HistoryPanel(tk.Frame):
             return
         self._mw._search_bar.search_var.set(entry.url)
         self._mw._on_search()
-        if hasattr(self._mw, '_notebook'):
+        if hasattr(self._mw, "_notebook"):
             self._mw._notebook.select(0)
 
     def _on_remove(self) -> None:

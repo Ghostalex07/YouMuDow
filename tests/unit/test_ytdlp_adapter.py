@@ -384,8 +384,9 @@ class TestSearchErrorHandling:
             results = adapter.search("test query")
 
         assert results == []
-        assert any("error" in log.lower() or "SSL" in log for log in logs), \
+        assert any("error" in log.lower() or "SSL" in log for log in logs), (
             f"Error not logged. Logs: {logs}"
+        )
 
     def test_get_metadata_logs_error_on_nonzero_returncode(self):
         from unittest.mock import patch, Mock
@@ -404,5 +405,101 @@ class TestSearchErrorHandling:
             result = adapter.get_metadata("https://youtube.com/watch?v=test")
 
         assert result is None
-        assert any("error" in log.lower() or "unavailable" in log.lower()
-                   for log in logs), f"Error not logged. Logs: {logs}"
+        assert any("error" in log.lower() or "unavailable" in log.lower() for log in logs), (
+            f"Error not logged. Logs: {logs}"
+        )
+
+
+class TestParseYtDlpError:
+    """Tests for yt-dlp error parsing."""
+
+    def test_empty_output(self):
+        from youmudow.adapters.ytdlp_adapter import parse_yt_dlp_error
+
+        assert parse_yt_dlp_error("") == "Download failed"
+
+    def test_private_video(self):
+        from youmudow.adapters.ytdlp_adapter import parse_yt_dlp_error
+
+        assert parse_yt_dlp_error("ERROR: This video is private") == "Video is private"
+
+    def test_region_block(self):
+        from youmudow.adapters.ytdlp_adapter import parse_yt_dlp_error
+
+        assert (
+            parse_yt_dlp_error("The uploader has not made this video available in your region")
+            == "Video not available in your region"
+        )
+
+    def test_cookie_not_found(self):
+        from youmudow.adapters.ytdlp_adapter import parse_yt_dlp_error
+
+        assert (
+            parse_yt_dlp_error("ERROR: could not find chrome cookies")
+            == "Chrome cookies not found - is Chrome installed?"
+        )
+
+    def test_cookie_locked(self):
+        from youmudow.adapters.ytdlp_adapter import parse_yt_dlp_error
+
+        result = parse_yt_dlp_error("ERROR: cookies database is locked")
+        assert "locked" in result.lower()
+
+    def test_generic_failure(self):
+        from youmudow.adapters.ytdlp_adapter import parse_yt_dlp_error
+
+        assert parse_yt_dlp_error("ERROR: Something totally unexpected") == "Download failed"
+
+    def test_cookie_error_parsing(self):
+        from youmudow.adapters.ytdlp_adapter import parse_cookie_error
+
+        assert parse_cookie_error("profile not accessible") == "Browser profile not accessible"
+
+
+class TestResolveOutputFile:
+    """Tests for resolving the actual downloaded file."""
+
+    def test_returns_most_recent_match(self, tmp_path):
+        import os
+        from youmudow.adapters.ytdlp_adapter import YtdlpAdapter
+
+        (tmp_path / "Song.mp3").write_text("x")
+        (tmp_path / "Song.mp4").write_text("y")
+        os.utime(tmp_path / "Song.mp3", (1_600_000_000, 1_600_000_000))
+        os.utime(tmp_path / "Song.mp4", (1_700_000_000, 1_700_000_000))
+        adapter = YtdlpAdapter()
+        result = adapter._resolve_output_file(tmp_path, "Song")
+        assert result == tmp_path / "Song.mp4"
+
+    def test_returns_none_when_no_match(self, tmp_path):
+        from youmudow.adapters.ytdlp_adapter import YtdlpAdapter
+
+        adapter = YtdlpAdapter()
+        assert adapter._resolve_output_file(tmp_path, "Nothing") is None
+
+
+class TestDownloadCancel:
+    """Tests for download cancellation."""
+
+    def test_cancelled_before_start(self, tmp_path, sample_video):
+        import threading
+        from youmudow.domain.enums import DownloadStatus
+        from youmudow.adapters.ytdlp_adapter import YtdlpAdapter
+
+        cancel_event = threading.Event()
+        cancel_event.set()
+        adapter = YtdlpAdapter()
+        result = adapter.download(sample_video, tmp_path, cancel_event=cancel_event)
+        assert result.status == DownloadStatus.CANCELLED
+
+    def test_file_not_resolved_when_cancelled(self, tmp_path, sample_video):
+        import threading
+        from youmudow.domain.enums import DownloadStatus
+        from youmudow.adapters.ytdlp_adapter import YtdlpAdapter
+
+        cancel_event = threading.Event()
+        cancel_event.set()
+        adapter = YtdlpAdapter()
+        result = adapter.download(sample_video, tmp_path, cancel_event=cancel_event)
+        assert result.path == tmp_path
+        assert result.status == DownloadStatus.CANCELLED

@@ -1,7 +1,14 @@
+"""yt-dlp update service for YouMuDow."""
+
+import logging
 import subprocess
 import sys
 import threading
 from typing import Callable
+
+from youmudow.domain.exceptions import YtDlpNotFoundError
+
+logger = logging.getLogger(__name__)
 
 
 def get_ytdlp_version() -> str:
@@ -13,7 +20,8 @@ def get_ytdlp_version() -> str:
             timeout=10,
         )
         return result.stdout.strip() if result.returncode == 0 else ""
-    except Exception:
+    except (OSError, subprocess.SubprocessError) as e:
+        logger.debug("Could not determine yt-dlp version: %s", e)
         return ""
 
 
@@ -33,8 +41,12 @@ def update_ytdlp(
                 new_version = get_ytdlp_version()
                 on_success(new_version)
                 return
-        except (FileNotFoundError, OSError, subprocess.SubprocessError):
-            pass
+        except FileNotFoundError as e:
+            logger.warning("yt-dlp binary not found: %s", e)
+            on_error(str(YtDlpNotFoundError("yt-dlp binary not found")))
+            return
+        except (OSError, subprocess.SubprocessError) as e:
+            logger.warning("yt-dlp self-update failed: %s", e)
 
         try:
             result = subprocess.run(
@@ -49,6 +61,7 @@ def update_ytdlp(
             else:
                 on_error(result.stderr or "Update failed")
         except Exception as e:
+            logger.warning("pip install yt-dlp failed: %s", e)
             on_error(str(e))
 
     threading.Thread(target=_do_update, daemon=True).start()

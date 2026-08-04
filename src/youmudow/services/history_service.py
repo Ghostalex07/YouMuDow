@@ -1,18 +1,16 @@
 """Download history service for YouMuDow."""
 
 import json
-import platform
+import logging
 import threading
 from datetime import datetime
 from pathlib import Path
 
+from youmudow.app.config import CONFIG_DIR
 from youmudow.domain.models import HistoryEntry, Video
 
-CONFIG_DIR: Path = (
-    Path.home() / ".config" / "youmudow"
-    if platform.system() != "Windows"
-    else Path.home() / "AppData" / "Local" / "YouMuDow"
-)
+logger = logging.getLogger(__name__)
+
 HISTORY_FILE: Path = CONFIG_DIR / "history.json"
 MAX_HISTORY = 500
 
@@ -28,18 +26,23 @@ class HistoryService:
             if HISTORY_FILE.exists():
                 data = json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
                 self._entries = [HistoryEntry.from_dict(e) for e in data if isinstance(e, dict)]
-        except Exception:
+        except (OSError, ValueError, TypeError) as e:
+            logger.warning("Failed to load download history from %s: %s", HISTORY_FILE, e)
             self._entries = []
 
     def _save(self) -> None:
         try:
             HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
             data = [e.to_dict() for e in self._entries[:MAX_HISTORY]]
-            HISTORY_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-        except Exception:
-            pass
+            HISTORY_FILE.write_text(
+                json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+        except OSError as e:
+            logger.warning("Failed to save download history to %s: %s", HISTORY_FILE, e)
 
-    def add(self, video: Video, output_path: str, file_format: str, file_size_bytes: int = 0) -> None:
+    def add(
+        self, video: Video, output_path: str, file_format: str, file_size_bytes: int = 0
+    ) -> None:
         entry = HistoryEntry(
             title=video.title,
             url=video.url,

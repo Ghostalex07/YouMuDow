@@ -1,4 +1,5 @@
 """Tests for StateManager."""
+
 from youmudow.app.state import StateManager, AppState, AppMode, AppStateData
 from youmudow.domain.models import Video
 from youmudow.domain.enums import DownloadStatus
@@ -122,6 +123,7 @@ class TestStateManager:
 
     def test_update_progress_throttled(self):
         import time
+
         sm = StateManager()
         calls = []
         sm.on_change(lambda s: calls.append(time.monotonic()))
@@ -138,9 +140,13 @@ class TestStateManager:
 class TestAppStateData:
     def test_defaults(self):
         d = AppStateData(
-            search_results=[], queue=[], active_downloads=[],
-            completed_downloads=[], state=AppState.IDLE,
-            mode=AppMode.NORMAL, error_message="",
+            search_results=[],
+            queue=[],
+            active_downloads=[],
+            completed_downloads=[],
+            state=AppState.IDLE,
+            mode=AppMode.NORMAL,
+            error_message="",
         )
         assert d.state == AppState.IDLE
         assert d.mode == AppMode.NORMAL

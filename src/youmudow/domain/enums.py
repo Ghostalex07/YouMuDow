@@ -11,3 +11,4 @@ class DownloadStatus(str, Enum):
     DOWNLOADING = "downloading"
     DONE = "done"
     ERROR = "error"
+    CANCELLED = "cancelled"

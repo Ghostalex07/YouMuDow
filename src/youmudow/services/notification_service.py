@@ -1,5 +1,10 @@
+"""System desktop notifications for YouMuDow."""
+
+import logging
 import platform
 import subprocess
+
+logger = logging.getLogger(__name__)
 
 
 def notify(title: str, message: str) -> None:
@@ -12,8 +17,8 @@ def notify(title: str, message: str) -> None:
                 stderr=subprocess.DEVNULL,
             )
         elif system == "Darwin":
-            safe_msg = message.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n')
-            safe_title = title.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n')
+            safe_msg = message.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+            safe_title = title.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
             script = f'display notification "{safe_msg}" with title "{safe_title}"'
             subprocess.Popen(
                 ["osascript", "-e", script],
@@ -22,9 +27,10 @@ def notify(title: str, message: str) -> None:
             )
         elif system == "Windows":
             try:
-                from plyer import notification
-                notification.notify(title=title, message=message, timeout=5)
+                import plyer.notification  # type: ignore[import-not-found]
+
+                plyer.notification.notify(title=title, message=message, timeout=5)
             except ImportError:
-                pass
-    except Exception:
-        pass
+                logger.debug("plyer not installed; skipping desktop notification")
+    except (OSError, subprocess.SubprocessError) as e:
+        logger.debug("Could not show desktop notification: %s", e)

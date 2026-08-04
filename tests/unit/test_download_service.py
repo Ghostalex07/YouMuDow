@@ -98,9 +98,7 @@ class TestDownloadService:
         assert download_service.queue_size == 1
 
     def test_add_multiple(self, download_service):
-        videos = [
-            Video(title=f"Video {i}", url=f"url{i}") for i in range(3)
-        ]
+        videos = [Video(title=f"Video {i}", url=f"url{i}") for i in range(3)]
         download_service.add_multiple(videos)
         assert download_service.queue_size == 3
 
@@ -111,8 +109,10 @@ class TestDownloadService:
 
     def test_on_event_callback(self, download_service):
         received = []
+
         def callback(event):
             received.append(event)
+
         download_service.on_event(callback)
         assert callback in download_service._event_callbacks
 
@@ -164,16 +164,20 @@ class TestDownloadServiceCallbacks:
 
     def test_on_progress_callback(self, download_service, sample_video):
         progress_updates = []
+
         def on_progress(progress):
             progress_updates.append(progress)
+
         download_service.on_progress(on_progress)
         download_service.download_now(sample_video)
         assert len(progress_updates) >= 0
 
     def test_on_complete_callback(self, download_service, sample_video):
         completed = []
+
         def on_complete(video):
             completed.append(video)
+
         download_service.on_complete(on_complete)
         download_service.download_now(sample_video)
         assert len(completed) >= 0

@@ -46,8 +46,13 @@ def _c(key: str) -> str:
     return getattr(colors, _COLOR_MAP.get(key, key.upper()), "#000000")
 
 
-def add_hover_effect(widget: tk.Widget, enter_key: str, leave_key: str,
-                     enter_fg: str | None = None, leave_fg: str | None = None) -> None:
+def add_hover_effect(
+    widget: tk.Widget,
+    enter_key: str,
+    leave_key: str,
+    enter_fg: str | None = None,
+    leave_fg: str | None = None,
+) -> None:
     def on_enter(e: tk.Event) -> None:
         widget.configure(bg=_c(enter_key))
         if enter_fg:

@@ -26,16 +26,13 @@ class SearchService:
         self._adapter = adapter or YtdlpAdapter()
 
     def set_log_callback(self, callback) -> None:
-        if hasattr(self._adapter, 'set_log_callback'):
+        if hasattr(self._adapter, "set_log_callback"):
             self._adapter.set_log_callback(callback)
 
     def search(self, query: str, limit: int = 10) -> list[Video]:
         if not query or not query.strip():
             return []
         return self._adapter.search(query.strip(), limit)
-
-    def search_by_url(self, url: str) -> Video | None:
-        return self.get_metadata(url)
 
     def get_metadata(self, url: str) -> Video | None:
         return self._adapter.get_metadata(url)

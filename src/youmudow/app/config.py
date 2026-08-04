@@ -1,18 +1,29 @@
 import json
+import logging
 import platform
 from pathlib import Path
 from typing import Any
 
 from youmudow.domain.models import DownloadOptions
 
+logger = logging.getLogger(__name__)
 
-CONFIG_DIR: Path = Path.home() / ".config" / "youmudow" if platform.system() != "Windows" else Path.home() / "AppData" / "Local" / "YouMuDow"
+
+CONFIG_DIR: Path = (
+    Path.home() / ".config" / "youmudow"
+    if platform.system() != "Windows"
+    else Path.home() / "AppData" / "Local" / "YouMuDow"
+)
 CONFIG_FILE: Path = CONFIG_DIR / "config.json"
 
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "window_geometry": "",
-    "output_path": str(Path.home() / "Music" / "YouMuDow" if platform.system() != "Windows" else Path.home() / "Desktop" / "YouMuDow"),
+    "output_path": str(
+        Path.home() / "Music" / "YouMuDow"
+        if platform.system() != "Windows"
+        else Path.home() / "Desktop" / "YouMuDow"
+    ),
     "format": "mp3",
     "quality": "best",
     "subtitles": False,
@@ -45,11 +56,9 @@ class AppConfig:
                     stored = json.load(f)
                 self._data = {**DEFAULT_CONFIG, **stored}
         except json.JSONDecodeError:
-            import sys
-            print(f"[config] Corrupted config file, using defaults: {CONFIG_FILE}", file=sys.stderr)
+            logger.warning("Corrupted config file, using defaults: %s", CONFIG_FILE)
         except OSError as e:
-            import sys
-            print(f"[config] Failed to load config: {e}", file=sys.stderr)
+            logger.warning("Failed to load config: %s", e)
 
     def save(self) -> None:
         try:
@@ -57,11 +66,14 @@ class AppConfig:
             with open(CONFIG_FILE, "w", encoding="utf-8") as f:
                 json.dump(self._data, f, indent=2)
         except OSError as e:
-            import sys
-            print(f"[config] Failed to save config: {e}", file=sys.stderr)
+            logger.warning("Failed to save config: %s", e)
 
     def get(self, key: str, default: Any = None) -> Any:
         return self._data.get(key, default)
+
+    def get_str(self, key: str, default: str = "") -> str:
+        value = self._data.get(key, default)
+        return default if value is None else str(value)
 
     def set(self, key: str, value: Any) -> None:
         self._data[key] = value
@@ -90,7 +102,8 @@ class AppConfig:
         self.set("search_history", history[:10])
 
     def get_search_history(self) -> list[str]:
-        return self.get("search_history", [])
+        history = self.get("search_history", [])
+        return [str(item) for item in history] if isinstance(history, list) else []
 
     def to_download_options(self) -> DownloadOptions:
         return DownloadOptions(
@@ -100,8 +113,12 @@ class AppConfig:
             subtitle_lang=str(self._data.get("subtitle_lang", "en")),
             embed_subtitles=bool(self._data.get("embed_subtitles", False)),
             use_cookies=bool(self._data.get("use_cookies", False)),
-            cookies_file=str(self._data.get("cookies_file", "")) if self._data.get("cookies_source") == "file" else None,
-            cookies_from_browser=str(self._data.get("browser", "chrome")) if self._data.get("cookies_source") != "file" else None,
+            cookies_file=str(self._data.get("cookies_file", ""))
+            if self._data.get("cookies_source") == "file"
+            else None,
+            cookies_from_browser=str(self._data.get("browser", "chrome"))
+            if self._data.get("cookies_source") != "file"
+            else None,
             cookies_profile=str(self._data.get("profile", "")) or None,
             rate_limit=str(self._data.get("rate_limit", "")) or None,
             split_chapters=bool(self._data.get("split_chapters", False)),

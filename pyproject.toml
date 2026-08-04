@@ -32,6 +32,7 @@ dev = [
     "pytest-cov>=4.1.0",
     "pyinstaller>=6.0",
     "ruff>=0.1.0",
+    "mypy>=1.8.0",
 ]
 
 [project.scripts]
@@ -42,3 +43,37 @@ where = ["src"]
 
 [tool.ruff]
 line-length = 100
+target-version = "py310"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.coverage.run]
+source = ["youmudow"]
+branch = true
+concurrency = ["thread"]
+
+[tool.coverage.report]
+skip_covered = true
+show_missing = true
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "@overload",
+    "def __repr__",
+]
+
+[tool.mypy]
+python_version = "3.10"
+files = ["src/youmudow"]
+check_untyped_defs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_return_any = true
+no_implicit_optional = true
+
+[[tool.mypy.overrides]]
+# The tkinter UI layer is deliberately dynamic (widgets access private
+# attributes of the main window); strict typing there adds noise without value.
+module = "youmudow.ui.*"
+ignore_errors = true

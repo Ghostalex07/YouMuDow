@@ -1,38 +1,24 @@
 """Event system for YouMuDow.
 
-Simple pub/sub event system for communication between layers.
+Simple pub/sub event bus for communication between layers.
+Used to deliver real-time log output from services to the UI.
 """
 
+import datetime
+import logging
 import threading
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Callable, TypeVar
+from typing import Callable
 
-from youmudow.domain.models import Video
-
-
-T = TypeVar("T")
+logger = logging.getLogger(__name__)
 
 
 class EventType(Enum):
     """Application event types."""
 
-    SEARCH_STARTED = auto()
-    SEARCH_COMPLETED = auto()
-    SEARCH_ERROR = auto()
-
-    DOWNLOAD_QUEUED = auto()
-    DOWNLOAD_STARTED = auto()
-    DOWNLOAD_PROGRESS = auto()
-    DOWNLOAD_COMPLETED = auto()
-    DOWNLOAD_ERROR = auto()
-    DOWNLOAD_CANCELLED = auto()
-
     LOG_OUTPUT = auto()
     LOG_CLEAR = auto()
-
-    STATE_CHANGED = auto()
-    SELECTION_CHANGED = auto()
 
 
 @dataclass
@@ -40,43 +26,6 @@ class Event:
     """Base event class."""
 
     type: EventType
-
-
-@dataclass
-class SearchEvent(Event):
-    """Search-related events."""
-
-    query: str = ""
-    results: list[Video] | None = None
-    error: str | None = None
-
-
-@dataclass
-class DownloadEvent(Event):
-    """Download-related events."""
-
-    video: Video | None = None
-    progress: float = 0.0
-    speed: str = ""
-    eta: str = ""
-    error: str | None = None
-
-
-@dataclass
-class StateChangeEvent(Event):
-    """State change events."""
-
-    state_name: str = ""
-    old_state: str = ""
-    new_state: str = ""
-
-
-@dataclass
-class SelectionEvent(Event):
-    """Selection change events."""
-
-    video: Video | None = None
-    index: int = -1
 
 
 @dataclass
@@ -97,6 +46,7 @@ class EventBus:
 
     _instance: "EventBus | None" = None
     _lock = threading.Lock()
+    _initialized: bool
 
     def __new__(cls) -> "EventBus":
         if cls._instance is None:
@@ -110,68 +60,38 @@ class EventBus:
         if self._initialized:
             return
         self._handlers: dict[EventType, list[Handler]] = {}
-        self._global_handlers: list[Handler] = []
         self._subscribe_lock = threading.Lock()
         self._initialized = True
 
     def subscribe(self, event_type: EventType, handler: Handler) -> Unsubscribe:
         with self._subscribe_lock:
-            if event_type not in self._handlers:
-                self._handlers[event_type] = []
-            self._handlers[event_type].append(handler)
+            self._handlers.setdefault(event_type, []).append(handler)
 
         def unsubscribe() -> None:
             self.unsubscribe(event_type, handler)
 
         return unsubscribe
 
-    def subscribe_any(self, handler: Handler) -> Unsubscribe:
-        with self._subscribe_lock:
-            self._global_handlers.append(handler)
-
-        def unsubscribe() -> None:
-            self.unsubscribe_any(handler)
-
-        return unsubscribe
-
     def unsubscribe(self, event_type: EventType, handler: Handler) -> None:
         with self._subscribe_lock:
-            if event_type in self._handlers:
-                try:
-                    self._handlers[event_type].remove(handler)
-                except ValueError:
-                    pass
-
-    def unsubscribe_any(self, handler: Handler) -> None:
-        with self._subscribe_lock:
             try:
-                self._global_handlers.remove(handler)
+                self._handlers[event_type].remove(handler)
             except ValueError:
                 pass
 
     def publish(self, event: Event) -> None:
         with self._subscribe_lock:
             handlers = list(self._handlers.get(event.type, []))
-            global_handlers = list(self._global_handlers)
 
         for handler in handlers:
             try:
                 handler(event)
-            except Exception as e:
-                import sys
-                print(f"[EventBus] Handler error: {e}", file=sys.stderr)
-
-        for handler in global_handlers:
-            try:
-                handler(event)
-            except Exception as e:
-                import sys
-                print(f"[EventBus] Handler error: {e}", file=sys.stderr)
+            except Exception:
+                logger.exception("Handler error in event bus")
 
     def clear(self) -> None:
         with self._subscribe_lock:
             self._handlers.clear()
-            self._global_handlers.clear()
 
     @classmethod
     def get_instance(cls) -> "EventBus":
@@ -196,26 +116,17 @@ def emit(event: Event) -> None:
     get_event_bus().publish(event)
 
 
-def on(
-    event_type: EventType,
-) -> Callable[[Handler], Handler]:
-    """Decorator to subscribe to an event type."""
-    def decorator(handler: Handler) -> Handler:
-        get_event_bus().subscribe(event_type, handler)
-        return handler
-    return decorator
-
-
 def emit_log(message: str, level: str = "info") -> None:
     """Emit a log message event for terminal display."""
-    import datetime
     timestamp = datetime.datetime.now().strftime("%H:%M:%S")
-    emit(LogEvent(
-        type=EventType.LOG_OUTPUT,
-        message=message,
-        level=level,
-        timestamp=timestamp,
-    ))
+    emit(
+        LogEvent(
+            type=EventType.LOG_OUTPUT,
+            message=message,
+            level=level,
+            timestamp=timestamp,
+        )
+    )
 
 
 def clear_logs() -> None:

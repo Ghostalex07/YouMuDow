@@ -85,7 +85,16 @@ class LogTerminal(ttk.Frame):
         c = self._colors
         try:
             self._text.configure(bg=c["background"], fg=c["foreground"])
-            for tag in ("info", "warning", "error", "success", "debug", "separator", "download", "metadata"):
+            for tag in (
+                "info",
+                "warning",
+                "error",
+                "success",
+                "debug",
+                "separator",
+                "download",
+                "metadata",
+            ):
                 self._text.tag_configure(tag, foreground=c.get(tag, c["foreground"]))
         except tk.TclError:
             pass
@@ -110,17 +119,20 @@ class LogTerminal(ttk.Frame):
             command=self.clear,
         )
         clear_btn.pack(side="left")
-        
+
         def add_hover(widget: tk.Widget) -> None:
             hover_bg = c["separator"]
             normal_bg = c["background"]
+
             def on_enter(e: tk.Event) -> None:
                 widget.configure(bg=hover_bg)
+
             def on_leave(e: tk.Event) -> None:
                 widget.configure(bg=normal_bg)
+
             widget.bind("<Enter>", on_enter)
             widget.bind("<Leave>", on_leave)
-        
+
         add_hover(clear_btn)
 
         self._auto_scroll_var = tk.BooleanVar(value=True)
@@ -139,7 +151,9 @@ class LogTerminal(ttk.Frame):
         )
         auto_scroll_check.pack(side="left", padx=(16, 0))
 
-        container = tk.Frame(self, bg=c["background"], bd=1, relief="solid", highlightbackground=c["separator"])
+        container = tk.Frame(
+            self, bg=c["background"], bd=1, relief="solid", highlightbackground=c["separator"]
+        )
         container.pack(fill="both", expand=True)
 
         text_frame = tk.Frame(container, bg=c["background"])
@@ -161,7 +175,15 @@ class LogTerminal(ttk.Frame):
         )
         self._text.pack(side="left", fill="both", expand=True)
 
-        scrollbar = tk.Scrollbar(text_frame, orient="vertical", bg=c["background"], activebackground=c["separator"], troughcolor=c["background"], relief="flat", bd=0)
+        scrollbar = tk.Scrollbar(
+            text_frame,
+            orient="vertical",
+            bg=c["background"],
+            activebackground=c["separator"],
+            troughcolor=c["background"],
+            relief="flat",
+            bd=0,
+        )
         scrollbar.configure(command=self._text.yview)
         self._text.configure(yscrollcommand=scrollbar.set)
         scrollbar.pack(side="right", fill="y")
@@ -248,7 +270,12 @@ class LogTerminal(ttk.Frame):
             return "metadata"
         if "[WARNING]" in message or "[RETRY]" in message:
             return "warning"
-        if "[CANCEL]" in message or "[INFO]" in message or "[PLAYLIST]" in message or "[SEARCH]" in message:
+        if (
+            "[CANCEL]" in message
+            or "[INFO]" in message
+            or "[PLAYLIST]" in message
+            or "[SEARCH]" in message
+        ):
             return "info"
         return level
 
@@ -257,7 +284,7 @@ class LogTerminal(ttk.Frame):
         sep_text = f" {'─' * 40} "
         if text:
             sep_text = f" {'─' * 15} {text} {'─' * 15} "
-        
+
         def do_append() -> None:
             try:
                 self._text.configure(state="normal")
@@ -265,11 +292,12 @@ class LogTerminal(ttk.Frame):
                 self._text.configure(state="disabled")
             except tk.TclError:
                 pass
-        
+
         self.after_idle(do_append)
 
     def clear(self) -> None:
         """Clear all log output (thread-safe)."""
+
         def do_clear() -> None:
             try:
                 with self._lock:
@@ -282,7 +310,7 @@ class LogTerminal(ttk.Frame):
                 self._line_count = 0
             except tk.TclError:
                 pass
-        
+
         self.after_idle(do_clear)
 
     def get_logs(self) -> str:

@@ -1,11 +1,14 @@
 """Results table widget for YouMuDow."""
 
+import logging
 import tkinter as tk
 from tkinter import ttk
 import webbrowser
 
 from youmudow.domain.models import Video
 from youmudow.ui.styles.constants import SPACING, FONT, _c
+
+logger = logging.getLogger(__name__)
 
 
 class ResultsTable(tk.Frame):
@@ -15,15 +18,23 @@ class ResultsTable(tk.Frame):
         self._playlist_videos: list[Video] = []
         self._is_playlist = False
 
-        self.grid(row=1, column=0, sticky="nsew",
-                  padx=(SPACING["md"], SPACING["sm"]), pady=(0, SPACING["md"]))
+        self.grid(
+            row=1,
+            column=0,
+            sticky="nsew",
+            padx=(SPACING["md"], SPACING["sm"]),
+            pady=(0, SPACING["md"]),
+        )
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
 
         columns = ("title", "uploader", "duration")
         self._results_tree = ttk.Treeview(
-            self, columns=columns, show="headings",
-            selectmode="extended", style="Modern.Treeview",
+            self,
+            columns=columns,
+            show="headings",
+            selectmode="extended",
+            style="Modern.Treeview",
         )
         self._results_tree.heading("title", text="TITLE")
         self._results_tree.heading("uploader", text="UPLOADER")
@@ -65,16 +76,28 @@ class ResultsTable(tk.Frame):
 
     def _style_treeview(self) -> None:
         style = ttk.Style()
-        style.configure("Modern.Treeview",
-                        background=_c("surface"), foreground=_c("text"),
-                        fieldbackground=_c("surface"), borderwidth=0,
-                        rowheight=44, font=FONT["body"])
-        style.configure("Modern.Treeview.Heading",
-                        background=_c("bg"), foreground=_c("text_secondary"),
-                        borderwidth=0, padding=(12, 8), font=FONT["label"])
-        style.map("Modern.Treeview",
-                  background=[("selected", _c("primary"))],
-                  foreground=[("selected", "#FFFFFF")])
+        style.configure(
+            "Modern.Treeview",
+            background=_c("surface"),
+            foreground=_c("text"),
+            fieldbackground=_c("surface"),
+            borderwidth=0,
+            rowheight=44,
+            font=FONT["body"],
+        )
+        style.configure(
+            "Modern.Treeview.Heading",
+            background=_c("bg"),
+            foreground=_c("text_secondary"),
+            borderwidth=0,
+            padding=(12, 8),
+            font=FONT["label"],
+        )
+        style.map(
+            "Modern.Treeview",
+            background=[("selected", _c("primary"))],
+            foreground=[("selected", "#FFFFFF")],
+        )
 
     def update_results(self, results: list[Video]) -> None:
         for item in self._results_tree.get_children():
@@ -88,7 +111,9 @@ class ResultsTable(tk.Frame):
 
         if results:
             if self._is_playlist and len(results) > 1:
-                self._mw._set_status(f"Found {len(results)} videos - 'Add to Queue' adds all to queue")
+                self._mw._set_status(
+                    f"Found {len(results)} videos - 'Add to Queue' adds all to queue"
+                )
             elif len(results) > 1:
                 self._mw._set_status(f"Found {len(results)} results - select one to download")
             else:
@@ -107,7 +132,8 @@ class ResultsTable(tk.Frame):
                 index = self._results_tree.index(item_id)
                 if 0 <= index < len(results):
                     videos.append(results[index])
-            except Exception:
+            except Exception as e:
+                logger.debug("Could not resolve selected video: %s", e)
                 continue
         return videos
 
@@ -120,7 +146,8 @@ class ResultsTable(tk.Frame):
             return
         try:
             index = self._results_tree.index(selection[0])
-        except Exception:
+        except Exception as e:
+            logger.debug("Could not resolve selection: %s", e)
             return
         if 0 <= index < len(results):
             self._mw._selected_video = results[index]
@@ -138,7 +165,8 @@ class ResultsTable(tk.Frame):
             return
         try:
             index = self._results_tree.index(item_id)
-        except Exception:
+        except Exception as e:
+            logger.debug("Could not resolve row index: %s", e)
             return
         if 0 <= index < len(results):
             webbrowser.open(results[index].url)

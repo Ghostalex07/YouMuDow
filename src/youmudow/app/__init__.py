@@ -11,13 +11,11 @@ from youmudow.app.events import (
     EventBus,
     EventType,
     Event,
-    SearchEvent,
-    DownloadEvent,
-    StateChangeEvent,
-    SelectionEvent,
+    LogEvent,
     get_event_bus,
     emit,
-    on,
+    emit_log,
+    clear_logs,
 )
 
 __all__ = [
@@ -29,11 +27,9 @@ __all__ = [
     "EventBus",
     "EventType",
     "Event",
-    "SearchEvent",
-    "DownloadEvent",
-    "StateChangeEvent",
-    "SelectionEvent",
+    "LogEvent",
     "get_event_bus",
     "emit",
-    "on",
+    "emit_log",
+    "clear_logs",
 ]

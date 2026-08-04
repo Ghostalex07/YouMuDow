@@ -1,4 +1,5 @@
 """Tests for AppController."""
+
 import pytest
 from unittest.mock import Mock
 from pathlib import Path
@@ -61,6 +62,7 @@ class TestAppController:
         url = "https://youtube.com/watch?v=test"
         controller.search_url(url)
         import time
+
         time.sleep(0.1)
         controller._search_service.get_metadata.assert_called()
 

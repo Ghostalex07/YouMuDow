@@ -2,7 +2,7 @@
 
 ![Python](https://img.shields.io/badge/python-3.10+-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Version](https://img.shields.io/badge/version-1.1.0-green.svg)
+![Version](https://img.shields.io/badge/version-1.2.0-green.svg)
 [![CI](https://github.com/Ghostalex07/YouMuDow/actions/workflows/ci.yml/badge.svg)](https://github.com/Ghostalex07/YouMuDow/actions/workflows/ci.yml)
 
 A modern music & video downloader with real-time progress, embedded metadata, and a clean desktop interface.
@@ -106,8 +106,10 @@ python scripts/package.py     # generates distributable ZIP
 
 ```bash
 pip install -e ".[dev]"
-pytest tests/ -v
-ruff check src/
+PYTHONPATH=src python3 -m pytest   # run tests
+ruff check src/ tests/             # lint
+ruff format --check src/ tests/    # formatting
+PYTHONPATH=src mypy                # type checking
 ```
 
 ## Project Structure
@@ -117,16 +119,20 @@ youmudow/
 ├── src/youmudow/
 │   ├── __init__.py            # App version
 │   ├── main.py                # Entry point
-│   ├── domain/                # Data models, validators
+│   ├── logging_config.py      # Centralized logging setup
+│   ├── domain/                # Data models, validators, exceptions
 │   │   ├── models.py
 │   │   ├── enums.py
-│   │   └── validators.py
-│   ├── adapters/              # yt-dlp integration
-│   │   └── ytdlp_adapter.py
+│   │   ├── validators.py
+│   │   └── exceptions.py
+│   ├── adapters/              # External integrations
+│   │   ├── ytdlp_adapter.py   # yt-dlp subprocess wrapper
+│   │   └── browser_profiles.py# Browser profile detection
 │   ├── services/              # Business logic
 │   │   ├── download_service.py
 │   │   ├── search_service.py
-│   │   ├── metadata_service.py
+│   │   ├── history_service.py
+│   │   ├── thumbnail_service.py
 │   │   ├── notification_service.py
 │   │   └── updater_service.py
 │   ├── app/                   # Application layer
@@ -134,16 +140,19 @@ youmudow/
 │   │   ├── state.py
 │   │   ├── config.py
 │   │   └── events.py
-│   └── ui/                    # Interface layer
+│   └── ui/                    # Tkinter interface
 │       ├── window.py
 │       ├── styles/
 │       └── widgets/
-│           └── log_terminal.py
 ├── tests/
 │   └── unit/
 ├── scripts/
 │   ├── build.py               # PyInstaller build
 │   └── package.py             # Distribution packaging
+├── docs/
+│   ├── architecture.md
+│   ├── usage.md
+│   └── contributing.md
 ├── .github/workflows/
 │   ├── ci.yml                 # CI pipeline
 │   └── release.yml            # Automated release

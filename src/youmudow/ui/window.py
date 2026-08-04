@@ -4,6 +4,7 @@ Tkinter-based GUI layer with modern dark theme.
 All business logic is delegated to the controller.
 """
 
+import logging
 import threading
 import platform
 import subprocess
@@ -14,9 +15,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 
 from youmudow.domain.validators import (
-    get_available_browsers, is_valid_rate_limit,
-    is_supported_url, is_playlist_url,
+    is_valid_rate_limit,
+    is_supported_url,
+    is_playlist_url,
 )
+from youmudow.adapters.browser_profiles import get_available_browsers
 from youmudow.services.updater_service import get_ytdlp_version, update_ytdlp
 from youmudow.ui.styles.styles import configure_styles
 from youmudow.ui.styles.theme import ThemeName, get_theme_manager
@@ -36,9 +39,13 @@ from youmudow import __version__
 if TYPE_CHECKING:
     from youmudow.app.controller import AppController
 
+logger = logging.getLogger(__name__)
+
 
 class MainWindow:
-    def __init__(self, controller: "AppController", debug_mode: bool = False, config: Any = None) -> None:
+    def __init__(
+        self, controller: "AppController", debug_mode: bool = False, config: Any = None
+    ) -> None:
         self._config = config
         self._controller = controller
         self._root = tk.Tk()
@@ -79,6 +86,7 @@ class MainWindow:
         self._root.after(3000, self._check_ytdlp_on_start)
         try:
             from assets.icon import get_icon_image
+
             icon = get_icon_image()
             if icon:
                 self._root.iconphoto(True, icon)
@@ -140,9 +148,12 @@ class MainWindow:
     def _create_log_panel(self) -> None:
         self._log_frame = tk.Frame(self._paned_window, bg=_c("bg"))
         label = tk.Label(
-            self._log_frame, text="  OUTPUT",
-            bg=_c("bg"), fg=_c("text_secondary"),
-            font=FONT["label"], anchor="w",
+            self._log_frame,
+            text="  OUTPUT",
+            bg=_c("bg"),
+            fg=_c("text_secondary"),
+            font=FONT["label"],
+            anchor="w",
         )
         label.pack(fill="x", pady=(SPACING["sm"], SPACING["xs"]))
         log_container = tk.Frame(self._log_frame, bg=_c("bg"))
@@ -170,9 +181,13 @@ class MainWindow:
         view_menu = tk.Menu(self._menubar, tearoff=0, bg=_c("surface"), fg=_c("text"), bd=1)
         self._menubar.add_cascade(label="View", menu=view_menu)
         self._debug_var = tk.BooleanVar(value=self._debug_mode)
-        view_menu.add_checkbutton(label="Debug Mode", variable=self._debug_var, command=self._on_toggle_debug)
+        view_menu.add_checkbutton(
+            label="Debug Mode", variable=self._debug_var, command=self._on_toggle_debug
+        )
         view_menu.add_separator()
-        view_menu.add_command(label="Toggle Light/Dark Theme    Ctrl+T", command=self._on_toggle_theme)
+        view_menu.add_command(
+            label="Toggle Light/Dark Theme    Ctrl+T", command=self._on_toggle_theme
+        )
 
         help_menu = tk.Menu(self._menubar, tearoff=0, bg=_c("surface"), fg=_c("text"), bd=1)
         self._menubar.add_cascade(label="Help", menu=help_menu)
@@ -197,7 +212,9 @@ class MainWindow:
 
         def on_log(event) -> None:
             if self._log_terminal:
-                self._log_terminal.append(event.message, level=event.level, timestamp=event.timestamp)
+                self._log_terminal.append(
+                    event.message, level=event.level, timestamp=event.timestamp
+                )
 
         def on_clear(event) -> None:
             if self._log_terminal:
@@ -212,7 +229,10 @@ class MainWindow:
         self._root.bind("<Control-n>", lambda _: self._search_bar.search_var.set(""))
         self._root.bind("<Escape>", lambda _: self._on_cancel_search())
         self._root.bind("<Control-o>", lambda _: self._on_open_folder())
-        self._root.bind("<Control-Shift-C>", lambda _: self._log_terminal.clear() if self._log_terminal else None)
+        self._root.bind(
+            "<Control-Shift-C>",
+            lambda _: self._log_terminal.clear() if self._log_terminal else None,
+        )
         self._root.bind("<Control-t>", lambda _: self._on_toggle_theme())
 
     def _setup_controller_callbacks(self) -> None:
@@ -237,8 +257,7 @@ class MainWindow:
                 self._set_status("No results found")
             self._update_button_states()
         except Exception as e:
-            import traceback
-            traceback.print_exc()
+            logger.exception("Search handler failed")
             self._set_status(f"Error: {e}")
 
     def _on_download_complete(self, video: Video) -> None:
@@ -249,6 +268,7 @@ class MainWindow:
     def _setup_state_observer(self) -> None:
         def on_state_change(snapshot: AppStateData) -> None:
             self._root.after(0, self._update_from_snapshot, snapshot)
+
         self._controller.state.on_change(on_state_change)
 
     def _update_from_snapshot(self, snapshot: AppStateData) -> None:
@@ -262,7 +282,11 @@ class MainWindow:
             if snapshot.active_downloads:
                 active = snapshot.active_downloads[0]
                 self._status_bar.progress_var.set(active.progress)
-                speed_info = f" · {active.speed}" if active.speed and active.speed != "Calculating..." else ""
+                speed_info = (
+                    f" · {active.speed}"
+                    if active.speed and active.speed != "Calculating..."
+                    else ""
+                )
                 eta_info = f" · ETA {active.eta}" if active.eta and active.eta != "00:00" else ""
                 self._set_status(f"Downloading: {active.progress:.1f}%{speed_info}{eta_info}")
                 self._status_bar.set_progress_color(_c("primary"))
@@ -273,7 +297,9 @@ class MainWindow:
         elif snapshot.state.name == "ERROR":
             self._is_searching = False
             self._is_downloading = False
-            self._set_status(f"Error: {snapshot.error_message}" if snapshot.error_message else "Error occurred")
+            self._set_status(
+                f"Error: {snapshot.error_message}" if snapshot.error_message else "Error occurred"
+            )
             self._status_bar.progress_var.set(0)
             self._status_bar.set_progress_color(_c("error"))
         else:
@@ -356,9 +382,11 @@ class MainWindow:
 
     def _handle_playlist_input(self, url: str) -> None:
         self._set_status("Fetching playlist...")
+
         def do_fetch() -> None:
             videos = self._controller.search_playlist(url)
             self._root.after(0, self._on_playlist_complete, videos)
+
         thread = threading.Thread(target=do_fetch, daemon=True)
         thread.start()
 
@@ -377,8 +405,8 @@ class MainWindow:
             clipboard = self._root.clipboard_get()
             if clipboard and is_supported_url(clipboard.strip()):
                 self._search_bar.search_var.set(clipboard.strip())
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Clipboard check failed: %s", e)
 
     def _check_ytdlp_on_start(self) -> None:
         version = get_ytdlp_version()
@@ -387,10 +415,13 @@ class MainWindow:
 
     def _on_update_ytdlp(self) -> None:
         self._set_status("Updating yt-dlp...")
+
         def on_success(version: str) -> None:
             self._root.after(0, lambda: self._set_status(f"yt-dlp updated to {version}"))
+
         def on_error(error: str) -> None:
             self._root.after(0, lambda: self._set_status(f"Update failed: {error}"))
+
         update_ytdlp(on_success, on_error)
 
     def _on_show_ytdlp_version(self) -> None:
@@ -434,7 +465,8 @@ class MainWindow:
                 subprocess.Popen(["open", str(path)])
             else:
                 subprocess.Popen(["xdg-open", str(path)])
-        except Exception:
+        except Exception as e:
+            logger.debug("Could not open folder: %s", e)
             self._set_status(f"Output: {path}")
 
     def _on_download_now(self) -> None:
@@ -516,7 +548,11 @@ class MainWindow:
         cls = widget.winfo_class()
 
         def _cv(key: str) -> str:
-            return key if key.startswith("#") else getattr(colors, _COLOR_MAP.get(key, key.upper()), "#000000")
+            return (
+                key
+                if key.startswith("#")
+                else getattr(colors, _COLOR_MAP.get(key, key.upper()), "#000000")
+            )
 
         try:
             if cls in ("Frame", "Labelframe"):
@@ -529,7 +565,7 @@ class MainWindow:
                 except tk.TclError:
                     widget.configure(bg=colors.BACKGROUND, fg=colors.TEXT)
             elif cls == "Button":
-                theme = getattr(widget, '_theme', None)
+                theme = getattr(widget, "_theme", None)
                 if theme:
                     widget.configure(
                         bg=_cv(theme.get("bg", "surface")),
@@ -538,18 +574,32 @@ class MainWindow:
                         activeforeground=_cv(theme.get("activefg", theme.get("fg", "text"))),
                     )
                 else:
-                    widget.configure(bg=colors.SURFACE, fg=colors.TEXT,
-                                     activebackground=colors.HOVER, activeforeground=colors.TEXT)
+                    widget.configure(
+                        bg=colors.SURFACE,
+                        fg=colors.TEXT,
+                        activebackground=colors.HOVER,
+                        activeforeground=colors.TEXT,
+                    )
             elif cls == "Entry":
                 widget.configure(bg=colors.SURFACE, fg=colors.TEXT, insertbackground=colors.TEXT)
             elif cls in ("Checkbutton", "Radiobutton"):
                 try:
                     parent_bg = widget.master.cget("bg")
-                    widget.configure(bg=parent_bg, fg=colors.TEXT, selectcolor=parent_bg,
-                                     activebackground=parent_bg, activeforeground=colors.TEXT)
+                    widget.configure(
+                        bg=parent_bg,
+                        fg=colors.TEXT,
+                        selectcolor=parent_bg,
+                        activebackground=parent_bg,
+                        activeforeground=colors.TEXT,
+                    )
                 except tk.TclError:
-                    widget.configure(bg=colors.SURFACE, fg=colors.TEXT, selectcolor=colors.SURFACE,
-                                     activebackground=colors.SURFACE, activeforeground=colors.TEXT)
+                    widget.configure(
+                        bg=colors.SURFACE,
+                        fg=colors.TEXT,
+                        selectcolor=colors.SURFACE,
+                        activebackground=colors.SURFACE,
+                        activeforeground=colors.TEXT,
+                    )
             elif cls == "Canvas":
                 bg_key = getattr(widget, "_bg_key", "bg")
                 widget.configure(bg=_cv(bg_key))
@@ -587,8 +637,8 @@ class MainWindow:
                 self._config.set("concurrent_downloads", dp._concurrent_var.get())
                 self._config.output_path = self._controller.get_output_path()
                 self._config.save()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Could not save config on close: %s", e)
         self.destroy()
 
     def _apply_config(self) -> None:
@@ -627,7 +677,9 @@ class MainWindow:
             dp._concurrent_var.set(self._config.get("concurrent_downloads", 1))
 
             if self._config.get("options_panel_open", False):
-                dp._options_frame.pack(fill="both", expand=True, padx=SPACING["md"], pady=(0, SPACING["md"]))
+                dp._options_frame.pack(
+                    fill="both", expand=True, padx=SPACING["md"], pady=(0, SPACING["md"])
+                )
                 dp._detail_toggle_btn.configure(text="▼ OPTIONS")
 
             geo = self._config.window_geometry
@@ -643,10 +695,10 @@ class MainWindow:
                     sh = self._root.winfo_screenheight()
                     if x + w < 0 or y + h < 0 or x > sw or y > sh:
                         self._root.geometry(f"{min(sw, 1200)}x{min(sh, 800)}+0+0")
-                except Exception:
-                    pass
-        except Exception:
-            pass
+                except Exception as e:
+                    logger.debug("Could not restore window geometry: %s", e)
+        except Exception as e:
+            logger.warning("Could not apply saved config: %s", e)
 
     def run(self) -> None:
         self._root.protocol("WM_DELETE_WINDOW", self._on_close)

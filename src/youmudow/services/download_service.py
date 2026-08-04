@@ -4,7 +4,7 @@ Handles video downloads with queue support and progress tracking.
 Emits detailed progress events for integration with any UI layer.
 """
 
-import subprocess
+import logging
 import threading
 from collections import deque
 from dataclasses import dataclass
@@ -15,6 +15,8 @@ from typing import Callable
 from youmudow.adapters.ytdlp_adapter import YtdlpAdapter
 from youmudow.domain.models import Video
 from youmudow.domain.enums import DownloadStatus
+
+logger = logging.getLogger(__name__)
 
 
 class DownloadEventType(Enum):
@@ -76,7 +78,6 @@ class DownloadWorker(threading.Thread):
         self._cancel_event = threading.Event()
         self._ready = threading.Event()
         self._stop = threading.Event()
-        self._process: subprocess.Popen | None = None
 
     @property
     def worker_id(self) -> int:
@@ -86,6 +87,10 @@ class DownloadWorker(threading.Thread):
     def is_busy(self) -> bool:
         return self._current_video is not None
 
+    @property
+    def current_video(self) -> Video | None:
+        return self._current_video
+
     def submit(self, video: Video) -> None:
         self._current_video = video
         self._cancel_event.clear()
@@ -93,12 +98,6 @@ class DownloadWorker(threading.Thread):
 
     def cancel(self) -> None:
         self._cancel_event.set()
-        if self._process and self._process.poll() is None:
-            self._process.terminate()
-            try:
-                self._process.wait(timeout=2)
-            except subprocess.TimeoutExpired:
-                self._process.kill()
 
     def stop(self) -> None:
         self._stop.set()
@@ -137,12 +136,15 @@ class DownloadWorker(threading.Thread):
             except Exception as e:
                 video.status = DownloadStatus.ERROR
                 video.error_message = str(e)
+                logger.exception("Download worker failed for %s", video.url)
 
             self._current_video = None
-            self._progress_callback(DownloadEvent(
-                type=DownloadEventType.COMPLETED,
-                video=video,
-            ))
+            self._progress_callback(
+                DownloadEvent(
+                    type=DownloadEventType.COMPLETED,
+                    video=video,
+                )
+            )
 
 
 class DownloadQueue:
@@ -229,7 +231,7 @@ class DownloadService:
         return self._max_concurrent
 
     def set_log_callback(self, callback) -> None:
-        if hasattr(self._adapter, 'set_log_callback'):
+        if hasattr(self._adapter, "set_log_callback"):
             self._adapter.set_log_callback(callback)
 
     def set_output_path(self, path: Path) -> None:
@@ -268,10 +270,12 @@ class DownloadService:
     def add_to_queue(self, video: Video) -> None:
         self._queue.add(video)
         self._queue_event.set()
-        self._emit_event(DownloadEvent(
-            type=DownloadEventType.QUEUED,
-            video=video,
-        ))
+        self._emit_event(
+            DownloadEvent(
+                type=DownloadEventType.QUEUED,
+                video=video,
+            )
+        )
 
     def add_multiple(self, videos: list[Video]) -> None:
         for video in videos:
@@ -305,17 +309,19 @@ class DownloadService:
         self._queue.remove(video)
         with self._lock:
             for worker in self._workers:
-                if worker._current_video is video:
+                if worker.current_video is video:
                     worker.cancel()
                     for wid, vid in list(self._active_downloads.items()):
                         if vid == video:
                             del self._active_downloads[wid]
                             break
                     break
-        self._emit_event(DownloadEvent(
-            type=DownloadEventType.CANCELLED,
-            video=video,
-        ))
+        self._emit_event(
+            DownloadEvent(
+                type=DownloadEventType.CANCELLED,
+                video=video,
+            )
+        )
 
     def _process_queue(self) -> None:
         while self._running:
@@ -332,10 +338,12 @@ class DownloadService:
                     with self._lock:
                         self._active_downloads[worker.worker_id] = video
                     worker.submit(video)
-                    self._emit_event(DownloadEvent(
-                        type=DownloadEventType.STARTED,
-                        video=video,
-                    ))
+                    self._emit_event(
+                        DownloadEvent(
+                            type=DownloadEventType.STARTED,
+                            video=video,
+                        )
+                    )
             else:
                 self._queue_event.wait(timeout=0.05)
                 self._queue_event.clear()
@@ -354,35 +362,53 @@ class DownloadService:
                     del self._active_downloads[video_id]
 
             if event.video.status == DownloadStatus.DONE:
-                self._emit_event(DownloadEvent(
-                    type=DownloadEventType.COMPLETED,
-                    video=event.video,
-                ))
+                self._emit_event(
+                    DownloadEvent(
+                        type=DownloadEventType.COMPLETED,
+                        video=event.video,
+                    )
+                )
+            elif event.video.status == DownloadStatus.CANCELLED:
+                self._emit_event(
+                    DownloadEvent(
+                        type=DownloadEventType.CANCELLED,
+                        video=event.video,
+                    )
+                )
             else:
-                self._emit_event(DownloadEvent(
-                    type=DownloadEventType.ERROR,
-                    video=event.video,
-                    error=event.video.error_message or "Download failed",
-                ))
+                self._emit_event(
+                    DownloadEvent(
+                        type=DownloadEventType.ERROR,
+                        video=event.video,
+                        error=event.video.error_message or "Download failed",
+                    )
+                )
 
     def _emit_event(self, event: DownloadEvent) -> None:
         for callback in self._event_callbacks:
-            callback(event)
+            try:
+                callback(event)
+            except Exception:
+                logger.exception("Event callback failed for %s", event.type.value)
 
     def download_now(self, video: Video, path: Path | None = None) -> Video:
         output_path = path or self._output_path
         result_video = self._adapter.download(video, output_path)
 
         if result_video.status == DownloadStatus.DONE:
-            self._emit_event(DownloadEvent(
-                type=DownloadEventType.COMPLETED,
-                video=result_video,
-            ))
+            self._emit_event(
+                DownloadEvent(
+                    type=DownloadEventType.COMPLETED,
+                    video=result_video,
+                )
+            )
         else:
-            self._emit_event(DownloadEvent(
-                type=DownloadEventType.ERROR,
-                video=result_video,
-                error=result_video.error_message or "Download failed",
-            ))
+            self._emit_event(
+                DownloadEvent(
+                    type=DownloadEventType.ERROR,
+                    video=result_video,
+                    error=result_video.error_message or "Download failed",
+                )
+            )
 
         return result_video
