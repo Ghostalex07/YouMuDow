@@ -9,14 +9,14 @@ import threading
 from pathlib import Path
 from typing import Any, Protocol
 
+from youmudow.app.events import emit_log
+from youmudow.app.state import AppState, StateManager
 from youmudow.domain.models import Video
 from youmudow.domain.validators import is_valid_youtube_url, sanitize_filename
-from youmudow.services.search_service import SearchService
 from youmudow.services.download_service import DownloadService
-from youmudow.services.thumbnail_service import ThumbnailService
 from youmudow.services.history_service import HistoryService
-from youmudow.app.state import StateManager, AppState
-from youmudow.app.events import emit_log
+from youmudow.services.search_service import SearchService
+from youmudow.services.thumbnail_service import ThumbnailService
 
 logger = logging.getLogger(__name__)
 

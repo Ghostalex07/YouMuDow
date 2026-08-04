@@ -1,10 +1,10 @@
 """Theme management for YouMuDow."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Literal
+from typing import ClassVar, Literal
 
-from youmudow.ui.styles.colors import Colors, LIGHT_COLORS, DARK_COLORS
-
+from youmudow.ui.styles.colors import DARK_COLORS, LIGHT_COLORS, Colors
 
 ThemeName = Literal["light", "dark"]
 
@@ -20,7 +20,7 @@ class Theme:
 class ThemeManager:
     """Manages application themes."""
 
-    _themes = {
+    _themes: ClassVar[dict[str, Theme]] = {
         "light": Theme(name="light", colors=LIGHT_COLORS),
         "dark": Theme(name="dark", colors=DARK_COLORS),
     }

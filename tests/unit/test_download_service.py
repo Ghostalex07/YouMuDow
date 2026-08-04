@@ -1,17 +1,18 @@
 """Tests for download service."""
 
-import pytest
 from unittest.mock import Mock
 
-from youmudow.services.download_service import (
-    DownloadService,
-    DownloadQueue,
-    DownloadEvent,
-    DownloadProgress,
-    DownloadEventType,
-)
-from youmudow.domain.models import Video
+import pytest
+
 from youmudow.domain.enums import DownloadStatus
+from youmudow.domain.models import Video
+from youmudow.services.download_service import (
+    DownloadEvent,
+    DownloadEventType,
+    DownloadProgress,
+    DownloadQueue,
+    DownloadService,
+)
 
 
 @pytest.fixture

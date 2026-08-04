@@ -2,11 +2,11 @@
 
 import logging
 import tkinter as tk
-from tkinter import ttk, messagebox
 import webbrowser
+from tkinter import messagebox, ttk
 
 from youmudow.domain.models import HistoryEntry
-from youmudow.ui.styles.constants import SPACING, FONT, _c
+from youmudow.ui.styles.constants import FONT, SPACING, _c
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +125,7 @@ class HistoryPanel(tk.Frame):
             index = self._tree.index(selection[0])
             if 0 <= index < len(self._filtered):
                 return self._filtered[index]
-        except Exception as e:
+        except tk.TclError as e:
             logger.debug("Could not resolve selected history entry: %s", e)
         return None
 

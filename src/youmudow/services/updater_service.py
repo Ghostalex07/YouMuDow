@@ -4,7 +4,7 @@ import logging
 import subprocess
 import sys
 import threading
-from typing import Callable
+from collections.abc import Callable
 
 from youmudow.domain.exceptions import YtDlpNotFoundError
 
@@ -18,6 +18,7 @@ def get_ytdlp_version() -> str:
             capture_output=True,
             text=True,
             timeout=10,
+            check=False,
         )
         return result.stdout.strip() if result.returncode == 0 else ""
     except (OSError, subprocess.SubprocessError) as e:
@@ -36,6 +37,7 @@ def update_ytdlp(
                 capture_output=True,
                 text=True,
                 timeout=120,
+                check=False,
             )
             if result.returncode == 0:
                 new_version = get_ytdlp_version()
@@ -54,13 +56,14 @@ def update_ytdlp(
                 capture_output=True,
                 text=True,
                 timeout=120,
+                check=False,
             )
             if result.returncode == 0:
                 new_version = get_ytdlp_version()
                 on_success(new_version)
             else:
                 on_error(result.stderr or "Update failed")
-        except Exception as e:
+        except (OSError, subprocess.SubprocessError) as e:
             logger.warning("pip install yt-dlp failed: %s", e)
             on_error(str(e))
 

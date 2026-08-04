@@ -1,7 +1,7 @@
 """Music & Video Downloader - A modern desktop application."""
 
 try:
-    from importlib.metadata import version, PackageNotFoundError
+    from importlib.metadata import PackageNotFoundError, version
 
     __version__ = version("youmudow")
 except (PackageNotFoundError, ImportError):

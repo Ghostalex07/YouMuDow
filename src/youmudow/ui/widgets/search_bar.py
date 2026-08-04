@@ -3,8 +3,8 @@
 import tkinter as tk
 from tkinter import ttk
 
-from youmudow.ui.styles.constants import SPACING, FONT, _c, add_hover_effect
 from youmudow.domain.validators import is_supported_url
+from youmudow.ui.styles.constants import FONT, SPACING, _c, add_hover_effect
 
 
 class SearchBar(tk.Frame):

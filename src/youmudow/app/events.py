@@ -7,9 +7,9 @@ Used to deliver real-time log output from services to the UI.
 import datetime
 import logging
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +48,7 @@ class EventBus:
     _lock = threading.Lock()
     _initialized: bool
 
-    def __new__(cls) -> "EventBus":
+    def __new__(cls) -> "EventBus":  # noqa: PYI034 - typing.Self requires Python 3.11
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
@@ -118,7 +118,7 @@ def emit(event: Event) -> None:
 
 def emit_log(message: str, level: str = "info") -> None:
     """Emit a log message event for terminal display."""
-    timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+    timestamp = datetime.datetime.now().astimezone().strftime("%H:%M:%S")
     emit(
         LogEvent(
             type=EventType.LOG_OUTPUT,

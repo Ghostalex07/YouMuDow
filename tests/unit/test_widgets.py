@@ -1,8 +1,9 @@
 """Tests for UI widgets."""
 
 import os
-import pytest
 from unittest.mock import Mock
+
+import pytest
 
 pytest.importorskip("tkinter")
 if not os.environ.get("DISPLAY"):
@@ -89,8 +90,8 @@ class TestResultsTable:
         rt.clear_results()
 
     def test_update_results(self, tk_root, mock_window):
-        from youmudow.ui.widgets.results_table import ResultsTable
         from youmudow.domain.models import Video
+        from youmudow.ui.widgets.results_table import ResultsTable
 
         rt = ResultsTable(tk_root, mock_window)
         videos = [
@@ -129,8 +130,8 @@ class TestHistoryPanel:
         hp.refresh()
 
     def test_apply_filter(self, tk_root, mock_window):
-        from youmudow.ui.widgets.history_panel import HistoryPanel
         from youmudow.domain.models import HistoryEntry
+        from youmudow.ui.widgets.history_panel import HistoryPanel
 
         hp = HistoryPanel(tk_root, mock_window)
         hp._all_entries = [

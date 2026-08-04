@@ -4,12 +4,11 @@ Displays real-time log output in a terminal-like format.
 Modern dark theme with syntax highlighting.
 """
 
-import tkinter as tk
-from tkinter import ttk
 import datetime
 import threading
+import tkinter as tk
 from pathlib import Path
-
+from tkinter import ttk
 
 MAX_LINES = 1000
 
@@ -206,7 +205,7 @@ class LogTerminal(ttk.Frame):
             return
 
         with self._lock:
-            ts = timestamp or datetime.datetime.now().strftime("%H:%M:%S")
+            ts = timestamp or datetime.datetime.now().astimezone().strftime("%H:%M:%S")
             self._log_buffer.append(f"[{ts}] [{level.upper()}] {message}")
             self._pending_messages.append((message, level, timestamp))
             if self._processing:
@@ -239,7 +238,7 @@ class LogTerminal(ttk.Frame):
             self._text.configure(state="normal")
 
             if self._show_timestamp:
-                ts = timestamp or datetime.datetime.now().strftime("%H:%M:%S")
+                ts = timestamp or datetime.datetime.now().astimezone().strftime("%H:%M:%S")
                 self._text.insert("end", f" {ts} ", "timestamp")
 
             level_tag = self._get_level_tag(message, level)

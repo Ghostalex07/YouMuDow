@@ -2,7 +2,7 @@
 
 import tkinter as tk
 
-from youmudow.ui.styles.constants import SPACING, FONT, _c
+from youmudow.ui.styles.constants import FONT, SPACING, _c
 
 
 class StatusBar(tk.Frame):
@@ -49,8 +49,7 @@ class StatusBar(tk.Frame):
     def update_progress_bar(self) -> None:
         try:
             width = self._progress_bar.winfo_width()
-            if width < 1:
-                width = 1
+            width = max(width, 1)
             progress = self._progress_var.get() / 100.0
             x_pos = width * progress
             self._progress_bar.coords(self._progress_rect, 0, 0, x_pos, 6)

@@ -2,7 +2,6 @@
 
 import re
 
-
 YOUTUBE_PATTERNS = [
     r"(?:https?://)?(?:www\.|m\.|music\.)?youtube\.com/watch\?v=[\w-]+",
     r"(?:https?://)?(?:www\.)?youtu\.be/[\w-]+",
@@ -55,13 +54,13 @@ def is_playlist_url(url: str) -> bool:
     if re.search(r"/playlist(?:/|\?|$)", url, re.IGNORECASE):
         return True
     # YouTube channel / user
-    if re.search(
-        r"(?:https?://)?(?:www\.)?youtube\.com/(?:@[\w-]+|channel/[\w-]+|c/[\w-]+|user/[\w-]+)/videos",
-        url,
-        re.IGNORECASE,
-    ):
-        return True
-    return False
+    return bool(
+        re.search(
+            r"(?:https?://)?(?:www\.)?youtube\.com/(?:@[\w-]+|channel/[\w-]+|c/[\w-]+|user/[\w-]+)/videos",
+            url,
+            re.IGNORECASE,
+        )
+    )
 
 
 def sanitize_filename(name: str, replacement: str = "_") -> str:

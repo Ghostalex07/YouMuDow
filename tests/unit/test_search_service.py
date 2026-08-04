@@ -1,10 +1,11 @@
 """Tests for search service."""
 
-import pytest
 from unittest.mock import Mock
 
-from youmudow.services.search_service import SearchService
+import pytest
+
 from youmudow.domain.models import Video
+from youmudow.services.search_service import SearchService
 
 
 @pytest.fixture

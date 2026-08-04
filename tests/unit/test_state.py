@@ -1,8 +1,8 @@
 """Tests for StateManager."""
 
-from youmudow.app.state import StateManager, AppState, AppMode, AppStateData
-from youmudow.domain.models import Video
+from youmudow.app.state import AppMode, AppState, AppStateData, StateManager
 from youmudow.domain.enums import DownloadStatus
+from youmudow.domain.models import Video
 
 
 class TestStateManager:

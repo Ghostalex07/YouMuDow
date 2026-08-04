@@ -49,7 +49,7 @@ class HistoryService:
             uploader=video.uploader or "",
             file_format=file_format,
             output_path=output_path,
-            downloaded_at=datetime.now().isoformat(),
+            downloaded_at=datetime.now().astimezone().isoformat(),
             duration=video.duration or 0,
             thumbnail=video.thumbnail or "",
             file_size_bytes=file_size_bytes,

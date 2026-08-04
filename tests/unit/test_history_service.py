@@ -1,12 +1,13 @@
 """Tests for HistoryService."""
 
-import pytest
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-from youmudow.services.history_service import HistoryService
+import pytest
+
 from youmudow.domain.models import Video
+from youmudow.services.history_service import HistoryService
 
 
 @pytest.fixture

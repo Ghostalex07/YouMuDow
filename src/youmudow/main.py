@@ -3,7 +3,7 @@
 import logging
 
 from youmudow.app import AppController
-from youmudow.app.config import AppConfig, CONFIG_DIR
+from youmudow.app.config import CONFIG_DIR, AppConfig
 from youmudow.logging_config import setup_logging
 from youmudow.ui import MainWindow
 

@@ -11,15 +11,16 @@ import re
 import subprocess
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
-from youmudow.domain.models import Video
+from youmudow.adapters.browser_profiles import check_browser_profile, get_fallback_browser
 from youmudow.domain.enums import DownloadStatus
 from youmudow.domain.exceptions import YtDlpError, YtDlpNotFoundError
+from youmudow.domain.models import Video
 from youmudow.domain.validators import sanitize_filename
-from youmudow.adapters.browser_profiles import check_browser_profile, get_fallback_browser
 
 logger = logging.getLogger(__name__)
 
@@ -291,6 +292,7 @@ class YtdlpAdapter:
                 capture_output=True,
                 text=True,
                 timeout=30,
+                check=False,
             )
 
             if result.returncode != 0:
@@ -344,6 +346,7 @@ class YtdlpAdapter:
                 capture_output=True,
                 text=True,
                 timeout=60,
+                check=False,
             )
 
             if result.returncode == 0 and result.stdout:
@@ -393,6 +396,7 @@ class YtdlpAdapter:
                 capture_output=True,
                 text=True,
                 timeout=120,
+                check=False,
             )
 
             videos = []
@@ -510,8 +514,8 @@ class YtdlpAdapter:
                             if info:
                                 video.progress = info.progress
                                 progress_callback(info.progress, info.speed)
-            except Exception:
-                pass
+            except (OSError, ValueError, json.JSONDecodeError) as e:
+                logger.debug("Output reader stopped for %s: %s", video.url, e)
 
         reader = threading.Thread(target=read_output, daemon=True)
         reader.start()

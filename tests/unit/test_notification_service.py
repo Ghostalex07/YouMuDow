@@ -21,9 +21,9 @@ class TestNotify:
         with (
             patch("platform.system", return_value="Windows"),
             patch.dict("sys.modules", {"plyer": None}),
+            patch("builtins.__import__", side_effect=ImportError("no plyer")),
         ):
-            with patch("builtins.__import__", side_effect=ImportError("no plyer")):
-                notify("Title", "Message")  # should not raise
+            notify("Title", "Message")  # should not raise
 
     def test_subprocess_error_is_swallowed(self):
         from youmudow.services.notification_service import notify

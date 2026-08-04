@@ -1,16 +1,17 @@
 """Tests for ytdlp adapter."""
 
-import pytest
-import tempfile
 import os
+import tempfile
 from unittest.mock import Mock
+
+import pytest
 
 from youmudow.adapters.ytdlp_adapter import (
     YtdlpAdapter,
     YtdlpConfig,
     create_adapter,
 )
-from youmudow.domain.models import Video, DownloadOptions
+from youmudow.domain.models import DownloadOptions, Video
 
 
 @pytest.fixture
@@ -316,7 +317,7 @@ class TestBuildDownloadArgsSubtitles:
     def test_embed_subs_from_config_includes_write_subs(self):
         """embed_subs from YtdlpConfig must include --write-subs or it's a no-op."""
         from youmudow.adapters.ytdlp_adapter import YtdlpAdapter, YtdlpConfig
-        from youmudow.domain.models import Video, DownloadOptions
+        from youmudow.domain.models import DownloadOptions, Video
 
         config = YtdlpConfig(embed_subs=True)
         adapter = YtdlpAdapter(config=config)
@@ -335,7 +336,7 @@ class TestBuildDownloadArgsSubtitles:
 
     def test_subtitles_true_includes_write_subs(self):
         from youmudow.adapters.ytdlp_adapter import YtdlpAdapter
-        from youmudow.domain.models import Video, DownloadOptions
+        from youmudow.domain.models import DownloadOptions, Video
 
         adapter = YtdlpAdapter()
         video = Video(
@@ -352,7 +353,7 @@ class TestBuildDownloadArgsSubtitles:
 
     def test_embed_subtitles_requires_subtitles_true(self):
         from youmudow.adapters.ytdlp_adapter import YtdlpAdapter
-        from youmudow.domain.models import Video, DownloadOptions
+        from youmudow.domain.models import DownloadOptions, Video
 
         adapter = YtdlpAdapter()
         video = Video(
@@ -368,7 +369,8 @@ class TestBuildDownloadArgsSubtitles:
 
 class TestSearchErrorHandling:
     def test_search_logs_error_on_nonzero_returncode(self):
-        from unittest.mock import patch, Mock
+        from unittest.mock import Mock, patch
+
         from youmudow.adapters.ytdlp_adapter import YtdlpAdapter
 
         adapter = YtdlpAdapter()
@@ -389,7 +391,8 @@ class TestSearchErrorHandling:
         )
 
     def test_get_metadata_logs_error_on_nonzero_returncode(self):
-        from unittest.mock import patch, Mock
+        from unittest.mock import Mock, patch
+
         from youmudow.adapters.ytdlp_adapter import YtdlpAdapter
 
         adapter = YtdlpAdapter()
@@ -461,6 +464,7 @@ class TestResolveOutputFile:
 
     def test_returns_most_recent_match(self, tmp_path):
         import os
+
         from youmudow.adapters.ytdlp_adapter import YtdlpAdapter
 
         (tmp_path / "Song.mp3").write_text("x")
@@ -483,8 +487,9 @@ class TestDownloadCancel:
 
     def test_cancelled_before_start(self, tmp_path, sample_video):
         import threading
-        from youmudow.domain.enums import DownloadStatus
+
         from youmudow.adapters.ytdlp_adapter import YtdlpAdapter
+        from youmudow.domain.enums import DownloadStatus
 
         cancel_event = threading.Event()
         cancel_event.set()
@@ -494,8 +499,9 @@ class TestDownloadCancel:
 
     def test_file_not_resolved_when_cancelled(self, tmp_path, sample_video):
         import threading
-        from youmudow.domain.enums import DownloadStatus
+
         from youmudow.adapters.ytdlp_adapter import YtdlpAdapter
+        from youmudow.domain.enums import DownloadStatus
 
         cancel_event = threading.Event()
         cancel_event.set()

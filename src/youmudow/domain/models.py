@@ -100,7 +100,7 @@ class HistoryEntry:
         try:
             dt = _dt.fromisoformat(self.downloaded_at)
             return dt.strftime("%d %b %Y %H:%M")
-        except Exception:
+        except (ValueError, TypeError):
             return self.downloaded_at
 
     def format_size(self) -> str:

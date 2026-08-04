@@ -6,12 +6,12 @@ and application status.
 
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Callable
 
-from youmudow.domain.models import Video
 from youmudow.domain.enums import DownloadStatus
+from youmudow.domain.models import Video
 
 
 class AppMode(Enum):

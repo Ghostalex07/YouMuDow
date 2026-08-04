@@ -2,11 +2,11 @@
 
 import logging
 import tkinter as tk
-from tkinter import ttk
 import webbrowser
+from tkinter import ttk
 
 from youmudow.domain.models import Video
-from youmudow.ui.styles.constants import SPACING, FONT, _c
+from youmudow.ui.styles.constants import FONT, SPACING, _c
 
 logger = logging.getLogger(__name__)
 
@@ -132,7 +132,7 @@ class ResultsTable(tk.Frame):
                 index = self._results_tree.index(item_id)
                 if 0 <= index < len(results):
                     videos.append(results[index])
-            except Exception as e:
+            except tk.TclError as e:
                 logger.debug("Could not resolve selected video: %s", e)
                 continue
         return videos
@@ -146,7 +146,7 @@ class ResultsTable(tk.Frame):
             return
         try:
             index = self._results_tree.index(selection[0])
-        except Exception as e:
+        except tk.TclError as e:
             logger.debug("Could not resolve selection: %s", e)
             return
         if 0 <= index < len(results):
@@ -165,7 +165,7 @@ class ResultsTable(tk.Frame):
             return
         try:
             index = self._results_tree.index(item_id)
-        except Exception as e:
+        except tk.TclError as e:
             logger.debug("Could not resolve row index: %s", e)
             return
         if 0 <= index < len(results):

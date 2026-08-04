@@ -4,7 +4,6 @@ import tkinter as tk
 
 from youmudow.ui.styles.theme import get_theme_manager
 
-
 SPACING = {
     "xs": 4,
     "sm": 8,

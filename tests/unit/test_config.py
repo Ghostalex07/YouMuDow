@@ -47,10 +47,12 @@ class TestAppConfig:
         with tempfile.TemporaryDirectory() as tmp:
             cfg = AppConfig()
             cfg.set("format", "flac")
-            with patch("youmudow.app.config.CONFIG_DIR", Path(tmp)):
-                with patch("youmudow.app.config.CONFIG_FILE", Path(tmp) / "config.json"):
-                    cfg.save()
-                    assert (Path(tmp) / "config.json").exists()
+            with (
+                patch("youmudow.app.config.CONFIG_DIR", Path(tmp)),
+                patch("youmudow.app.config.CONFIG_FILE", Path(tmp) / "config.json"),
+            ):
+                cfg.save()
+                assert (Path(tmp) / "config.json").exists()
 
     def test_corrupted_config_fallback(self):
         with tempfile.TemporaryDirectory() as tmp:

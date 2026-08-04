@@ -5,36 +5,36 @@ All business logic is delegated to the controller.
 """
 
 import logging
-import threading
 import platform
 import subprocess
+import threading
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable
+from tkinter import filedialog, messagebox, ttk
+from typing import TYPE_CHECKING, Any
 
-from youmudow.domain.validators import (
-    is_valid_rate_limit,
-    is_supported_url,
-    is_playlist_url,
-)
+from youmudow import __version__
 from youmudow.adapters.browser_profiles import get_available_browsers
+from youmudow.app.events import EventBus, EventType, get_event_bus
+from youmudow.app.state import AppStateData
+from youmudow.domain.models import Video
+from youmudow.domain.validators import (
+    is_playlist_url,
+    is_supported_url,
+    is_valid_rate_limit,
+)
 from youmudow.services.updater_service import get_ytdlp_version, update_ytdlp
+from youmudow.ui.styles.constants import _COLOR_MAP, FONT, SPACING, _c
 from youmudow.ui.styles.styles import configure_styles
 from youmudow.ui.styles.theme import ThemeName, get_theme_manager
-from youmudow.ui.styles.constants import SPACING, FONT, _c, _COLOR_MAP
-
-from youmudow.domain.models import Video
-from youmudow.app.state import AppStateData
-from youmudow.app.events import EventType, EventBus, get_event_bus
-from youmudow.ui.widgets.log_terminal import LogTerminal
-from youmudow.ui.widgets.search_bar import SearchBar
-from youmudow.ui.widgets.results_table import ResultsTable
 from youmudow.ui.widgets.detail_panel import DetailPanel
-from youmudow.ui.widgets.status_bar import StatusBar
 from youmudow.ui.widgets.history_panel import HistoryPanel
-from youmudow import __version__
+from youmudow.ui.widgets.log_terminal import LogTerminal
+from youmudow.ui.widgets.results_table import ResultsTable
+from youmudow.ui.widgets.search_bar import SearchBar
+from youmudow.ui.widgets.status_bar import StatusBar
 
 if TYPE_CHECKING:
     from youmudow.app.controller import AppController
@@ -90,8 +90,8 @@ class MainWindow:
             icon = get_icon_image()
             if icon:
                 self._root.iconphoto(True, icon)
-        except Exception:
-            pass
+        except (ImportError, OSError, tk.TclError, ValueError) as e:
+            logger.debug("Could not set window icon: %s", e)
         self._root.deiconify()
 
     def _setup_ui(self) -> None:
@@ -405,7 +405,7 @@ class MainWindow:
             clipboard = self._root.clipboard_get()
             if clipboard and is_supported_url(clipboard.strip()):
                 self._search_bar.search_var.set(clipboard.strip())
-        except Exception as e:
+        except tk.TclError as e:
             logger.debug("Clipboard check failed: %s", e)
 
     def _check_ytdlp_on_start(self) -> None:
@@ -441,7 +441,7 @@ class MainWindow:
     def _on_export_logs(self) -> None:
         if not self._log_terminal:
             return
-        default_name = f"youmudow_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        default_name = f"youmudow_logs_{datetime.now().astimezone().strftime('%Y%m%d_%H%M%S')}.txt"
         path = filedialog.asksaveasfilename(
             title="Export Logs",
             defaultextension=".txt",
@@ -452,7 +452,7 @@ class MainWindow:
             try:
                 self._log_terminal.export_to_file(Path(path))
                 self._set_status(f"Logs exported to {path}")
-            except Exception as e:
+            except (OSError, ValueError) as e:
                 self._set_status(f"Export failed: {e}")
 
     def _on_open_folder(self) -> None:
@@ -465,7 +465,7 @@ class MainWindow:
                 subprocess.Popen(["open", str(path)])
             else:
                 subprocess.Popen(["xdg-open", str(path)])
-        except Exception as e:
+        except (OSError, ValueError) as e:
             logger.debug("Could not open folder: %s", e)
             self._set_status(f"Output: {path}")
 
@@ -637,7 +637,7 @@ class MainWindow:
                 self._config.set("concurrent_downloads", dp._concurrent_var.get())
                 self._config.output_path = self._controller.get_output_path()
                 self._config.save()
-            except Exception as e:
+            except (tk.TclError, KeyError, TypeError, ValueError) as e:
                 logger.debug("Could not save config on close: %s", e)
         self.destroy()
 
@@ -695,9 +695,9 @@ class MainWindow:
                     sh = self._root.winfo_screenheight()
                     if x + w < 0 or y + h < 0 or x > sw or y > sh:
                         self._root.geometry(f"{min(sw, 1200)}x{min(sh, 800)}+0+0")
-                except Exception as e:
+                except tk.TclError as e:
                     logger.debug("Could not restore window geometry: %s", e)
-        except Exception as e:
+        except (tk.TclError, KeyError, TypeError, ValueError) as e:
             logger.warning("Could not apply saved config: %s", e)
 
     def run(self) -> None:

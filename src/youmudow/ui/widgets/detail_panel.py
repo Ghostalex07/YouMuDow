@@ -3,15 +3,15 @@
 import logging
 import threading
 import tkinter as tk
-from tkinter import ttk, filedialog
 import webbrowser
+from tkinter import filedialog, ttk
 
-from youmudow.domain.models import Video, DownloadOptions
-from youmudow.domain.enums import DownloadStatus
-from youmudow.domain.validators import is_valid_rate_limit
 from youmudow.adapters.browser_profiles import get_all_browser_profiles, get_available_browsers
 from youmudow.app.state import AppStateData
-from youmudow.ui.styles.constants import SPACING, FONT, _c, add_hover_effect
+from youmudow.domain.enums import DownloadStatus
+from youmudow.domain.models import DownloadOptions, Video
+from youmudow.domain.validators import is_valid_rate_limit
+from youmudow.ui.styles.constants import FONT, SPACING, _c, add_hover_effect
 
 logger = logging.getLogger(__name__)
 
@@ -545,15 +545,16 @@ class DetailPanel(tk.Frame):
 
                 data = urlopen(thumbnail_url, timeout=5).read()
                 self._mw._root.after(0, _set_thumbnail, data, thumbnail_url)
-            except Exception as e:
+            except (OSError, ValueError) as e:
                 logger.debug("Could not fetch thumbnail %s: %s", thumbnail_url, e)
 
         def _set_thumbnail(data: bytes, url: str) -> None:
             if getattr(self, "_last_thumb_url", None) != url:
                 return
             try:
-                from PIL import Image, ImageTk
                 import io
+
+                from PIL import Image, ImageTk
 
                 img = Image.open(io.BytesIO(data))
                 max_w = 240
@@ -563,7 +564,7 @@ class DetailPanel(tk.Frame):
                 self._thumbnail_label.configure(image=self._tk_image, text="")
             except ImportError:
                 self._thumbnail_label.configure(text=f"[Thumbnail: {url}]")
-            except Exception as e:
+            except (OSError, ValueError) as e:
                 logger.debug("Could not render thumbnail %s: %s", url, e)
 
         threading.Thread(target=_fetch_and_set, daemon=True).start()

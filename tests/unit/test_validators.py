@@ -1,9 +1,9 @@
 """Tests for domain validators."""
 
 from youmudow.domain.validators import (
+    is_playlist_url,
     is_valid_youtube_url,
     sanitize_filename,
-    is_playlist_url,
 )
 
 

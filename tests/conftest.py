@@ -1,8 +1,9 @@
 """Shared pytest fixtures for YouMuDow tests."""
 
 import pytest
-from youmudow.domain.models import Video, DownloadOptions
+
 from youmudow.domain.enums import DownloadStatus
+from youmudow.domain.models import DownloadOptions, Video
 
 
 @pytest.fixture(autouse=True)

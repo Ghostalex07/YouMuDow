@@ -7,14 +7,14 @@ Emits detailed progress events for integration with any UI layer.
 import logging
 import threading
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Callable
 
 from youmudow.adapters.ytdlp_adapter import YtdlpAdapter
-from youmudow.domain.models import Video
 from youmudow.domain.enums import DownloadStatus
+from youmudow.domain.models import Video
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +103,22 @@ class DownloadWorker(threading.Thread):
         self._stop.set()
         self._ready.set()
 
+    def _make_progress_callback(self, video: Video) -> Callable[[float, str], None]:
+        def callback(progress: float, speed: str) -> None:
+            evt = DownloadEvent(
+                type=DownloadEventType.PROGRESS,
+                video=video,
+                progress=DownloadProgress(
+                    video=video,
+                    progress=progress,
+                    speed=_format_speed(speed),
+                    status=DownloadStatus.DOWNLOADING,
+                ),
+            )
+            self._progress_callback(evt)
+
+        return callback
+
     def run(self) -> None:
         while not self._stop.is_set():
             self._ready.wait()
@@ -114,19 +130,7 @@ class DownloadWorker(threading.Thread):
             if video is None:
                 continue
 
-            def progress_callback_fn(progress: float, speed: str) -> None:
-                evt = DownloadEvent(
-                    type=DownloadEventType.PROGRESS,
-                    video=video,
-                    progress=DownloadProgress(
-                        video=video,
-                        progress=progress,
-                        speed=_format_speed(speed),
-                        status=DownloadStatus.DOWNLOADING,
-                    ),
-                )
-                self._progress_callback(evt)
-
+            progress_callback_fn = self._make_progress_callback(video)
             progress_callback_fn(0.0, "")
 
             try:
