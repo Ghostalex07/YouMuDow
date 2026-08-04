@@ -5,15 +5,12 @@ from pathlib import Path
 from typing import Any
 
 from youmudow.domain.models import DownloadOptions
+from youmudow.paths import config_dir
 
 logger = logging.getLogger(__name__)
 
 
-CONFIG_DIR: Path = (
-    Path.home() / ".config" / "youmudow"
-    if platform.system() != "Windows"
-    else Path.home() / "AppData" / "Local" / "YouMuDow"
-)
+CONFIG_DIR: Path = config_dir()
 CONFIG_FILE: Path = CONFIG_DIR / "config.json"
 
 

@@ -21,15 +21,6 @@ from youmudow.services.thumbnail_service import ThumbnailService
 logger = logging.getLogger(__name__)
 
 
-class ControllerProtocol(Protocol):
-    """Protocol defining the controller interface for UI layer."""
-
-    def search(self, query: str) -> None: ...
-    def enqueue(self, video: Video) -> None: ...
-    def start_downloads(self) -> None: ...
-    def stop_downloads(self) -> None: ...
-
-
 class DownloadCompleteCallback(Protocol):
     """Callback for download completion."""
 

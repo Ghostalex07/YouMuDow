@@ -58,7 +58,3 @@ def get_theme_manager() -> ThemeManager:
     if _default_theme_manager is None:
         _default_theme_manager = ThemeManager()
     return _default_theme_manager
-
-
-def set_default_theme(theme_name: ThemeName) -> None:
-    get_theme_manager().set_theme(theme_name)

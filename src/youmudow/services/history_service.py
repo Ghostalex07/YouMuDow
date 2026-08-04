@@ -6,12 +6,12 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-from youmudow.app.config import CONFIG_DIR
 from youmudow.domain.models import HistoryEntry, Video
+from youmudow.paths import config_dir
 
 logger = logging.getLogger(__name__)
 
-HISTORY_FILE: Path = CONFIG_DIR / "history.json"
+HISTORY_FILE: Path = config_dir() / "history.json"
 MAX_HISTORY = 500
 
 

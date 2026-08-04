@@ -5,7 +5,6 @@ from youmudow.adapters.ytdlp_adapter import (
     ProgressInfo,
     YtdlpAdapter,
     YtdlpConfig,
-    create_adapter,
 )
 
 __all__ = [
@@ -13,5 +12,4 @@ __all__ = [
     "ProgressInfo",
     "YtdlpAdapter",
     "YtdlpConfig",
-    "create_adapter",
 ]

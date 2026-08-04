@@ -3,7 +3,6 @@
 Modern dark theme with smooth visuals and consistent styling.
 """
 
-import tkinter as tk
 from tkinter import ttk
 
 from youmudow.ui.styles.colors import Colors
@@ -12,9 +11,8 @@ from youmudow.ui.styles.colors import Colors
 class StyleManager:
     """Manages ttk styles for the application."""
 
-    def __init__(self, root: tk.Tk | None = None) -> None:
+    def __init__(self) -> None:
         self._style = ttk.Style()
-        self._root = root
         self._colors: Colors | None = None
 
     def configure(self, colors: Colors) -> None:
@@ -223,7 +221,7 @@ class StyleManager:
         )
 
 
-def configure_styles(root: tk.Tk, colors: Colors) -> StyleManager:
-    manager = StyleManager(root)
+def configure_styles(colors: Colors) -> StyleManager:
+    manager = StyleManager()
     manager.configure(colors)
     return manager

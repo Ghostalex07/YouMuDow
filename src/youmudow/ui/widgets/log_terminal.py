@@ -47,8 +47,6 @@ _TERMINAL_COLORS_LIGHT = {
     "metadata": "#16A34A",
 }
 
-TERMINAL_COLORS = _TERMINAL_COLORS_DARK  # module-level alias for external use
-
 
 class LogTerminal(ttk.Frame):
     """Terminal-like widget for displaying log output with modern styling."""

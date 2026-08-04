@@ -55,7 +55,7 @@ class MainWindow:
         saved_theme = self._config.get("theme", "dark") if self._config else "dark"
         self._theme_manager = get_theme_manager()
         self._theme_manager.set_theme(saved_theme)
-        configure_styles(self._root, self._theme_manager.colors)
+        configure_styles(self._theme_manager.colors)
         self._root.configure(bg=_c("bg"))
 
         self._selected_video: Video | None = None
@@ -525,7 +525,7 @@ class MainWindow:
         current = self._theme_manager.current.name
         new_theme: ThemeName = "light" if current == "dark" else "dark"
         self._theme_manager.set_theme(new_theme)
-        configure_styles(self._root, self._theme_manager.colors)
+        configure_styles(self._theme_manager.colors)
         self._results_table._style_treeview()
         self._apply_theme_colors()
         if self._log_terminal:

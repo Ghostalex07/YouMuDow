@@ -14,7 +14,6 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 from youmudow.adapters.browser_profiles import check_browser_profile, get_fallback_browser
 from youmudow.domain.enums import DownloadStatus
@@ -646,7 +645,7 @@ class YtdlpAdapter:
             video.error_message = "Download cancelled"
         elif video.status != DownloadStatus.DONE:
             video.status = DownloadStatus.ERROR
-            video.error_message = last_error or "Download failed"
+            video.error_message = video.error_message or last_error or "Download failed"
         else:
             video.path = self._resolve_output_file(output_path, safe_title)
 
@@ -702,9 +701,3 @@ class YtdlpAdapter:
             return int(float(duration_str))
         except (ValueError, TypeError):
             return 0
-
-
-def create_adapter(**kwargs: Any) -> YtdlpAdapter:
-    """Factory function to create a configured adapter."""
-    config = YtdlpConfig(**kwargs)
-    return YtdlpAdapter(config)

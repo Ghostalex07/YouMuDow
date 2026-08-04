@@ -38,8 +38,6 @@ class DownloadProgress:
     progress: float = 0.0
     speed: str = ""
     eta: str = ""
-    downloaded_bytes: str = ""
-    total_bytes: str = ""
     status: DownloadStatus = DownloadStatus.READY
 
 
@@ -77,7 +75,7 @@ class DownloadWorker(threading.Thread):
         self._current_video: Video | None = None
         self._cancel_event = threading.Event()
         self._ready = threading.Event()
-        self._stop = threading.Event()
+        self._shutdown = threading.Event()
 
     @property
     def worker_id(self) -> int:
@@ -100,7 +98,7 @@ class DownloadWorker(threading.Thread):
         self._cancel_event.set()
 
     def stop(self) -> None:
-        self._stop.set()
+        self._shutdown.set()
         self._ready.set()
 
     def _make_progress_callback(self, video: Video) -> Callable[[float, str], None]:
@@ -120,10 +118,10 @@ class DownloadWorker(threading.Thread):
         return callback
 
     def run(self) -> None:
-        while not self._stop.is_set():
+        while not self._shutdown.is_set():
             self._ready.wait()
             self._ready.clear()
-            if self._stop.is_set():
+            if self._shutdown.is_set():
                 break
 
             video = self._current_video

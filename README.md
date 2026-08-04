@@ -40,8 +40,16 @@ A modern music & video downloader with real-time progress, embedded metadata, an
 ```bash
 git clone https://github.com/Ghostalex07/YouMuDow.git
 cd YouMuDow
-pip install -e ".[dev]"
+python3 -m venv .venv && source .venv/bin/activate   # optional but recommended
+pip install -e .
 youmudow
+```
+
+Linux users also need the Tkinter bindings (included with Python on Windows/macOS):
+
+```bash
+sudo apt install python3-tk    # Debian/Ubuntu
+sudo dnf install python3-tkinter   # Fedora
 ```
 
 ### Option 2: Download executable
@@ -105,12 +113,17 @@ python scripts/package.py     # generates distributable ZIP
 ## Development
 
 ```bash
-pip install -e ".[dev]"
-PYTHONPATH=src python3 -m pytest   # run tests
-ruff check src/ tests/             # lint
-ruff format --check src/ tests/    # formatting
-PYTHONPATH=src mypy                # type checking
+pip install -e ".[dev]"        # installs pinned dev tooling (pytest, ruff, mypy, pyinstaller)
+PYTHONPATH=src python3 -m pytest              # run tests
+PYTHONPATH=src python3 -m pytest --cov        # run tests with coverage report
+ruff check src/ tests/                        # lint
+ruff format --check src/ tests/               # formatting
+PYTHONPATH=src mypy                           # type checking
 ```
+
+All checks above are enforced by CI. The coverage gate (`fail_under` in `pyproject.toml`) is
+currently **70%**; UI smoke tests (`tests/unit/test_window_smoke.py`) need a display server and
+are run under `xvfb-run` in CI.
 
 ## Project Structure
 
@@ -120,6 +133,7 @@ youmudow/
 │   ├── __init__.py            # App version
 │   ├── main.py                # Entry point
 │   ├── logging_config.py      # Centralized logging setup
+│   ├── paths.py               # Shared config path resolution
 │   ├── domain/                # Data models, validators, exceptions
 │   │   ├── models.py
 │   │   ├── enums.py
