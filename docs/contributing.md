@@ -27,6 +27,19 @@ ruff format --check src/ tests/             # formatting
 PYTHONPATH=src mypy                         # type checking
 ```
 
+Or use `make check`, which runs all four.
+
+## Pre-commit Hooks
+
+Hooks are configured in `.pre-commit-config.yaml` (ruff lint + format, trailing
+whitespace, end-of-file fixes, YAML checks):
+
+```bash
+pip install pre-commit
+pre-commit install       # runs hooks on every commit
+pre-commit run --all-files   # run once against the whole repo
+```
+
 ## Testing
 
 ```bash

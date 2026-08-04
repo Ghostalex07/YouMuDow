@@ -2,10 +2,20 @@
 
 ![Python](https://img.shields.io/badge/python-3.10+-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Version](https://img.shields.io/badge/version-1.2.0-green.svg)
+![Version](https://img.shields.io/badge/version-5.0.0-green.svg)
 [![CI](https://github.com/Ghostalex07/YouMuDow/actions/workflows/ci.yml/badge.svg)](https://github.com/Ghostalex07/YouMuDow/actions/workflows/ci.yml)
 
 A modern music & video downloader with real-time progress, embedded metadata, and a clean desktop interface.
+
+## Screenshots
+
+| Main window | Configuration panel |
+|---|---|
+| ![Main window](docs/screenshots/main.png) | ![Configuration panel](docs/screenshots/configuration.png) |
+
+| Queue panel | Progress & log |
+|---|---|
+| ![Queue panel](docs/screenshots/queue.png) | ![Progress and log](docs/screenshots/progress.png) |
 
 ## Features
 
@@ -24,6 +34,7 @@ A modern music & video downloader with real-time progress, embedded metadata, an
 - **Export download logs to file**: File > Export Logs saves session logs
 - **Retry failed downloads**: One-click retry for errored downloads
 - **Clipboard URL detection on startup**: Automatically detects URLs in clipboard
+- **Command-line interface**: `youmudow-cli` for headless downloads and searches
 - **Cross-platform**: Linux, macOS, Windows
 - **Keyboard shortcuts**: Ctrl+D to download, Ctrl+Q to queue, and more
 
@@ -89,6 +100,29 @@ Download from [ffmpeg.org](https://ffmpeg.org/download.html) and add to PATH.
 5. **Download**: Click Download or add to queue
 6. **Monitor**: Watch progress in the queue panel and status bar
 
+## Command-Line Interface
+
+YouMuDow ships with `youmudow-cli`, a headless CLI that reuses the exact same
+services as the desktop app (no duplicate download or search logic):
+
+```bash
+# Download a video as MP3
+youmudow-cli download "https://www.youtube.com/watch?v=dQw4w9WgXcQ" --format mp3
+
+# Search by query and download the best audio
+youmudow-cli download "bohemian rhapsody" --format mp3 --quality 320kbps
+
+# Download to a specific folder without resolving metadata
+youmudow-cli download "https://..." --output ~/Downloads --skip-metadata
+
+# Search without downloading
+youmudow-cli search "lofi beats" --limit 10
+```
+
+`download` options: `--format` (mp3, m4a, flac, wav, ogg, opus, aac, mp4, ...),
+`--quality` (bitrate or resolution), `--output DIR`, `--skip-metadata`.
+`search` options: `--limit N` (default 10). Run `youmudow-cli --version` for the version.
+
 ## Keyboard Shortcuts
 
 | Shortcut | Action |
@@ -102,6 +136,24 @@ Download from [ffmpeg.org](https://ffmpeg.org/download.html) and add to PATH.
 | `Ctrl+V` | Paste URL (auto-replaces field) |
 | `Ctrl+T` | Toggle light/dark theme |
 
+## Architecture
+
+YouMuDow follows a strict layered architecture — see
+[docs/architecture.md](docs/architecture.md) for the full diagram and dependency
+rules:
+
+```
+ui → app → services → domain
+      ↘   ↗        ↘
+     adapters        adapters
+```
+
+- `domain/` — data models, validators, exceptions (stdlib only)
+- `adapters/` — yt-dlp subprocess wrapper, browser profile detection
+- `services/` — download, search, history, thumbnail, notification logic
+- `app/` — controller, state, configuration
+- `ui/` — Tkinter interface (window, styles, widgets)
+
 ## Building from source
 
 ```bash
@@ -113,63 +165,69 @@ python scripts/package.py     # generates distributable ZIP
 ## Development
 
 ```bash
-pip install -e ".[dev]"        # installs pinned dev tooling (pytest, ruff, mypy, pyinstaller)
-PYTHONPATH=src python3 -m pytest              # run tests
-PYTHONPATH=src python3 -m pytest --cov        # run tests with coverage report
-ruff check src/ tests/                        # lint
-ruff format --check src/ tests/               # formatting
-PYTHONPATH=src mypy                           # type checking
+make install                 # pip install -e ".[dev]" (pinned tooling)
+make run                     # launch the desktop app
+make test                    # run the test suite
+make coverage                # run tests with coverage report
+make lint                    # ruff lint (read-only)
+make format                  # auto-format code
+make typecheck               # mypy
+make check                   # run every quality gate (lint + format + mypy + tests)
 ```
 
-All checks above are enforced by CI. The coverage gate (`fail_under` in `pyproject.toml`) is
-currently **70%**; UI smoke tests (`tests/unit/test_window_smoke.py`) need a display server and
-are run under `xvfb-run` in CI.
+Without `make`, the same commands are:
+
+```bash
+pip install -e ".[dev]"                     # installs pinned dev tooling
+PYTHONPATH=src python3 -m pytest            # tests
+PYTHONPATH=src python3 -m pytest --cov      # tests with coverage report
+ruff check src/ tests/                      # lint
+ruff format --check src/ tests/             # formatting
+PYTHONPATH=src mypy                         # type checking
+```
+
+Pre-commit hooks are configured via `.pre-commit-config.yaml`:
+
+```bash
+pip install pre-commit && pre-commit install
+```
+
+All checks above are enforced by CI. The coverage gate (`fail_under` in
+`pyproject.toml`) is currently **70%**; UI smoke tests
+(`tests/unit/test_window_smoke.py`) need a display server and run under
+`xvfb-run` in CI.
 
 ## Project Structure
 
 ```
 youmudow/
 ├── src/youmudow/
-│   ├── __init__.py            # App version
+│   ├── __init__.py            # App version (from package metadata)
 │   ├── main.py                # Entry point
+│   ├── cli.py                 # youmudow-cli entry point
 │   ├── logging_config.py      # Centralized logging setup
 │   ├── paths.py               # Shared config path resolution
 │   ├── domain/                # Data models, validators, exceptions
-│   │   ├── models.py
-│   │   ├── enums.py
-│   │   ├── validators.py
-│   │   └── exceptions.py
-│   ├── adapters/              # External integrations
-│   │   ├── ytdlp_adapter.py   # yt-dlp subprocess wrapper
-│   │   └── browser_profiles.py# Browser profile detection
-│   ├── services/              # Business logic
-│   │   ├── download_service.py
-│   │   ├── search_service.py
-│   │   ├── history_service.py
-│   │   ├── thumbnail_service.py
-│   │   ├── notification_service.py
-│   │   └── updater_service.py
-│   ├── app/                   # Application layer
-│   │   ├── controller.py
-│   │   ├── state.py
-│   │   ├── config.py
-│   │   └── events.py
-│   └── ui/                    # Tkinter interface
-│       ├── window.py
-│       ├── styles/
-│       └── widgets/
+│   ├── adapters/              # yt-dlp subprocess wrapper, browser profiles
+│   ├── services/              # Download, search, history, thumbnail, notification
+│   ├── app/                   # Controller, state, config
+│   └── ui/                    # Tkinter interface (window, styles, widgets)
 ├── tests/
 │   └── unit/
 ├── scripts/
 │   ├── build.py               # PyInstaller build
-│   └── package.py             # Distribution packaging
+│   ├── package.py             # Distribution packaging
+│   └── bump_version.py        # Automated version bump
 ├── docs/
-│   ├── architecture.md
+│   ├── architecture.md        # Layered architecture + dependency rules
 │   ├── usage.md
-│   └── contributing.md
+│   ├── contributing.md
+│   └── screenshots/
 ├── .github/workflows/
-│   ├── ci.yml                 # CI pipeline
+│   ├── ci.yml                 # CI pipeline (lint, typecheck, test, build)
 │   └── release.yml            # Automated release
+├── Makefile                   # Dev task shortcuts
+├── .pre-commit-config.yaml
 ├── CHANGELOG.md
 ├── README.md
 └── pyproject.toml

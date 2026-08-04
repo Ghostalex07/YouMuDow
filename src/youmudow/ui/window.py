@@ -85,7 +85,7 @@ class MainWindow:
         self._root.after(500, self._check_clipboard_on_start)
         self._root.after(3000, self._check_ytdlp_on_start)
         try:
-            from assets.icon import get_icon_image
+            from youmudow.ui.icon import get_icon_image
 
             icon = get_icon_image()
             if icon:

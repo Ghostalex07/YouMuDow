@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
-from youmudow.adapters.ytdlp_adapter import YtdlpAdapter
+from youmudow.adapters.ytdlp_adapter import ProgressCallback, YtdlpAdapter
 from youmudow.domain.enums import DownloadStatus
 from youmudow.domain.models import Video
 
@@ -393,9 +393,14 @@ class DownloadService:
             except Exception:
                 logger.exception("Event callback failed for %s", event.type.value)
 
-    def download_now(self, video: Video, path: Path | None = None) -> Video:
+    def download_now(
+        self,
+        video: Video,
+        path: Path | None = None,
+        progress_callback: ProgressCallback | None = None,
+    ) -> Video:
         output_path = path or self._output_path
-        result_video = self._adapter.download(video, output_path)
+        result_video = self._adapter.download(video, output_path, progress_callback)
 
         if result_video.status == DownloadStatus.DONE:
             self._emit_event(

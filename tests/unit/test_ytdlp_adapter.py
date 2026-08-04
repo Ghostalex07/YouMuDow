@@ -80,8 +80,18 @@ class TestBuildArgs:
         )
         args = adapter._build_base_args(video)
         assert "yt-dlp" in args
-        assert "--no-check-certificate" in args
+        assert "--no-check-certificate" not in args
         assert "https://youtube.com/watch?v=test" not in args
+
+    def test_certificate_verification_disabled_when_configured(self, adapter):
+        video = Video(
+            title="Test",
+            url="https://youtube.com/watch?v=test",
+            options=DownloadOptions(file_format="mp3"),
+        )
+        adapter._config.verify_certificates = False
+        args = adapter._build_base_args(video)
+        assert "--no-check-certificate" in args
 
     def test_cookies_from_browser(self, adapter):
         video = Video(

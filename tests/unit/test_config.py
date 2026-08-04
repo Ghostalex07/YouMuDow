@@ -61,3 +61,68 @@ class TestAppConfig:
             with patch("youmudow.app.config.CONFIG_FILE", config_file):
                 cfg = AppConfig()
                 assert cfg.get("format") == "mp3"
+
+    def test_load_oserror_falls_back_to_defaults(self):
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            patch("youmudow.app.config.CONFIG_FILE", Path(tmp)),
+        ):
+            cfg = AppConfig()
+            assert cfg.get("format") == "mp3"
+
+    def test_save_oserror_is_swallowed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            blocking = Path(tmp) / "blocking"
+            blocking.write_text("not a directory")
+            with patch("youmudow.app.config.CONFIG_DIR", blocking):
+                cfg = AppConfig()
+                cfg.set("format", "mp4")
+                cfg.save()  # should not raise
+
+    def test_get_str_returns_default_when_value_is_none(self):
+        cfg = AppConfig()
+        cfg.set("format", None)
+        assert cfg.get_str("format", "mp3") == "mp3"
+
+    def test_get_str_missing_key_returns_default(self):
+        assert AppConfig().get_str("missing", "fallback") == "fallback"
+
+    def test_add_search_prepends_and_dedups(self):
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            patch("youmudow.app.config.CONFIG_FILE", Path(tmp) / "config.json"),
+        ):
+            cfg = AppConfig()
+            cfg.add_search("second")
+            cfg.add_search("first")
+            cfg.add_search("second")
+            assert cfg.get_search_history() == ["second", "first"]
+
+    def test_add_search_truncates_to_ten(self):
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            patch("youmudow.app.config.CONFIG_FILE", Path(tmp) / "config.json"),
+        ):
+            cfg = AppConfig()
+            for i in range(12):
+                cfg.add_search(f"query-{i}")
+            assert len(cfg.get_search_history()) == 10
+            assert cfg.get_search_history()[0] == "query-11"
+
+    def test_get_search_history_returns_empty_for_non_list(self):
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            patch("youmudow.app.config.CONFIG_FILE", Path(tmp) / "config.json"),
+        ):
+            cfg = AppConfig()
+            cfg.set("search_history", "not-a-list")
+            assert cfg.get_search_history() == []
+
+    def test_search_history_entries_coerced_to_string(self):
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            patch("youmudow.app.config.CONFIG_FILE", Path(tmp) / "config.json"),
+        ):
+            cfg = AppConfig()
+            cfg.set("search_history", [123, 456])
+            assert cfg.get_search_history() == ["123", "456"]

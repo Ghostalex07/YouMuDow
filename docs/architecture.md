@@ -11,23 +11,42 @@ external tooling.
 ## Layered Architecture
 
 ```
-┌─────────────────────────────┐
-│  ui/   (Tkinter widgets)     │  presentation only
-├─────────────────────────────┤
-│  app/  (controller, state,   │  coordination, config, events
-│        config, event bus)    │
-├─────────────────────────────┤
-│  services/ (business logic)  │  downloads, search, history
-├─────────────────────────────┤
-│  domain/ (models, enums,     │  pure data & validation
-│        validators, errors)   │
-├─────────────────────────────┤
-│  adapters/ (yt-dlp, browser) │  external integrations
-└─────────────────────────────┘
+┌────────────────────────────────────────────────────┐
+│  ui/    (Tkinter widgets)      presentation only   │
+├────────────────────────────────────────────────────┤
+│  app/   (controller, state,    coordination,       │
+│          config, event bus)    config, events      │
+├────────────────────────────────────────────────────┤
+│  services/  (business logic)   downloads, search,   │
+│                                history             │
+├────────────────────────────────────────────────────┤
+│  domain/  (models, enums,      pure data &          │
+│           validators, errors)  validation          │
+├────────────────────────────────────────────────────┤
+│  adapters/  (yt-dlp, browser)  external tooling    │
+├────────────────────────────────────────────────────┤
+│  External:  yt-dlp · ffmpeg ·  0 dependencies      │
+│             browser profiles   allowed downward    │
+└────────────────────────────────────────────────────┘
 ```
 
-Each layer imports only from the layers below it. `domain` has no imports from
-the rest of the application.
+Dependencies flow strictly downward: `ui → app → services → domain`, with
+`adapters` sitting at the boundary to the outside world. Each layer imports only
+from the layers below it.
+
+## Dependency Rules
+
+| Layer | May import from | Must not import from |
+|-------|-----------------|----------------------|
+| `ui` | `app`, `services`, `domain`, `adapters` | anything else in the package |
+| `app` | `services`, `domain` | `ui` (no Tkinter in controllers) |
+| `services` | `domain`, `adapters` | `app`, `ui` |
+| `domain` | stdlib only | the rest of the application |
+| `adapters` | `domain` | `app`, `services`, `ui` |
+
+These rules are enforced by code review and kept visible by the mypy
+configuration (the `ui` layer is type-checked permissively because Tkinter
+widgets are deliberately dynamic).
 
 ## Domain Layer (`domain/`)
 

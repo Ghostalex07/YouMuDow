@@ -69,6 +69,31 @@ class TestSearchService:
         result = search_service.get_metadata("https://youtube.com/watch?v=abc")
         assert result == expected
 
+    def test_get_playlist_calls_adapter(self, search_service, mock_adapter):
+        expected = [Video(title="Track 1", url="u1")]
+        mock_adapter.get_playlist_videos.return_value = expected
+        assert search_service.get_playlist("https://example.com/playlist", limit=3) == expected
+        mock_adapter.get_playlist_videos.assert_called_once_with("https://example.com/playlist", 3)
+
+    def test_set_log_callback_forwarded_to_adapter(self, search_service, mock_adapter):
+        callback = lambda: None
+        search_service.set_log_callback(callback)
+        mock_adapter.set_log_callback.assert_called_once_with(callback)
+
+    def test_set_log_callback_safe_when_adapter_lacks_method(self):
+        class StubAdapter:
+            def search(self, query, limit=10):
+                return []
+
+            def get_metadata(self, url):
+                return None
+
+            def get_playlist_videos(self, url, limit=50):
+                return []
+
+        service = SearchService(adapter=StubAdapter())
+        service.set_log_callback(lambda: None)  # should not raise
+
 
 class TestSearchServiceIntegration:
     """Integration tests for SearchService with mocked yt-dlp."""

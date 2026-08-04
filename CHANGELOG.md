@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.0.0] - 2026-08-04
+
+### Added
+- **Command-line interface**: `youmudow-cli` with `download` (--format, --quality,
+  --output, --skip-metadata) and `search` (--limit) subcommands, reusing the same
+  services as the GUI
+- **Packaged app icon**: icon moved into the package as `ui/icon.py` (previously
+  in an unpackaged `assets/` directory, so the icon never loaded in the GUI)
+- **Makefile**: `make install/run/test/coverage/lint/format/typecheck/check`
+- **Pre-commit hooks**: `.pre-commit-config.yaml` (ruff lint + format, trailing
+  whitespace, YAML checks)
+- **CI build job**: PyInstaller build artifact uploaded from CI
+- **Architecture documentation**: dependency rules table in `docs/architecture.md`
+- **Screenshots**: real app screenshots added to `docs/screenshots/`
+
+### Changed
+- `--no-check-certificate` (TLS verification disabled) is no longer hardcoded;
+  `YtdlpConfig.verify_certificates=True` by default and is configurable
+- CI split into parallel `lint` / `typecheck` / `test` (Python 3.10–3.12) /
+  `build` jobs with concurrency cancellation
+- README rewritten with screenshots, CLI docs and Makefile-based development guide
+
+### Fixed
+- App icon never displayed because `assets/` was outside the package
+- `docs/index.html` referenced a deleted `requirements.txt`
+
 ## [1.2.0] - 2026-08-04
 
 ### Added

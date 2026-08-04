@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=64.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "youmudow"
-version = "1.2.0"
+version = "5.0.0"
 description = "Music & Video Downloader - A modern desktop application"
 readme = "README.md"
 license = {text = "MIT"}
@@ -37,6 +37,7 @@ dev = [
 
 [project.scripts]
 youmudow = "youmudow.main:main"
+youmudow-cli = "youmudow.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

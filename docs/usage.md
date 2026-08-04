@@ -8,6 +8,23 @@
 4. Optionally enable cookies, rate limiting, chapter splitting or subtitles.
 5. Click **Download** (or add to queue) and watch progress in the queue panel.
 
+## Command-Line Interface
+
+The `youmudow-cli` entry point provides a headless alternative that reuses the
+same services as the GUI:
+
+```bash
+youmudow-cli download "URL" --format mp3 --quality 320kbps --output ~/Downloads
+youmudow-cli download "SEARCH QUERY" --skip-metadata
+youmudow-cli search "lofi beats" --limit 10
+youmudow-cli --version
+```
+
+- `download` options: `--format` (mp3, m4a, flac, wav, ogg, opus, aac, mp4, ...),
+  `--quality` (bitrate or resolution), `--output DIR`, `--skip-metadata`
+  (skip title resolution and download the URL directly).
+- `search` options: `--limit N` (default 10).
+
 ## Configuration
 
 Settings are persisted automatically to a JSON file under the OS config

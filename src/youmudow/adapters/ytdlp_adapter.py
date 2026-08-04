@@ -100,6 +100,7 @@ class YtdlpConfig:
     ffmpeg_location: str | None = None
     cookies_file: str | None = None
     user_agent: str | None = None
+    verify_certificates: bool = True
     download_timeout: int = 300
     max_retries: int = 2
 
@@ -143,7 +144,9 @@ class YtdlpAdapter:
             self._log_callback(message)
 
     def _build_base_args(self, video: Video | None = None, skip_cookies: bool = False) -> list[str]:
-        args = ["yt-dlp", "--no-check-certificate"]
+        args = ["yt-dlp"]
+        if not self._config.verify_certificates:
+            args.append("--no-check-certificate")
 
         if self._config.ffmpeg_location:
             args.extend(["--ffmpeg-location", self._config.ffmpeg_location])
