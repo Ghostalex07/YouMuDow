@@ -13,7 +13,11 @@ from youmudow.app.events import emit_log
 from youmudow.app.state import AppState, StateManager
 from youmudow.domain.models import Video
 from youmudow.domain.validators import is_valid_youtube_url, sanitize_filename
-from youmudow.services.download_service import DownloadService
+from youmudow.services.download_service import (
+    DownloadEventType,
+    DownloadProgress,
+    DownloadService,
+)
 from youmudow.services.history_service import HistoryService
 from youmudow.services.search_service import SearchService
 from youmudow.services.thumbnail_service import ThumbnailService
@@ -249,8 +253,6 @@ class AppController:
         self._state_manager.reset()
 
     def _setup_download_callbacks(self) -> None:
-        from youmudow.services.download_service import DownloadProgress
-
         def on_progress(progress: DownloadProgress) -> None:
             if progress.video:
                 self._state_manager.update_progress(
@@ -289,7 +291,7 @@ class AppController:
         self._download_service.on_progress(on_progress)
         self._download_service.on_complete(on_complete)
         self._download_service.on_event(
-            lambda e: on_started(e.video) if e.type.name == "STARTED" else None
+            lambda e: on_started(e.video) if e.type is DownloadEventType.STARTED else None
         )
 
         self._download_service.on_error(on_error)

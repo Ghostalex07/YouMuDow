@@ -275,6 +275,25 @@ class YtdlpAdapter:
 
         return None
 
+    def _parse_flat_results(self, stdout: str) -> list[Video]:
+        """Parse yt-dlp `--flat-playlist --print` output into Video objects."""
+        videos: list[Video] = []
+        if not stdout:
+            return videos
+        for line in stdout.strip().split("\n"):
+            if line and " | " in line:
+                parts = line.split(" | ", 3)
+                if len(parts) >= 4:
+                    videos.append(
+                        Video(
+                            title=parts[1].strip(),
+                            url=parts[0].strip(),
+                            uploader=parts[2].strip(),
+                            duration=self._parse_duration(parts[3]),
+                        )
+                    )
+        return videos
+
     def search(self, query: str, limit: int = 10) -> list[Video]:
         args = self._build_base_args(None)
         args.extend(
@@ -302,20 +321,7 @@ class YtdlpAdapter:
                 first_line = error_msg.split("\n")[0][:120]
                 self._log(f"[SEARCH] yt-dlp error (code {result.returncode}): {first_line}")
 
-            videos = []
-            if result.stdout:
-                for line in result.stdout.strip().split("\n"):
-                    if line and " | " in line:
-                        parts = line.split(" | ", 3)
-                        if len(parts) >= 4:
-                            videos.append(
-                                Video(
-                                    title=parts[1].strip(),
-                                    url=parts[0].strip(),
-                                    uploader=parts[2].strip(),
-                                    duration=self._parse_duration(parts[3]),
-                                )
-                            )
+            videos = self._parse_flat_results(result.stdout)
 
             self._log(f"[SEARCH] Found {len(videos)} results")
             return videos
@@ -401,20 +407,7 @@ class YtdlpAdapter:
                 check=False,
             )
 
-            videos = []
-            if result.stdout:
-                for line in result.stdout.strip().split("\n"):
-                    if line and " | " in line:
-                        parts = line.split(" | ", 3)
-                        if len(parts) >= 4:
-                            videos.append(
-                                Video(
-                                    title=parts[1].strip(),
-                                    url=parts[0].strip(),
-                                    uploader=parts[2].strip(),
-                                    duration=self._parse_duration(parts[3]),
-                                )
-                            )
+            videos = self._parse_flat_results(result.stdout)
 
             total = len(videos)
             if total > limit:

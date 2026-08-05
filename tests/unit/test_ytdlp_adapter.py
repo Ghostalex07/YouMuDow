@@ -12,9 +12,23 @@ import pytest
 from youmudow.adapters.ytdlp_adapter import (
     YtdlpAdapter,
     YtdlpConfig,
+    parse_cookie_error,
+    parse_yt_dlp_error,
 )
 from youmudow.domain.enums import DownloadStatus
+from youmudow.domain.exceptions import YtDlpError, YtDlpNotFoundError
 from youmudow.domain.models import DownloadOptions, Video
+
+
+def make_video(**options) -> Video:
+    """Build a minimal video with the given DownloadOptions."""
+    return Video(
+        title="Test",
+        url="https://youtube.com/watch?v=test",
+        uploader="Test",
+        duration=60,
+        options=DownloadOptions(**options),
+    )
 
 
 @pytest.fixture
@@ -68,61 +82,52 @@ class TestYtdlpAdapter:
 
 
 class TestBuildArgs:
-    """Tests for argument building."""
+    """Tests for base argument building."""
 
     def test_base_args_basic(self, adapter):
-        video = Video(
-            title="Test",
-            url="https://youtube.com/watch?v=test",
-            uploader="Test",
-            duration=60,
-            options=DownloadOptions(file_format="mp3"),
-        )
-        args = adapter._build_base_args(video)
+        args = adapter._build_base_args(make_video(file_format="mp3"))
         assert "yt-dlp" in args
         assert "--no-check-certificate" not in args
         assert "https://youtube.com/watch?v=test" not in args
 
     def test_certificate_verification_disabled_when_configured(self, adapter):
-        video = Video(
-            title="Test",
-            url="https://youtube.com/watch?v=test",
-            options=DownloadOptions(file_format="mp3"),
-        )
         adapter._config.verify_certificates = False
-        args = adapter._build_base_args(video)
+        args = adapter._build_base_args(make_video(file_format="mp3"))
         assert "--no-check-certificate" in args
 
-    def test_cookies_from_browser(self, adapter):
-        video = Video(
-            title="Test",
-            url="https://youtube.com/watch?v=test",
-            uploader="Test",
-            duration=60,
-            options=DownloadOptions(
-                use_cookies=True,
-                cookies_from_browser="firefox",
-                cookies_profile="default",
+    @pytest.mark.parametrize(
+        ("options", "expected"),
+        [
+            ({"use_cookies": True, "cookies_from_browser": "firefox"}, "--cookies-from-browser"),
+            (
+                {
+                    "use_cookies": True,
+                    "cookies_from_browser": "firefox",
+                    "cookies_profile": "my-profile",
+                },
+                "firefox:my-profile",
             ),
-        )
-        args = adapter._build_base_args(video)
+        ],
+    )
+    def test_cookies_from_browser(self, adapter, options, expected):
+        args = adapter._build_base_args(make_video(**options))
         assert "--cookies-from-browser" in args
-        assert "firefox" in args
+        assert expected in args
 
-    def test_cookies_from_browser_with_profile(self, adapter):
-        video = Video(
-            title="Test",
-            url="https://youtube.com/watch?v=test",
-            uploader="Test",
-            duration=60,
-            options=DownloadOptions(
-                use_cookies=True,
-                cookies_from_browser="firefox",
-                cookies_profile="my-profile",
-            ),
-        )
-        args = adapter._build_base_args(video)
-        assert "firefox:my-profile" in args
+    def test_default_profile_has_no_suffix(self, adapter):
+        with patch(
+            "youmudow.adapters.ytdlp_adapter.check_browser_profile",
+            return_value=(True, ""),
+        ):
+            args = adapter._build_base_args(
+                make_video(
+                    use_cookies=True,
+                    cookies_from_browser="firefox",
+                    cookies_profile="main",
+                )
+            )
+        assert "--cookies-from-browser" in args
+        assert "firefox:main" not in args
 
     def test_cookies_from_file(self, adapter):
         with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as f:
@@ -130,62 +135,31 @@ class TestBuildArgs:
             temp_file = f.name
 
         try:
-            video = Video(
-                title="Test",
-                url="https://youtube.com/watch?v=test",
-                uploader="Test",
-                duration=60,
-                options=DownloadOptions(
-                    use_cookies=True,
-                    cookies_file=temp_file,
-                    cookies_from_browser=None,
-                ),
+            args = adapter._build_base_args(
+                make_video(use_cookies=True, cookies_file=temp_file, cookies_from_browser=None)
             )
-            args = adapter._build_base_args(video)
             assert "--cookies" in args
             assert temp_file in args
         finally:
             os.unlink(temp_file)
 
     def test_cookies_from_nonexistent_file(self, adapter):
-        video = Video(
-            title="Test",
-            url="https://youtube.com/watch?v=test",
-            uploader="Test",
-            duration=60,
-            options=DownloadOptions(
-                use_cookies=True,
-                cookies_file="/nonexistent/cookies.txt",
-                cookies_from_browser=None,
-            ),
+        args = adapter._build_base_args(
+            make_video(
+                use_cookies=True, cookies_file="/nonexistent/cookies.txt", cookies_from_browser=None
+            )
         )
-        args = adapter._build_base_args(video)
         assert "--cookies" not in args
 
     def test_no_cookies_when_disabled(self, adapter):
-        video = Video(
-            title="Test",
-            url="https://youtube.com/watch?v=test",
-            uploader="Test",
-            duration=60,
-            options=DownloadOptions(use_cookies=False),
-        )
-        args = adapter._build_base_args(video)
+        args = adapter._build_base_args(make_video(use_cookies=False))
         assert "--cookies-from-browser" not in args
         assert "--cookies" not in args
 
     def test_skip_cookies_flag(self, adapter):
-        video = Video(
-            title="Test",
-            url="https://youtube.com/watch?v=test",
-            uploader="Test",
-            duration=60,
-            options=DownloadOptions(
-                use_cookies=True,
-                cookies_from_browser="firefox",
-            ),
+        args = adapter._build_base_args(
+            make_video(use_cookies=True, cookies_from_browser="firefox"), skip_cookies=True
         )
-        args = adapter._build_base_args(video, skip_cookies=True)
         assert "--cookies-from-browser" not in args
 
 
@@ -193,194 +167,254 @@ class TestBuildDownloadArgs:
     """Tests for download argument building."""
 
     def test_format_mp3(self, adapter):
-        video = Video(
-            title="Test",
-            url="https://youtube.com/watch?v=test",
-            uploader="Test",
-            duration=60,
-            options=DownloadOptions(file_format="mp3", quality="320kbps"),
-        )
-        args = adapter._build_download_args(video)
+        args = adapter._build_download_args(make_video(file_format="mp3", quality="320kbps"))
         assert "--extract-audio" in args
         assert "--audio-format" in args
         assert "mp3" in args
 
     def test_format_mp4(self, adapter):
-        video = Video(
-            title="Test",
-            url="https://youtube.com/watch?v=test",
-            uploader="Test",
-            duration=60,
-            options=DownloadOptions(file_format="mp4", quality="1080p"),
-        )
-        args = adapter._build_download_args(video)
+        args = adapter._build_download_args(make_video(file_format="mp4", quality="1080p"))
         assert "-f" in args
 
     def test_rate_limit_option(self, adapter):
-        video = Video(
-            title="Test",
-            url="https://youtube.com/watch?v=test",
-            uploader="Test",
-            duration=60,
-            options=DownloadOptions(file_format="mp3", rate_limit="1M"),
-        )
-        args = adapter._build_download_args(video)
+        args = adapter._build_download_args(make_video(file_format="mp3", rate_limit="1M"))
         assert "--limit-rate" in args
         assert "1M" in args
 
     def test_split_chapters_option(self, adapter):
-        video = Video(
-            title="Test",
-            url="https://youtube.com/watch?v=test",
-            uploader="Test",
-            duration=60,
-            options=DownloadOptions(file_format="mp4", split_chapters=True),
-        )
-        args = adapter._build_download_args(video)
+        args = adapter._build_download_args(make_video(file_format="mp4", split_chapters=True))
         assert "--split-chapters" in args
 
     def test_subtitles_option(self, adapter):
-        video = Video(
-            title="Test",
-            url="https://youtube.com/watch?v=test",
-            uploader="Test",
-            duration=60,
-            options=DownloadOptions(
+        args = adapter._build_download_args(
+            make_video(
                 file_format="mp3",
                 subtitles=True,
                 subtitle_lang="en,es",
                 embed_subtitles=True,
-            ),
+            )
         )
-        args = adapter._build_download_args(video)
         assert "--write-subs" in args
         assert "--sub-langs" in args
         assert "en,es" in args
         assert "--embed-subs" in args
 
 
-class TestFormatSelectors:
-    """Tests for format selector generation."""
+class TestBuildDownloadArgsOptions:
+    """Metadata, chapters and subtitle option flags."""
 
-    def test_mp3_selector(self, adapter):
-        selector = adapter._get_format_selector("mp3", "best")
-        assert selector == "bestaudio/best"
-
-    def test_mp4_1080p_selector(self, adapter):
-        selector = adapter._get_format_selector("mp4", "1080p")
-        assert "1080" in selector
-
-    def test_audio_quality(self, adapter):
-        assert adapter._get_audio_quality("320kbps") == "0"
-        assert adapter._get_audio_quality("128kbps") == "3"
-        assert adapter._get_audio_quality("96kbps") == "4"
-
-
-class TestProgressParsing:
-    """Tests for progress parsing."""
-
-    def test_parse_progress_with_size(self):
-        a = YtdlpAdapter()
-        info = a._parse_progress("[download] 50.0% of ~10.0MiB at 1.0MiB/s ETA 00:30")
-        assert info is not None
-        assert info.progress == 50.0
-
-    def test_parse_progress_without_size(self):
-        a = YtdlpAdapter()
-        info = a._parse_progress("[download] 75.0% at 2.0MiB/s ETA 00:15")
-        assert info is not None
-        assert info.progress == 75.0
-
-    def test_parse_non_progress(self):
-        a = YtdlpAdapter()
-        info = a._parse_progress("[info] Downloading video")
-        assert info is None
-
-
-class TestDurationParsing:
-    """Tests for duration parsing."""
-
-    def test_parse_minutes(self):
-        a = YtdlpAdapter()
-        assert a._parse_duration("3:45") == 225
-
-    def test_parse_hours(self):
-        a = YtdlpAdapter()
-        assert a._parse_duration("1:30:45") == 5445
-
-    def test_parse_seconds(self):
-        a = YtdlpAdapter()
-        assert a._parse_duration("90") == 90
-
-    def test_parse_invalid(self):
-        a = YtdlpAdapter()
-        assert a._parse_duration("invalid") == 0
-        assert a._parse_duration("") == 0
-        assert a._parse_duration(None) == 0
-
-
-class TestBuildDownloadArgsSubtitles:
-    """Tests for subtitle argument building in download args."""
-
-    def test_embed_subs_from_config_includes_write_subs(self):
-        """embed_subs from YtdlpConfig must include --write-subs or it's a no-op."""
-        from youmudow.adapters.ytdlp_adapter import YtdlpAdapter, YtdlpConfig
-        from youmudow.domain.models import DownloadOptions, Video
-
-        config = YtdlpConfig(embed_subs=True)
-        adapter = YtdlpAdapter(config=config)
-
-        video = Video(
-            title="Test",
-            url="https://youtube.com/watch?v=x",
-            options=DownloadOptions(subtitles=False),
-        )
-        args = adapter._build_download_args(video)
-
+    @pytest.mark.parametrize(
+        ("options", "config_overrides", "expected_flags"),
+        [
+            ({"file_format": "mp3"}, {}, ["--embed-thumbnail"]),
+            ({"file_format": "mp4"}, {"add_chapters": True}, ["--embed-chapters"]),
+            (
+                {"file_format": "mp3"},
+                {"parse_metadata": "title:%(title)s"},
+                ["--parse-metadata"],
+            ),
+            (
+                {"file_format": "mp3"},
+                {"metadata_from_title": "artist - title"},
+                ["--metadata-from-title"],
+            ),
+            (
+                {"subtitles": True, "subtitle_lang": "en,es", "embed_subtitles": True},
+                {},
+                ["--write-subs", "--sub-langs", "--embed-subs"],
+            ),
+            ({"subtitles": False}, {"embed_subs": True}, ["--write-subs", "--embed-subs"]),
+        ],
+    )
+    def test_flags(self, options, config_overrides, expected_flags):
+        adapter = YtdlpAdapter(YtdlpConfig(**config_overrides))
+        args = adapter._build_download_args(make_video(**options))
+        for flag in expected_flags:
+            assert flag in args
         if "--embed-subs" in args:
             assert "--write-subs" in args, (
                 "--embed-subs added without --write-subs: yt-dlp will ignore it silently"
             )
+        if "--sub-langs" in args:
+            lang = args[args.index("--sub-langs") + 1]
+            assert lang == options.get("subtitle_lang", "en")
 
-    def test_subtitles_true_includes_write_subs(self):
-        from youmudow.adapters.ytdlp_adapter import YtdlpAdapter
-        from youmudow.domain.models import DownloadOptions, Video
+    def test_no_embed_thumbnail_for_mp4(self, adapter):
+        args = adapter._build_download_args(make_video(file_format="mp4"))
+        assert "--embed-thumbnail" not in args
 
-        adapter = YtdlpAdapter()
-        video = Video(
-            title="Test",
-            url="https://youtube.com/watch?v=x",
-            options=DownloadOptions(subtitles=True, subtitle_lang="es"),
-        )
-        args = adapter._build_download_args(video)
 
-        assert "--write-subs" in args
-        assert "--sub-langs" in args
-        idx = args.index("--sub-langs")
-        assert args[idx + 1] == "es"
+class TestFormatSelectors:
+    """Format selector and audio quality generation."""
 
-    def test_embed_subtitles_requires_subtitles_true(self):
-        from youmudow.adapters.ytdlp_adapter import YtdlpAdapter
-        from youmudow.domain.models import DownloadOptions, Video
+    @pytest.mark.parametrize(
+        ("fmt", "quality", "expected"),
+        [
+            ("mp3", "best", "bestaudio/best"),
+            ("mp4", "1080p", "bestvideo[height<=1080]+bestaudio/best"),
+            ("mp4", "720p", "bestvideo[height<=720]+bestaudio/best"),
+            ("mp4", "8k", "bestvideo+bestaudio/best"),
+        ],
+    )
+    def test_selector(self, adapter, fmt, quality, expected):
+        assert adapter._get_format_selector(fmt, quality) == expected
 
-        adapter = YtdlpAdapter()
-        video = Video(
-            title="Test",
-            url="https://youtube.com/watch?v=x",
-            options=DownloadOptions(subtitles=True, embed_subtitles=True),
-        )
-        args = adapter._build_download_args(video)
+    @pytest.mark.parametrize(
+        ("quality", "expected"),
+        [
+            ("320kbps", "0"),
+            ("256kbps", "1"),
+            ("192kbps", "2"),
+            ("128kbps", "3"),
+            ("96kbps", "4"),
+            ("64kbps", "5"),
+            ("best", "0"),
+            ("", "0"),
+        ],
+    )
+    def test_audio_quality(self, adapter, quality, expected):
+        assert adapter._get_audio_quality(quality) == expected
 
-        assert "--write-subs" in args
-        assert "--embed-subs" in args
+
+class TestProgressParsing:
+    """Progress output parsing."""
+
+    @pytest.mark.parametrize(
+        ("line", "progress", "speed", "eta", "size"),
+        [
+            (
+                "[download] 50.0% of ~10.0MiB at 1.0MiB/s ETA 00:30",
+                50.0,
+                "1.0MiB/s",
+                "00:30",
+                "",
+            ),
+            ("[download] 75.0% at 2.0MiB/s ETA 00:15", 75.0, "2.0MiB/s", "00:15", ""),
+            ("[download] 50.0% of ~10.0MiB", 50.0, "", "", "10.0MiB"),
+        ],
+    )
+    def test_parse_progress(self, line, progress, speed, eta, size):
+        info = YtdlpAdapter()._parse_progress(line)
+        assert info is not None
+        assert info.progress == progress
+        assert info.speed == speed
+        assert info.eta == eta
+        assert info.size == size
+
+    def test_parse_non_progress(self):
+        assert YtdlpAdapter()._parse_progress("[info] Downloading video") is None
+
+
+class TestDurationParsing:
+    """Duration string parsing."""
+
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            ("3:45", 225),
+            ("1:30:45", 5445),
+            ("90", 90),
+            ("invalid", 0),
+            ("", 0),
+            (None, 0),
+        ],
+    )
+    def test_parse_duration(self, value, expected):
+        assert YtdlpAdapter()._parse_duration(value) == expected
+
+
+class TestParseYtDlpError:
+    """yt-dlp error output parsing."""
+
+    @pytest.mark.parametrize(
+        ("output", "expected"),
+        [
+            ("", "Download failed"),
+            ("ERROR: This video is private", "Video is private"),
+            ("ERROR: video has been removed", "Video has been removed"),
+            ("ERROR: network connection error", "Connection error"),
+            ("ERROR: permission denied", "Permission denied"),
+            ("ERROR: please sign in", "Authentication required"),
+            ("ERROR: captcha required", "CAPTCHA required"),
+            (
+                "The uploader has not made this video available in your region",
+                "Video not available in your region",
+            ),
+            ("この動画は地域制限", "Video not available in your region"),
+            (
+                "ERROR: could not find chrome cookies",
+                "Chrome cookies not found - is Chrome installed?",
+            ),
+            ("ERROR: cookies database is locked", "Cookies locked - browser may be running"),
+            ("ERROR: Something totally unexpected", "Download failed"),
+        ],
+    )
+    def test_parse(self, output, expected):
+        assert parse_yt_dlp_error(output) == expected
+
+
+class TestParseCookieError:
+    """Cookie error output parsing."""
+
+    @pytest.mark.parametrize(
+        ("output", "expected"),
+        [
+            (
+                "ERROR: could not find firefox cookies",
+                "Firefox cookies not found - is Firefox installed?",
+            ),
+            (
+                "ERROR: could not find chrome cookies",
+                "Chrome cookies not found - is Chrome installed?",
+            ),
+            ("ERROR: something not found", "Browser cookies not found"),
+            ("ERROR: cookies are locked", "Cookies locked - browser may be running"),
+            ("ERROR: profile not accessible", "Browser profile not accessible"),
+            ("ERROR: database corrupted", "Cookies database corrupted or inaccessible"),
+            ("ERROR: no such file or directory", "Browser profile directory not found"),
+            ("ERROR: something else", "Cookie authentication failed"),
+        ],
+    )
+    def test_parse(self, output, expected):
+        assert parse_cookie_error(output) == expected
+
+
+class TestResolveOutputFile:
+    """Resolving the actual downloaded file."""
+
+    def test_returns_most_recent_match(self, tmp_path):
+        (tmp_path / "Song.mp3").write_text("x")
+        (tmp_path / "Song.mp4").write_text("y")
+        os.utime(tmp_path / "Song.mp3", (1_600_000_000, 1_600_000_000))
+        os.utime(tmp_path / "Song.mp4", (1_700_000_000, 1_700_000_000))
+        result = YtdlpAdapter()._resolve_output_file(tmp_path, "Song")
+        assert result == tmp_path / "Song.mp4"
+
+    def test_returns_none_when_no_match(self, tmp_path):
+        assert YtdlpAdapter()._resolve_output_file(tmp_path, "Nothing") is None
+
+
+class TestDownloadCancel:
+    """Download cancellation."""
+
+    def test_cancelled_before_start(self, tmp_path, sample_video):
+        cancel_event = threading.Event()
+        cancel_event.set()
+        result = YtdlpAdapter().download(sample_video, tmp_path, cancel_event=cancel_event)
+        assert result.status == DownloadStatus.CANCELLED
+
+    def test_file_not_resolved_when_cancelled(self, tmp_path, sample_video):
+        cancel_event = threading.Event()
+        cancel_event.set()
+        result = YtdlpAdapter().download(sample_video, tmp_path, cancel_event=cancel_event)
+        assert result.path == tmp_path
+        assert result.status == DownloadStatus.CANCELLED
 
 
 class TestSearchErrorHandling:
+    """Error handling for search/metadata subprocesses."""
+
     def test_search_logs_error_on_nonzero_returncode(self):
-        from unittest.mock import Mock, patch
-
-        from youmudow.adapters.ytdlp_adapter import YtdlpAdapter
-
         adapter = YtdlpAdapter()
         logs = []
         adapter.set_log_callback(logs.append)
@@ -399,10 +433,6 @@ class TestSearchErrorHandling:
         )
 
     def test_get_metadata_logs_error_on_nonzero_returncode(self):
-        from unittest.mock import Mock, patch
-
-        from youmudow.adapters.ytdlp_adapter import YtdlpAdapter
-
         adapter = YtdlpAdapter()
         logs = []
         adapter.set_log_callback(logs.append)
@@ -418,368 +448,6 @@ class TestSearchErrorHandling:
         assert result is None
         assert any("error" in log.lower() or "unavailable" in log.lower() for log in logs), (
             f"Error not logged. Logs: {logs}"
-        )
-
-
-class TestParseYtDlpError:
-    """Tests for yt-dlp error parsing."""
-
-    def test_empty_output(self):
-        from youmudow.adapters.ytdlp_adapter import parse_yt_dlp_error
-
-        assert parse_yt_dlp_error("") == "Download failed"
-
-    def test_private_video(self):
-        from youmudow.adapters.ytdlp_adapter import parse_yt_dlp_error
-
-        assert parse_yt_dlp_error("ERROR: This video is private") == "Video is private"
-
-    def test_region_block(self):
-        from youmudow.adapters.ytdlp_adapter import parse_yt_dlp_error
-
-        assert (
-            parse_yt_dlp_error("The uploader has not made this video available in your region")
-            == "Video not available in your region"
-        )
-
-    def test_cookie_not_found(self):
-        from youmudow.adapters.ytdlp_adapter import parse_yt_dlp_error
-
-        assert (
-            parse_yt_dlp_error("ERROR: could not find chrome cookies")
-            == "Chrome cookies not found - is Chrome installed?"
-        )
-
-    def test_cookie_locked(self):
-        from youmudow.adapters.ytdlp_adapter import parse_yt_dlp_error
-
-        result = parse_yt_dlp_error("ERROR: cookies database is locked")
-        assert "locked" in result.lower()
-
-    def test_generic_failure(self):
-        from youmudow.adapters.ytdlp_adapter import parse_yt_dlp_error
-
-        assert parse_yt_dlp_error("ERROR: Something totally unexpected") == "Download failed"
-
-    def test_cookie_error_parsing(self):
-        from youmudow.adapters.ytdlp_adapter import parse_cookie_error
-
-        assert parse_cookie_error("profile not accessible") == "Browser profile not accessible"
-
-
-class TestResolveOutputFile:
-    """Tests for resolving the actual downloaded file."""
-
-    def test_returns_most_recent_match(self, tmp_path):
-        import os
-
-        from youmudow.adapters.ytdlp_adapter import YtdlpAdapter
-
-        (tmp_path / "Song.mp3").write_text("x")
-        (tmp_path / "Song.mp4").write_text("y")
-        os.utime(tmp_path / "Song.mp3", (1_600_000_000, 1_600_000_000))
-        os.utime(tmp_path / "Song.mp4", (1_700_000_000, 1_700_000_000))
-        adapter = YtdlpAdapter()
-        result = adapter._resolve_output_file(tmp_path, "Song")
-        assert result == tmp_path / "Song.mp4"
-
-    def test_returns_none_when_no_match(self, tmp_path):
-        from youmudow.adapters.ytdlp_adapter import YtdlpAdapter
-
-        adapter = YtdlpAdapter()
-        assert adapter._resolve_output_file(tmp_path, "Nothing") is None
-
-
-class TestDownloadCancel:
-    """Tests for download cancellation."""
-
-    def test_cancelled_before_start(self, tmp_path, sample_video):
-        import threading
-
-        from youmudow.adapters.ytdlp_adapter import YtdlpAdapter
-        from youmudow.domain.enums import DownloadStatus
-
-        cancel_event = threading.Event()
-        cancel_event.set()
-        adapter = YtdlpAdapter()
-        result = adapter.download(sample_video, tmp_path, cancel_event=cancel_event)
-        assert result.status == DownloadStatus.CANCELLED
-
-    def test_file_not_resolved_when_cancelled(self, tmp_path, sample_video):
-        import threading
-
-        from youmudow.adapters.ytdlp_adapter import YtdlpAdapter
-        from youmudow.domain.enums import DownloadStatus
-
-        cancel_event = threading.Event()
-        cancel_event.set()
-        adapter = YtdlpAdapter()
-        result = adapter.download(sample_video, tmp_path, cancel_event=cancel_event)
-        assert result.path == tmp_path
-        assert result.status == DownloadStatus.CANCELLED
-
-
-class TestParseCookieError:
-    """Tests for cookie error parsing."""
-
-    def test_browser_cookies_not_found(self):
-        from youmudow.adapters.ytdlp_adapter import parse_cookie_error
-
-        assert (
-            parse_cookie_error("ERROR: could not find firefox cookies")
-            == "Firefox cookies not found - is Firefox installed?"
-        )
-
-    def test_generic_not_found(self):
-        from youmudow.adapters.ytdlp_adapter import parse_cookie_error
-
-        assert parse_cookie_error("ERROR: something not found") == "Browser cookies not found"
-
-    def test_locked(self):
-        from youmudow.adapters.ytdlp_adapter import parse_cookie_error
-
-        assert (
-            parse_cookie_error("ERROR: cookies are locked")
-            == "Cookies locked - browser may be running"
-        )
-
-    def test_profile(self):
-        from youmudow.adapters.ytdlp_adapter import parse_cookie_error
-
-        assert (
-            parse_cookie_error("ERROR: profile not accessible") == "Browser profile not accessible"
-        )
-
-    def test_database(self):
-        from youmudow.adapters.ytdlp_adapter import parse_cookie_error
-
-        assert (
-            parse_cookie_error("ERROR: database corrupted")
-            == "Cookies database corrupted or inaccessible"
-        )
-
-    def test_directory(self):
-        from youmudow.adapters.ytdlp_adapter import parse_cookie_error
-
-        assert (
-            parse_cookie_error("ERROR: no such file or directory")
-            == "Browser profile directory not found"
-        )
-
-    def test_unknown(self):
-        from youmudow.adapters.ytdlp_adapter import parse_cookie_error
-
-        assert parse_cookie_error("ERROR: something else") == "Cookie authentication failed"
-
-
-class TestParseYtDlpErrorExtended:
-    """More error-parsing cases."""
-
-    def test_region_japanese(self):
-        from youmudow.adapters.ytdlp_adapter import parse_yt_dlp_error
-
-        assert parse_yt_dlp_error("この動画は地域制限") == "Video not available in your region"
-
-    def test_connection_error(self):
-        from youmudow.adapters.ytdlp_adapter import parse_yt_dlp_error
-
-        assert parse_yt_dlp_error("ERROR: network connection error") == "Connection error"
-
-    def test_removed(self):
-        from youmudow.adapters.ytdlp_adapter import parse_yt_dlp_error
-
-        assert parse_yt_dlp_error("ERROR: video has been removed") == "Video has been removed"
-
-    def test_permission_denied(self):
-        from youmudow.adapters.ytdlp_adapter import parse_yt_dlp_error
-
-        assert parse_yt_dlp_error("ERROR: permission denied") == "Permission denied"
-
-    def test_auth_required(self):
-        from youmudow.adapters.ytdlp_adapter import parse_yt_dlp_error
-
-        assert parse_yt_dlp_error("ERROR: please sign in") == "Authentication required"
-
-    def test_captcha(self):
-        from youmudow.adapters.ytdlp_adapter import parse_yt_dlp_error
-
-        assert parse_yt_dlp_error("ERROR: captcha required") == "CAPTCHA required"
-
-    def test_cookie_delegation(self):
-        from youmudow.adapters.ytdlp_adapter import parse_yt_dlp_error
-
-        assert (
-            parse_yt_dlp_error("ERROR: could not find chrome cookies")
-            == "Chrome cookies not found - is Chrome installed?"
-        )
-
-
-class TestBuildBaseArgsFallbacks:
-    """Fallback and config-level argument building."""
-
-    def _adapter_with_config(self, **kwargs):
-        return YtdlpAdapter(YtdlpConfig(**kwargs))
-
-    def test_ffmpeg_and_user_agent(self):
-        adapter = self._adapter_with_config(ffmpeg_location="/usr/bin", user_agent="UA/1.0")
-        args = adapter._build_base_args()
-        assert "--ffmpeg-location" in args
-        assert "/usr/bin" in args
-        assert "--user-agent" in args
-        assert "UA/1.0" in args
-
-    def test_config_cookies_file_without_video(self):
-        adapter = self._adapter_with_config(cookies_file="/tmp/cookies.txt")
-        args = adapter._build_base_args()
-        assert "--cookies" in args
-
-    def test_config_cookies_file_skipped(self):
-        adapter = self._adapter_with_config(cookies_file="/tmp/cookies.txt")
-        args = adapter._build_base_args(skip_cookies=True)
-        assert "--cookies" not in args
-
-    def test_browser_fallback(self):
-        video = Video(
-            title="Test",
-            url="https://youtube.com/watch?v=test",
-            options=DownloadOptions(use_cookies=True, cookies_from_browser="chrome"),
-        )
-        adapter = YtdlpAdapter()
-        logs = []
-        adapter.set_log_callback(logs.append)
-        with (
-            patch(
-                "youmudow.adapters.ytdlp_adapter.check_browser_profile",
-                return_value=(False, "chrome not installed"),
-            ),
-            patch(
-                "youmudow.adapters.ytdlp_adapter.get_fallback_browser",
-                return_value="firefox",
-            ),
-        ):
-            args = adapter._build_base_args(video)
-        assert "--cookies-from-browser" in args
-        assert "firefox" in args
-        assert any("Falling back to Firefox" in log for log in logs)
-
-    def test_fallback_equals_browser_no_change(self):
-        video = Video(
-            title="Test",
-            url="https://youtube.com/watch?v=test",
-            options=DownloadOptions(use_cookies=True, cookies_from_browser="firefox"),
-        )
-        adapter = YtdlpAdapter()
-        with (
-            patch(
-                "youmudow.adapters.ytdlp_adapter.check_browser_profile",
-                return_value=(False, "not installed"),
-            ),
-            patch(
-                "youmudow.adapters.ytdlp_adapter.get_fallback_browser",
-                return_value="firefox",
-            ),
-        ):
-            args = adapter._build_base_args(video)
-        assert "firefox" in args
-
-    def test_default_profile_has_no_suffix(self):
-        video = Video(
-            title="Test",
-            url="https://youtube.com/watch?v=test",
-            options=DownloadOptions(
-                use_cookies=True,
-                cookies_from_browser="firefox",
-                cookies_profile="main",
-            ),
-        )
-        adapter = YtdlpAdapter()
-        with patch(
-            "youmudow.adapters.ytdlp_adapter.check_browser_profile",
-            return_value=(True, ""),
-        ):
-            args = adapter._build_base_args(video)
-        assert "--cookies-from-browser" in args
-        assert "firefox:main" not in args
-
-
-class TestBuildDownloadArgsExtended:
-    """Metadata, chapters and subtitle options."""
-
-    def test_embed_thumbnail_for_mp3(self, adapter):
-        video = Video(
-            title="Test",
-            url="https://youtube.com/watch?v=test",
-            options=DownloadOptions(file_format="mp3"),
-        )
-        args = adapter._build_download_args(video)
-        assert "--embed-thumbnail" in args
-
-    def test_no_embed_thumbnail_for_mp4(self, adapter):
-        video = Video(
-            title="Test",
-            url="https://youtube.com/watch?v=test",
-            options=DownloadOptions(file_format="mp4"),
-        )
-        args = adapter._build_download_args(video)
-        assert "--embed-thumbnail" not in args
-
-    def test_embed_chapters(self, adapter):
-        adapter._config.add_chapters = True
-        video = Video(
-            title="Test",
-            url="https://youtube.com/watch?v=test",
-            options=DownloadOptions(file_format="mp4"),
-        )
-        args = adapter._build_download_args(video)
-        assert "--embed-chapters" in args
-
-    def test_parse_metadata(self, adapter):
-        adapter._config.parse_metadata = "title:%(title)s"
-        video = Video(
-            title="Test",
-            url="https://youtube.com/watch?v=test",
-            options=DownloadOptions(file_format="mp3"),
-        )
-        args = adapter._build_download_args(video)
-        assert "--parse-metadata" in args
-
-    def test_metadata_from_title(self, adapter):
-        adapter._config.metadata_from_title = "artist - title"
-        video = Video(
-            title="Test",
-            url="https://youtube.com/watch?v=test",
-            options=DownloadOptions(file_format="mp3"),
-        )
-        args = adapter._build_download_args(video)
-        assert "--metadata-from-title" in args
-
-    def test_config_embed_subs_without_options(self, adapter):
-        adapter._config.embed_subs = True
-        video = Video(
-            title="Test",
-            url="https://youtube.com/watch?v=test",
-            options=DownloadOptions(file_format="mp4", subtitles=False),
-        )
-        args = adapter._build_download_args(video)
-        assert "--write-subs" in args
-        assert "--embed-subs" in args
-
-
-class TestFormatSelectorsExtended:
-    """Additional format selector cases."""
-
-    def test_audio_quality_default(self, adapter):
-        assert adapter._get_audio_quality("best") == "0"
-        assert adapter._get_audio_quality("192kbps") == "2"
-        assert adapter._get_audio_quality("") == "0"
-
-    def test_video_unknown_quality(self, adapter):
-        selector = adapter._get_format_selector("mp4", "8k")
-        assert selector == "bestvideo+bestaudio/best"
-
-    def test_video_known_quality(self, adapter):
-        assert (
-            adapter._get_format_selector("mp4", "720p") == "bestvideo[height<=720]+bestaudio/best"
         )
 
 
@@ -907,24 +575,16 @@ class TestLogDownloadMessages:
     def test_log_start_embeds_metadata_and_thumbnail(self, adapter):
         logs = []
         adapter.set_log_callback(logs.append)
-        video = Video(
-            title="Song",
-            url="https://youtube.com/watch?v=test",
-            options=DownloadOptions(file_format="mp3"),
-        )
-        adapter._log_download_start(video, "mp3")
+        adapter._log_download_start(make_video(file_format="mp3"), "mp3")
         joined = "\n".join(logs)
         assert "[METADATA] Embedding: metadata, thumbnail" in joined
 
     def test_log_start_subtitles(self, adapter):
         logs = []
         adapter.set_log_callback(logs.append)
-        video = Video(
-            title="Song",
-            url="https://youtube.com/watch?v=test",
-            options=DownloadOptions(file_format="mp3", subtitles=True, embed_subtitles=True),
+        adapter._log_download_start(
+            make_video(file_format="mp3", subtitles=True, embed_subtitles=True), "mp3"
         )
-        adapter._log_download_start(video, "mp3")
         joined = "\n".join(logs)
         assert "[SUB] Downloading subtitles (en)" in joined
         assert "[SUB] Embedding subtitles in file" in joined
@@ -932,26 +592,88 @@ class TestLogDownloadMessages:
     def test_log_success(self, adapter):
         logs = []
         adapter.set_log_callback(logs.append)
-        video = Video(
-            title="Song",
-            url="https://youtube.com/watch?v=test",
-            options=DownloadOptions(file_format="mp3"),
-        )
-        adapter._log_download_success(video, "mp3")
+        adapter._log_download_success(make_video(file_format="mp3"), "mp3")
         joined = "\n".join(logs)
-        assert "[DONE] Song" in joined
+        assert "[DONE] Test" in joined
 
 
 class TestIsCookieError:
     """Cookie error detection."""
 
-    def test_matches(self, adapter):
-        assert adapter._is_cookie_error("ERROR: could not find chrome cookies")
-        assert adapter._is_cookie_error("cookies database locked")
-        assert adapter._is_cookie_error("brave profile not found")
+    @pytest.mark.parametrize(
+        "output",
+        [
+            "ERROR: could not find chrome cookies",
+            "cookies database locked",
+            "brave profile not found",
+        ],
+    )
+    def test_matches(self, adapter, output):
+        assert adapter._is_cookie_error(output)
 
     def test_does_not_match(self, adapter):
         assert not adapter._is_cookie_error("ERROR: network timeout")
+
+
+class TestBuildBaseArgsFallbacks:
+    """Fallback and config-level argument building."""
+
+    def _adapter_with_config(self, **kwargs):
+        return YtdlpAdapter(YtdlpConfig(**kwargs))
+
+    def test_ffmpeg_and_user_agent(self):
+        adapter = self._adapter_with_config(ffmpeg_location="/usr/bin", user_agent="UA/1.0")
+        args = adapter._build_base_args()
+        assert "--ffmpeg-location" in args
+        assert "/usr/bin" in args
+        assert "--user-agent" in args
+        assert "UA/1.0" in args
+
+    def test_config_cookies_file_without_video(self):
+        adapter = self._adapter_with_config(cookies_file="/tmp/cookies.txt")
+        args = adapter._build_base_args()
+        assert "--cookies" in args
+
+    def test_config_cookies_file_skipped(self):
+        adapter = self._adapter_with_config(cookies_file="/tmp/cookies.txt")
+        args = adapter._build_base_args(skip_cookies=True)
+        assert "--cookies" not in args
+
+    def test_browser_fallback(self):
+        video = make_video(use_cookies=True, cookies_from_browser="chrome")
+        adapter = YtdlpAdapter()
+        logs = []
+        adapter.set_log_callback(logs.append)
+        with (
+            patch(
+                "youmudow.adapters.ytdlp_adapter.check_browser_profile",
+                return_value=(False, "chrome not installed"),
+            ),
+            patch(
+                "youmudow.adapters.ytdlp_adapter.get_fallback_browser",
+                return_value="firefox",
+            ),
+        ):
+            args = adapter._build_base_args(video)
+        assert "--cookies-from-browser" in args
+        assert "firefox" in args
+        assert any("Falling back to Firefox" in log for log in logs)
+
+    def test_fallback_equals_browser_no_change(self):
+        video = make_video(use_cookies=True, cookies_from_browser="firefox")
+        adapter = YtdlpAdapter()
+        with (
+            patch(
+                "youmudow.adapters.ytdlp_adapter.check_browser_profile",
+                return_value=(False, "not installed"),
+            ),
+            patch(
+                "youmudow.adapters.ytdlp_adapter.get_fallback_browser",
+                return_value="firefox",
+            ),
+        ):
+            args = adapter._build_base_args(video)
+        assert "firefox" in args
 
 
 class FakeProcess:
@@ -1005,8 +727,6 @@ class TestRunProcess:
         assert progress == [(50.0, "1.2MiB/s")]
 
     def test_missing_binary_raises(self, tmp_path, sample_video):
-        from youmudow.domain.exceptions import YtDlpNotFoundError
-
         adapter = YtdlpAdapter()
         with (
             patch("subprocess.Popen", side_effect=FileNotFoundError),
@@ -1061,11 +781,7 @@ class TestDownloadFlows:
         sleep.assert_called()
 
     def test_cookie_retry_without_auth(self, tmp_path):
-        video = Video(
-            title="Test",
-            url="https://youtube.com/watch?v=test",
-            options=DownloadOptions(use_cookies=True, cookies_from_browser="chrome"),
-        )
+        video = make_video(use_cookies=True, cookies_from_browser="chrome")
         adapter = YtdlpAdapter(YtdlpConfig(max_retries=2))
         skipped = []
 
@@ -1107,8 +823,6 @@ class TestDownloadFlows:
         assert result.status == DownloadStatus.CANCELLED
 
     def test_ytdlp_error_raised(self, tmp_path, sample_video):
-        from youmudow.domain.exceptions import YtDlpError
-
         adapter = YtdlpAdapter()
         with patch.object(adapter, "_run_process", side_effect=YtDlpError("boom")):
             result = self._download(sample_video, tmp_path, adapter=adapter)

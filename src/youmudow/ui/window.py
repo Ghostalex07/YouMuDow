@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any
 from youmudow import __version__
 from youmudow.adapters.browser_profiles import get_available_browsers
 from youmudow.app.events import EventBus, EventType, get_event_bus
-from youmudow.app.state import AppStateData
+from youmudow.app.state import AppMode, AppState, AppStateData
 from youmudow.domain.models import Video
 from youmudow.domain.validators import (
     is_playlist_url,
@@ -272,12 +272,12 @@ class MainWindow:
         self._controller.state.on_change(on_state_change)
 
     def _update_from_snapshot(self, snapshot: AppStateData) -> None:
-        self._is_downloading = snapshot.state.name == "DOWNLOADING"
+        self._is_downloading = snapshot.state is AppState.DOWNLOADING
 
-        if snapshot.state.name == "SEARCHING":
+        if snapshot.state is AppState.SEARCHING:
             self._is_searching = True
             self._set_status("Searching...")
-        elif snapshot.state.name == "DOWNLOADING":
+        elif snapshot.state is AppState.DOWNLOADING:
             self._is_searching = False
             if snapshot.active_downloads:
                 active = snapshot.active_downloads[0]
@@ -294,7 +294,7 @@ class MainWindow:
                 self._status_bar.progress_var.set(0)
                 self._status_bar.set_progress_color(_c("primary"))
                 self._set_status("Downloading...")
-        elif snapshot.state.name == "ERROR":
+        elif snapshot.state is AppState.ERROR:
             self._is_searching = False
             self._is_downloading = False
             self._set_status(
@@ -305,7 +305,7 @@ class MainWindow:
         else:
             self._is_searching = False
             self._is_downloading = False
-            self._set_status("Ready" if snapshot.state.name == "IDLE" else snapshot.state.name)
+            self._set_status("Ready" if snapshot.state is AppState.IDLE else snapshot.state.name)
             if not snapshot.active_downloads:
                 self._status_bar.progress_var.set(0)
                 self._status_bar.set_progress_color(_c("border"))
@@ -315,7 +315,7 @@ class MainWindow:
             self._detail_panel._update_queue_display(snapshot)
         self._root.after(50, self._status_bar.update_progress_bar)
 
-        mode_is_debug = snapshot.mode.name == "DEBUG"
+        mode_is_debug = snapshot.mode is AppMode.DEBUG
         if mode_is_debug != self._debug_mode:
             self._debug_mode = mode_is_debug
             self._debug_var.set(mode_is_debug)
