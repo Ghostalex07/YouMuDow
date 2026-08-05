@@ -127,8 +127,3 @@ def emit_log(message: str, level: str = "info") -> None:
             timestamp=timestamp,
         )
     )
-
-
-def clear_logs() -> None:
-    """Clear the log display."""
-    emit(LogEvent(type=EventType.LOG_CLEAR))

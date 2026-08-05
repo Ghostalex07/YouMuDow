@@ -54,7 +54,7 @@ Pure data models and validation, no I/O.
 
 - `models.py` — `Video`, `DownloadOptions`, `HistoryEntry` dataclasses and their
   helpers (`from_metadata`, `format_size`, ...).
-- `enums.py` — `DownloadStatus`, `DownloadEventType`, quality/format constants.
+- `enums.py` — `DownloadStatus`, the download lifecycle states.
 - `validators.py` — URL validation (`is_valid_youtube_url`, `is_playlist_url`),
   filename sanitization, rate-limit validation.
 - `exceptions.py` — exception hierarchy rooted at `YouMuDowError`
@@ -137,5 +137,5 @@ instantiates `AppController` and `MainWindow`, and starts the Tkinter main loop.
 ## Logging
 
 Centralized in `logging_config.setup_logging()`: a consistent format, an INFO
-console handler and an optional file handler (`logs/youmudow.log`). Modules use
-`logging.getLogger(__name__)`.
+console handler and an optional file handler (`youmudow.log` in the OS config
+directory). Modules use `logging.getLogger(__name__)`.
