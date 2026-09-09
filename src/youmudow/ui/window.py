@@ -10,6 +10,7 @@ import subprocess
 import threading
 import tkinter as tk
 from collections.abc import Callable
+from copy import copy
 from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -478,7 +479,7 @@ class MainWindow:
             self._is_downloading = True
             self._update_button_states()
             for video in selected:
-                video.options = opts
+                video.options = copy.copy(opts)
             self._controller.enqueue_multiple(selected)
             self._controller.start_downloads()
             self._set_status(f"Downloading {len(selected)} videos...")

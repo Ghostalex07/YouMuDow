@@ -98,6 +98,42 @@ class TestStateManager:
         assert v not in sm.get_snapshot().active_downloads
         assert v in sm.get_queue()
 
+    def test_stop_all_clears_active(self):
+        sm = StateManager()
+        v1 = Video(title="A", url="a")
+        v2 = Video(title="B", url="b")
+        sm.add_to_queue(v1)
+        sm.add_to_queue(v2)
+        sm.start_download(v1)
+        sm.start_download(v2)
+        assert len(sm.get_snapshot().active_downloads) == 2
+        assert sm.state == AppState.DOWNLOADING
+
+        sm.stop_all()
+        snap = sm.get_snapshot()
+        assert snap.active_downloads == []
+        assert snap.state == AppState.IDLE
+        assert v1.status == DownloadStatus.CANCELLED
+        assert v2.status == DownloadStatus.CANCELLED
+
+    def test_stop_all_idempotent(self):
+        sm = StateManager()
+        sm.stop_all()
+        sm.stop_all()
+        assert sm.state == AppState.IDLE
+        assert sm.get_snapshot().active_downloads == []
+
+    def test_stop_all_notifies(self):
+        sm = StateManager()
+        calls = []
+        sm.on_change(lambda s: calls.append(1))
+        v = Video(title="A", url="a")
+        sm.add_to_queue(v)
+        sm.start_download(v)
+        calls.clear()
+        sm.stop_all()
+        assert len(calls) == 1
+
     def test_snapshot(self):
         sm = StateManager()
         v = Video(title="Test", url="url")

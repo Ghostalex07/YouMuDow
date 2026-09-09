@@ -47,6 +47,9 @@ _ERROR_PATTERNS: list[tuple[tuple[str, ...], str]] = [
     (("captcha", "verification"), "CAPTCHA required"),
 ]
 
+_DESTINATION_RE = re.compile(r"\[download\]\s+Destination:\s+(\S+)")
+_ALREADY_DOWNLOADED_RE = re.compile(r"\[download\]\s+(\S+)\s+has already been downloaded")
+
 _COOKIE_BROWSER_NAMES: tuple[str, ...] = ("chrome", "firefox", "edge", "brave", "opera", "vivaldi")
 
 _COOKIE_ERROR_PATTERNS: list[tuple[tuple[str, ...], str]] = [
@@ -129,6 +132,7 @@ class YtdlpAdapter:
     def __init__(self, config: YtdlpConfig | None = None) -> None:
         self._config = config or YtdlpConfig()
         self._log_callback: LogCallback | None = None
+        self._last_destination: Path | None = None
 
     @property
     def config(self) -> YtdlpConfig:
@@ -472,6 +476,7 @@ class YtdlpAdapter:
         Returns (-1, []) if cancelled before process starts.
         """
         error_lines: list[str] = []
+        destinations: list[str] = []
         output_lock = threading.Lock()
 
         try:
@@ -503,6 +508,13 @@ class YtdlpAdapter:
                         with output_lock:
                             if "error" in stripped.lower() or "warning" in stripped.lower():
                                 error_lines.append(stripped)
+                        dest_match = _DESTINATION_RE.search(stripped)
+                        if dest_match:
+                            destinations.append(dest_match.group(1))
+                        else:
+                            already_match = _ALREADY_DOWNLOADED_RE.search(stripped)
+                            if already_match:
+                                destinations.append(already_match.group(1))
                         self._log(stripped)
                         if progress_callback:
                             info = self._parse_progress(stripped)
@@ -531,6 +543,9 @@ class YtdlpAdapter:
                     process.kill()
 
         reader.join(timeout=1)
+        with output_lock:
+            if destinations:
+                self._last_destination = Path(destinations[-1])
         return process.returncode, error_lines
 
     def _is_cookie_error(self, error_output: str) -> bool:
@@ -562,6 +577,7 @@ class YtdlpAdapter:
         output_path.mkdir(parents=True, exist_ok=True)
         video.status = DownloadStatus.DOWNLOADING
         video.path = output_path
+        self._last_destination = None
 
         opts = video.options
         fmt = opts.file_format if opts else "mp3"
@@ -643,7 +659,9 @@ class YtdlpAdapter:
             video.status = DownloadStatus.ERROR
             video.error_message = video.error_message or last_error or "Download failed"
         else:
-            video.path = self._resolve_output_file(output_path, safe_title)
+            video.path = self._last_destination or self._resolve_output_file(
+                output_path, safe_title
+            )
 
         return video
 

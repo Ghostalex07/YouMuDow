@@ -201,12 +201,14 @@ class TestDownloadServiceExtra:
         assert events
         assert events[-1].type == DownloadEventType.QUEUED
 
-    def test_cancel_video_emits_cancelled(self, download_service, sample_video):
+    def test_cancel_video_removes_from_active(self, mock_adapter, sample_video, tmp_path):
+        service = DownloadService(adapter=mock_adapter, default_output_path=tmp_path)
         events = []
-        download_service.on_event(events.append)
-        download_service.add_to_queue(sample_video)
-        download_service.cancel_video(sample_video)
-        assert any(e.type == DownloadEventType.CANCELLED for e in events)
+        service.on_event(events.append)
+        service.add_to_queue(sample_video)
+        service.cancel_video(sample_video)
+        assert service.active_count == 0
+        assert service.queue_size == 0
 
 
 class TestDownloadWorker:
@@ -216,7 +218,7 @@ class TestDownloadWorker:
         worker = DownloadWorker(
             worker_id=0,
             adapter=Mock(),
-            output_path=Path("/tmp"),
+            output_path_getter=lambda: Path("/tmp"),
             progress_callback=Mock(),
         )
         assert worker.is_busy is False
@@ -227,7 +229,7 @@ class TestDownloadWorker:
         assert worker._cancel_event.is_set()
 
     def test_worker_id(self):
-        worker = DownloadWorker(0, Mock(), Path("/tmp"), Mock())
+        worker = DownloadWorker(0, Mock(), lambda: Path("/tmp"), Mock())
         assert worker.worker_id == 0
 
     def test_run_completes(self, mock_adapter, sample_video, tmp_path):
@@ -237,7 +239,7 @@ class TestDownloadWorker:
 
         mock_adapter.download.side_effect = success_download
         events = []
-        worker = DownloadWorker(0, mock_adapter, tmp_path, events.append)
+        worker = DownloadWorker(0, mock_adapter, lambda: tmp_path, events.append)
         worker.start()
         worker.submit(sample_video)
         for _ in range(100):
@@ -252,17 +254,35 @@ class TestDownloadWorker:
         adapter = Mock()
         adapter.download.side_effect = Exception("boom")
         events = []
-        worker = DownloadWorker(0, adapter, tmp_path, events.append)
+        worker = DownloadWorker(0, adapter, lambda: tmp_path, events.append)
         worker.start()
         worker.submit(sample_video)
         for _ in range(100):
-            if any(e.type == DownloadEventType.COMPLETED for e in events):
+            if any(e.type == DownloadEventType.ERROR for e in events):
                 break
             time.sleep(0.02)
         worker.stop()
         worker.join(timeout=2)
         assert sample_video.status == DownloadStatus.ERROR
         assert sample_video.error_message == "boom"
+        assert any(e.type == DownloadEventType.ERROR for e in events)
+
+    def test_run_cancelled(self, sample_video, tmp_path):
+        adapter = Mock()
+        adapter.download.side_effect = lambda video, *a, **kw: (
+            setattr(video, "status", DownloadStatus.CANCELLED) or video
+        )
+        events = []
+        worker = DownloadWorker(0, adapter, lambda: tmp_path, events.append)
+        worker.start()
+        worker.submit(sample_video)
+        for _ in range(100):
+            if any(e.type == DownloadEventType.CANCELLED for e in events):
+                break
+            time.sleep(0.02)
+        worker.stop()
+        worker.join(timeout=2)
+        assert any(e.type == DownloadEventType.CANCELLED for e in events)
 
 
 class TestDownloadServiceConcurrency:
@@ -308,6 +328,104 @@ class TestDownloadServiceConcurrency:
         service.start()
         assert service.is_running is True
         service.stop()
+
+    def test_max_concurrent_respected(self, tmp_path):
+        adapter = Mock()
+
+        def blocking_download(video, *args, **kwargs):
+            video.status = DownloadStatus.DONE
+            time.sleep(0.3)
+            return video
+
+        adapter.download.side_effect = blocking_download
+        service = DownloadService(adapter=adapter, default_output_path=tmp_path, max_concurrent=2)
+        videos = [Video(title=f"V{i}", url=f"url{i}") for i in range(4)]
+        service.add_multiple(videos)
+        completions = []
+        service.on_complete(completions.append)
+        service.start()
+
+        time.sleep(0.1)
+        assert service.active_count == 2, (
+            f"active_count={service.active_count}, expected 2 (max concurrent)"
+        )
+        assert service.queue_size == 2
+
+        assert self._wait_for(lambda: len(completions) == 4, timeout=3.0)
+        service.stop()
+        assert service.active_count == 0
+
+    def test_cancel_one_does_not_affect_others(self, tmp_path):
+        adapter = Mock()
+
+        def blocking_download(video, output_path, progress_callback=None, cancel_event=None):
+            if cancel_event is not None and cancel_event.wait(0.4):
+                video.status = DownloadStatus.CANCELLED
+                return video
+            video.status = DownloadStatus.DONE
+            return video
+
+        adapter.download.side_effect = blocking_download
+        service = DownloadService(adapter=adapter, default_output_path=tmp_path, max_concurrent=2)
+        v0 = Video(title="Slow", url="url0")
+        v1 = Video(title="Fast", url="url1")
+        service.add_multiple([v0, v1])
+        completions = []
+
+        def hook(event):
+            if event.type in (DownloadEventType.COMPLETED, DownloadEventType.CANCELLED):
+                completions.append(event)
+
+        service.on_event(hook)
+        service.start()
+        time.sleep(0.2)
+
+        service.cancel_video(v0)
+        assert self._wait_for(
+            lambda: any(e.type == DownloadEventType.CANCELLED for e in completions)
+        )
+        assert v0.status == DownloadStatus.CANCELLED
+        assert self._wait_for(lambda: len(completions) == 2, timeout=3.0)
+        service.stop()
+        assert v1.status == DownloadStatus.DONE
+
+    def test_stop_joins_workers(self, mock_adapter, sample_video, tmp_path):
+        def success_download(video, *args, **kwargs):
+            video.status = DownloadStatus.DONE
+            return video
+
+        mock_adapter.download.side_effect = success_download
+        service = DownloadService(adapter=mock_adapter, default_output_path=tmp_path)
+        service.add_to_queue(sample_video)
+        service.start()
+        assert self._wait_for(lambda: service.active_count == 0)
+        service.stop()
+        assert service._workers == []
+
+    def test_output_path_updates_after_start(self, tmp_path):
+        adapter = Mock()
+
+        def success_download(video, *args, **kwargs):
+            video.status = DownloadStatus.DONE
+            return video
+
+        adapter.download.side_effect = success_download
+        service = DownloadService(adapter=adapter, default_output_path=tmp_path)
+        service.start()
+        new_path = tmp_path / "moved"
+        service.set_output_path(new_path)
+        received = []
+
+        def hook(event):
+            if event.type == DownloadEventType.STARTED:
+                received.append(event.video)
+
+        service.on_event(hook)
+        service.add_to_queue(Video(title="V2", url="u2"))
+        assert self._wait_for(lambda: len(received) >= 1)
+        service.stop()
+        paths = [c.args[1] for c in adapter.download.call_args_list]
+        assert all(str(new_path) == str(p) for p in paths), f"Paths used: {paths}"
 
 
 class TestDownloadEvents:

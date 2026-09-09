@@ -1,5 +1,6 @@
 """Detail panel widget for YouMuDow."""
 
+import copy
 import logging
 import threading
 import tkinter as tk
@@ -595,7 +596,7 @@ class DetailPanel(tk.Frame):
         val = self._concurrent_var.get()
         if hasattr(self._mw, "_controller") and self._mw._controller:
             ds = self._mw._controller._download_service
-            ds._max_concurrent = val
+            ds.set_max_concurrent(val)
 
     def _on_subtitles_toggle(self) -> None:
         state = "normal" if self._subtitles_var.get() else "disabled"
@@ -661,7 +662,7 @@ class DetailPanel(tk.Frame):
             if opts is None:
                 return
             for video in selected:
-                video.options = opts
+                video.options = copy.copy(opts)
             self._mw._controller.enqueue_multiple(selected)
             self._mw._set_status(f"Added {len(selected)} to queue")
             return
@@ -680,7 +681,7 @@ class DetailPanel(tk.Frame):
             return
         videos = self._mw._results_table.playlist_videos
         for video in videos:
-            video.options = opts
+            video.options = copy.copy(opts)
         self._mw._controller.enqueue_multiple(videos)
         self._mw._set_status(f"Added {len(videos)} videos to queue")
 
