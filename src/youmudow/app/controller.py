@@ -217,10 +217,12 @@ class AppController:
 
     def enqueue(self, video: Video) -> None:
         self._state_manager.add_to_queue(video)
+        if self._download_service.is_running:
+            self._download_service.add_to_queue(video)
 
     def enqueue_multiple(self, videos: list[Video]) -> None:
         for video in videos:
-            self._state_manager.add_to_queue(video)
+            self.enqueue(video)
 
     def remove_from_queue(self, video: Video) -> None:
         """Remove a video from the queue, cancelling it if actively downloading.
@@ -240,9 +242,10 @@ class AppController:
         if not queue:
             return
 
-        for video in queue:
-            self._state_manager.start_download(video)
-
+        # The download service is the source of truth for the download
+        # lifecycle (queue -> active -> terminal). StateManager is updated from
+        # its events: a video moves from `queue` to `active_downloads` only when
+        # the service actually dispatches it (STARTED), never eagerly.
         self._download_service.add_multiple(queue)
         self._download_service.start()
 
@@ -316,6 +319,7 @@ class AppController:
             emit_log(f"[CANCELLED] {video.title}", level="warning")
 
         def on_started(video: Video) -> None:
+            self._state_manager.start_download(video)
             emit_log(f"[DOWNLOAD] Starting: {video.title}", level="info")
 
         self._download_service.on_progress(on_progress)

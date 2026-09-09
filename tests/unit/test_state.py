@@ -73,6 +73,23 @@ class TestStateManager:
         assert v.status == DownloadStatus.DOWNLOADING
         assert sm.state == AppState.DOWNLOADING
 
+    def test_start_download_idempotent_active(self):
+        sm = StateManager()
+        v = Video(title="Test", url="url")
+        sm.add_to_queue(v)
+        sm.start_download(v)
+        sm.start_download(v)
+        assert sm.get_snapshot().active_downloads == [v]
+        assert v not in sm.get_queue()
+
+    def test_start_download_already_active_keeps_single_entry(self):
+        sm = StateManager()
+        v = Video(title="Test", url="url")
+        sm.add_to_queue(v)
+        sm.start_download(v)
+        sm.start_download(Video(title="Copy", url=v.url))
+        assert len(sm.get_snapshot().active_downloads) == 1
+
     def test_finish_download(self):
         sm = StateManager()
         v = Video(title="Test", url="url")
@@ -166,6 +183,20 @@ class TestStateManager:
         snap.queue[0].progress = 99.0
         assert sm.get_queue()[0].title == "Test"
         assert sm.get_queue()[0].progress == 0.0
+
+    def test_snapshot_mutation_of_nested_options_isolated(self):
+        from youmudow.domain.models import DownloadOptions
+
+        sm = StateManager()
+        v = Video(
+            title="Test",
+            url="url",
+            options=DownloadOptions(file_format="mp3", quality="192kbps"),
+        )
+        sm.add_to_queue(v)
+        snap = sm.get_snapshot()
+        snap.queue[0].options.file_format = "mp4"
+        assert sm.get_queue()[0].options.file_format == "mp3"
 
     def test_mutation_tolerant_matching(self):
         sm = StateManager()

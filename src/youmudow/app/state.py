@@ -134,12 +134,18 @@ class StateManager:
         self._notify_change()
 
     def start_download(self, video: Video) -> None:
+        """Move a video into the active download list.
+
+        Safe to call with an already-active video (no duplicate entries).
+        """
         with self._lock:
-            index = self._find_index(self._queue, video)
-            if index >= 0:
-                self._queue.pop(index)
+            queue_index = self._find_index(self._queue, video)
+            active_index = self._find_index(self._active_downloads, video)
+            if queue_index >= 0:
+                self._queue.pop(queue_index)
+            if active_index < 0:
+                self._active_downloads.append(video)
             video.status = DownloadStatus.DOWNLOADING
-            self._active_downloads.append(video)
             if self._state != AppState.DOWNLOADING:
                 self._state = AppState.DOWNLOADING
         self._notify_change()

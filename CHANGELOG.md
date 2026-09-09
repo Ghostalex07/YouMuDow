@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+- Download lifecycle: activation is now event-driven — a video moves to active
+  only when the service reports it started, keeping `StateManager` and the
+  service queue/active state consistent; `StateManager.start_download` is
+  idempotent
+- `DownloadService.stop()` is thread-safe, idempotent and reports workers that
+  refuse to stop; downloads can restart cleanly after stop
+- Duplicate queue entries (same URL already queued/active) are ignored, while a
+  finished download can still be re-queued for retry
+
+### Fixed
+- A terminal `COMPLETED` was emitted even when a download did not end in `DONE`
+  (unknown/partial statuses now map to `ERROR`; only `DONE` maps to `COMPLETED`)
+- Deadlock when a download event callback called `stop()`/`add_to_queue` (the
+  STARTED event was broadcast while holding the service lock)
+- Late worker events could still fire after stop(); they are now dropped once
+  the service is stopped
+- `max_retries=0` produced zero attempts (now treated as one attempt)
+- Output resolution could mistake a pre-existing file for the new download;
+  only files created during the run are considered
+- Reader thread could stay alive if the subprocess died without closing stdout
+  (stdout is now closed on the main thread before joining the reader)
+- Huge playlists were fully enumerated even with a small limit (`--playlist-end`)
+- CLI accepted invalid formats/qualities and unauthenticated-scheme URLs; it now
+  validates URL/format/quality and returns 130 on Ctrl+C
+
 ## [5.0.0] - 2026-08-04
 
 ### Added

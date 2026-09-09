@@ -159,12 +159,33 @@ class DownloadWorker(threading.Thread):
             with self._video_lock:
                 self._current_video = None
 
-            if video.status == DownloadStatus.CANCELLED:
-                event_type = DownloadEventType.CANCELLED
-            elif video.status == DownloadStatus.ERROR:
-                event_type = DownloadEventType.ERROR
-            else:
+            if self._shutdown.is_set():
+                # Service is shutting down: the terminal state is managed by
+                # DownloadService.stop() itself, so no event is broadcast.
+                logger.debug("Worker %s bailing during shutdown for %s", self._worker_id, video.url)
+                continue
+
+            # Explicit terminal-state mapping. COMPLETED is only emitted when the
+            # adapter reported a successful download (status DONE). Any other
+            # outcome (exception, cancellation, or an unexpected status) maps to
+            # a distinct event; an unknown status is never silently COMPLETED.
+            if video.status == DownloadStatus.DONE:
                 event_type = DownloadEventType.COMPLETED
+            elif video.status == DownloadStatus.CANCELLED:
+                event_type = DownloadEventType.CANCELLED
+            else:
+                if video.status != DownloadStatus.ERROR:
+                    logger.warning(
+                        "Download of %s ended with unexpected status %s; treating as error",
+                        video.url,
+                        video.status,
+                    )
+                    video.status = DownloadStatus.ERROR
+                    if not video.error_message:
+                        video.error_message = (
+                            f"Download ended with unexpected status: {video.status}"
+                        )
+                event_type = DownloadEventType.ERROR
 
             self._progress_callback(DownloadEvent(type=event_type, video=video))
 
@@ -216,6 +237,10 @@ class DownloadService:
 
     Supports multiple concurrent downloads and detailed progress events.
     Fully decoupled from UI layer.
+
+    Lifecycle is event-based: the service is *running* while ``_run_event`` is
+    set. ``start()`` is idempotent (safe to call while running, or after a
+    ``stop()``), and ``stop()`` is safe to call repeatedly and from any thread.
     """
 
     def __init__(
@@ -229,7 +254,7 @@ class DownloadService:
         self._output_path = default_output_path or Path.home() / "Downloads"
         self._max_concurrent = max_concurrent
         self._workers: list[DownloadWorker] = []
-        self._running = False
+        self._run_event = threading.Event()
         self._event_callbacks: list[Callable[[DownloadEvent], None]] = []
         self._lock = threading.Lock()
         self._callbacks_lock = threading.Lock()
@@ -248,7 +273,7 @@ class DownloadService:
 
     @property
     def is_running(self) -> bool:
-        return self._running
+        return self._run_event.is_set()
 
     @property
     def max_concurrent(self) -> int:
@@ -313,6 +338,12 @@ class DownloadService:
         self._queue.clear()
 
     def add_to_queue(self, video: Video) -> None:
+        if self._is_known(video):
+            # Same URL is already queued or actively downloading: duplicates
+            # would double-download and emit two terminal events for one URL.
+            # Nothing to do; a finished download is no longer "known".
+            logger.debug("Ignoring duplicate queue entry for %s", video.url)
+            return
         self._queue.add(video)
         self._queue_event.set()
         self._emit_event(
@@ -326,51 +357,97 @@ class DownloadService:
         for video in videos:
             self.add_to_queue(video)
 
+    def _is_known(self, video: Video) -> bool:
+        """True when a video with the same URL is queued or active."""
+        with self._lock:
+            for item in self._queue.peek():
+                if item.url == video.url:
+                    return True
+            for item in self._active_downloads.values():
+                if item.url == video.url:
+                    return True
+        return False
+
     def _get_output_path(self) -> Path:
         with self._lock:
             return self._output_path
 
     def start(self) -> None:
-        if self._running:
-            return
-
-        self._running = True
-        for i in range(self._max_concurrent):
-            worker = DownloadWorker(
-                worker_id=i,
-                adapter=self._adapter,
-                output_path_getter=self._get_output_path,
-                progress_callback=self._handle_worker_event,
-            )
-            self._workers.append(worker)
-            worker.start()
-
-        self._queue_thread = threading.Thread(
-            target=self._process_queue,
-            daemon=True,
-        )
-        self._queue_thread.start()
-
-    def stop(self) -> None:
-        self._running = False
+        """Start the dispatch loop and spawn workers. Idempotent."""
         with self._lock:
+            if self._run_event.is_set():
+                # Already running (or a caller raced with us): do not spawn a
+                # second set of workers or a second queue thread.
+                return
+            previous_thread = self._queue_thread
+            if previous_thread is not None and previous_thread.is_alive():
+                # Only possible after an abnormal stop(); wait briefly so we do
+                # not end up with two queue threads draining the same queue.
+                previous_thread.join(timeout=1.0)
+            self._run_event.set()
+            for i in range(self._max_concurrent):
+                worker = DownloadWorker(
+                    worker_id=i,
+                    adapter=self._adapter,
+                    output_path_getter=self._get_output_path,
+                    progress_callback=self._handle_worker_event,
+                )
+                self._workers.append(worker)
+                worker.start()
+
+            self._queue_thread = threading.Thread(
+                target=self._process_queue,
+                daemon=True,
+            )
+            self._queue_thread.start()
+
+    def stop(self, timeout: float = 5.0) -> None:
+        """Stop the service and wait for workers and subprocesses to finish.
+
+        Workers are signalled to cancel and stop; each worker is joined for up
+        to ``timeout`` seconds. A worker (or its subprocess) that refuses to
+        terminate is reported with a clear log message instead of being hidden.
+        No further download events are broadcast once the service is stopped.
+        """
+        with self._lock:
+            self._run_event.clear()
             workers = list(self._workers)
-            self._workers.clear()
+
         for worker in workers:
             worker.cancel()
             worker.stop()
         for worker in workers:
-            worker.join(timeout=5)
+            if worker is threading.current_thread():
+                # A callback running on the worker's own thread may call stop().
+                continue
+            worker.join(timeout=timeout)
             if worker.is_alive():
-                logger.warning("Download worker %s did not terminate within 5s", worker.worker_id)
-        if self._queue_thread is not None:
-            self._queue_thread.join(timeout=1.0)
-            self._queue_thread = None
+                logger.error(
+                    "Worker %s did not terminate within %.1fs; its subprocess may "
+                    "have ignored the terminate/cancel request. It can no longer "
+                    "affect application state.",
+                    worker.worker_id,
+                    timeout,
+                )
+
         with self._lock:
-            for video in self._active_downloads.values():
-                if video.status == DownloadStatus.DOWNLOADING:
-                    video.status = DownloadStatus.CANCELLED
+            self._workers.clear()
+            still_active = list(self._active_downloads.values())
             self._active_downloads.clear()
+        for video in still_active:
+            if video.status in (DownloadStatus.DOWNLOADING, DownloadStatus.QUEUED):
+                video.status = DownloadStatus.CANCELLED
+                video.error_message = "Cancelled by shutdown"
+
+        queue_thread = self._queue_thread
+        if queue_thread is not None and queue_thread is not threading.current_thread():
+            queue_thread.join(timeout=max(0.5, min(timeout, 1.0)))
+            if queue_thread.is_alive():
+                logger.error(
+                    "Queue thread still alive after stop(); it will exit after its "
+                    "current wait cycle and cannot dispatch further downloads."
+                )
+        self._queue_thread = None
 
     def cancel_video(self, video: Video) -> bool:
         """Cancel a video.
@@ -392,7 +469,7 @@ class DownloadService:
         return True
 
     def _process_queue(self) -> None:
-        while self._running:
+        while self._run_event.is_set():
             if self._queue.is_empty():
                 self._queue_event.wait(timeout=0.1)
                 self._queue_event.clear()
@@ -406,7 +483,7 @@ class DownloadService:
                 continue
 
             with self._lock:
-                if not self._running:
+                if not self._run_event.is_set():
                     break
                 worker = idle_workers[0]
                 if worker not in self._workers:
@@ -418,16 +495,30 @@ class DownloadService:
                     self._queue.add(video)
                     continue
                 self._active_downloads[worker.worker_id] = video
-                self._emit_event(
-                    DownloadEvent(
-                        type=DownloadEventType.STARTED,
-                        video=video,
-                    )
+            if not self._run_event.is_set():
+                # stop() ran between dispatch and the broadcast below; the
+                # worker was already signalled, so do not announce a stale start.
+                continue
+            self._emit_event(
+                DownloadEvent(
+                    type=DownloadEventType.STARTED,
+                    video=video,
                 )
+            )
 
     def _handle_worker_event(self, event: DownloadEvent) -> None:
         if event.type == DownloadEventType.PROGRESS:
             self._emit_event(event)
+            return
+
+        if not self._run_event.is_set():
+            # The service has been stopped: no terminal (or late) event from a
+            # lingering worker may reach callbacks or mutate state again.
+            logger.debug(
+                "Ignoring %s event for %s: service stopped",
+                event.type.value,
+                event.video.url,
+            )
             return
 
         with self._lock:

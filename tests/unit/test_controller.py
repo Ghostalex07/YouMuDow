@@ -247,6 +247,30 @@ class TestControllerSearchFlows:
         controller.start_downloads()
         controller._download_service.add_multiple.assert_not_called()
 
+    def test_start_downloads_does_not_preactivate_queue(self, controller):
+        """Activation must come from the service's STARTED event, not eagerly."""
+        v = Video(title="T", url="u")
+        controller._state_manager.get_queue.return_value = [v]
+        controller.start_downloads()
+        controller._download_service.add_multiple.assert_called_once_with([v])
+        controller._download_service.start.assert_called_once_with()
+        controller._state_manager.start_download.assert_not_called()
+
+    def test_enqueue_while_running_forwards_to_service(self, controller):
+        controller._download_service.is_running = True
+        v = Video(title="T", url="u")
+        controller.enqueue(v)
+        controller._state_manager.add_to_queue.assert_called_once_with(v)
+        controller._download_service.add_to_queue.assert_called_once_with(v)
+
+    def test_enqueue_while_idle_does_not_start_service(self, controller):
+        controller._download_service.is_running = False
+        v = Video(title="T", url="u")
+        controller.enqueue(v)
+        controller._state_manager.add_to_queue.assert_called_once_with(v)
+        controller._download_service.add_to_queue.assert_not_called()
+        controller._download_service.start.assert_not_called()
+
     def test_remove_from_queue_cancels(self, controller):
         v = Video(title="T", url="u")
         controller.remove_from_queue(v)
@@ -392,6 +416,15 @@ class TestControllerCallbacks:
         v = Video(title="Song", url="u")
         cb = self._callback(controller, "on_event")
         cb(DownloadEvent(type=DownloadEventType.STARTED, video=v))
+        controller._state_manager.start_download.assert_called_once_with(v)
+
+    def test_on_started_ignores_non_started_events(self, controller):
+        from youmudow.services.download_service import DownloadEvent, DownloadEventType
+
+        v = Video(title="Song", url="u")
+        cb = self._callback(controller, "on_event")
+        cb(DownloadEvent(type=DownloadEventType.QUEUED, video=v))
+        controller._state_manager.start_download.assert_not_called()
 
     def test_log_callback_levels(self, controller):
         cb = controller._search_service.set_log_callback.call_args[0][0]

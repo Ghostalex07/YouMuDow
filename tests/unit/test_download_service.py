@@ -537,6 +537,243 @@ class TestDownloadServiceConcurrency:
         assert all(str(new_path) == str(p) for p in paths), f"Paths used: {paths}"
 
 
+class TestDownloadServiceLifecycle:
+    """Lifecycle invariants: explicit terminal states, stop semantics, restart."""
+
+    def _wait_for(self, predicate, timeout=3.0):
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if predicate():
+                return True
+            time.sleep(0.02)
+        return False
+
+    def test_worker_unexpected_status_maps_to_error(self, tmp_path):
+        adapter = Mock()
+        adapter.download.side_effect = lambda video, *a, **kw: video
+        events = []
+        worker = DownloadWorker(0, adapter, lambda: tmp_path, events.append)
+        v = Video(title="v", url="u")
+        worker.start()
+        worker.submit(v)
+        assert self._wait_for(lambda: any(e.type == DownloadEventType.ERROR for e in events))
+        worker.stop()
+        worker.join(timeout=2)
+        assert not any(e.type == DownloadEventType.COMPLETED for e in events)
+        assert v.status == DownloadStatus.ERROR
+
+    def test_completed_requires_done_status(self, tmp_path):
+        # A download that returns the video without DONE must never COMPLETE.
+        adapter = Mock()
+        adapter.download.side_effect = lambda video, *a, **kw: (
+            setattr(video, "status", DownloadStatus.DOWNLOADING) or video
+        )
+        events = []
+        worker = DownloadWorker(0, adapter, lambda: tmp_path, events.append)
+        v = Video(title="v", url="u")
+        worker.start()
+        worker.submit(v)
+        assert self._wait_for(lambda: any(e.type == DownloadEventType.ERROR for e in events))
+        worker.stop()
+        worker.join(timeout=2)
+        assert not any(e.type == DownloadEventType.COMPLETED for e in events)
+
+    def test_stop_blocks_late_events(self, tmp_path):
+        adapter = Mock()
+
+        def slow(video, output_path, progress_callback=None, cancel_event=None):
+            if cancel_event is not None:
+                cancel_event.wait(2.0)
+            video.status = DownloadStatus.DONE
+            return video
+
+        adapter.download.side_effect = slow
+        service = DownloadService(adapter=adapter, default_output_path=tmp_path)
+        events = []
+        service.on_event(events.append)
+        v = Video(title="v", url="u")
+        service.add_to_queue(v)
+        service.start()
+        time.sleep(0.1)
+        service.stop()
+        # The worker wakes up (cancel event set) after stop() returned; neither
+        # the worker's shutdown check nor the event gate may emit COMPLETED.
+        time.sleep(0.3)
+        assert not any(e.type == DownloadEventType.COMPLETED for e in events)
+        assert not any(e.type == DownloadEventType.ERROR for e in events)
+
+    def test_stop_with_stubborn_worker_returns(self, tmp_path, caplog):
+        import logging
+
+        adapter = Mock()
+
+        def ignores_cancel(video, *args, **kwargs):
+            time.sleep(0.4)
+            video.status = DownloadStatus.DONE
+            return video
+
+        adapter.download.side_effect = ignores_cancel
+        service = DownloadService(adapter=adapter, default_output_path=tmp_path)
+        v = Video(title="v", url="u")
+        service.add_to_queue(v)
+        service.start()
+        time.sleep(0.1)
+        with caplog.at_level(logging.ERROR, logger="youmudow.services.download_service"):
+            service.stop(timeout=0.1)
+        assert service.active_count == 0
+        assert service._workers == []
+        assert any("did not terminate" in r.message for r in caplog.records)
+
+    def test_restart_after_stop(self, mock_adapter, tmp_path):
+        mock_adapter.download.side_effect = lambda video, *a, **kw: (
+            setattr(video, "status", DownloadStatus.DONE) or video
+        )
+        service = DownloadService(adapter=mock_adapter, default_output_path=tmp_path)
+        completed = []
+        service.on_complete(completed.append)
+        service.add_to_queue(Video(title="a", url="url_a"))
+        service.start()
+        assert self._wait_for(lambda: len(completed) == 1)
+        service.stop()
+        assert service._workers == []
+        assert not service.is_running
+
+        # Restart must spawn fresh workers and a fresh queue thread.
+        service.add_to_queue(Video(title="b", url="url_b"))
+        service.start()
+        assert self._wait_for(lambda: len(completed) == 2)
+        service.stop()
+        assert service._workers == []
+
+    def test_concurrent_start_spawns_single_worker_set(self, tmp_path):
+        adapter = Mock()
+        adapter.download.side_effect = lambda video, *a, **kw: (
+            setattr(video, "status", DownloadStatus.DONE) or video
+        )
+        service = DownloadService(adapter=adapter, default_output_path=tmp_path, max_concurrent=3)
+        service.start()
+        service.start()
+        service.start()
+        assert len(service._workers) == 3
+        service.stop()
+
+    def test_enqueue_while_running_processed(self, mock_adapter, tmp_path):
+        mock_adapter.download.side_effect = lambda video, *a, **kw: (
+            setattr(video, "status", DownloadStatus.DONE) or video
+        )
+        service = DownloadService(adapter=mock_adapter, default_output_path=tmp_path)
+        started = []
+        service.on_event(
+            lambda e: started.append(e) if e.type == DownloadEventType.STARTED else None
+        )
+        service.start()
+        assert self._wait_for(lambda: service.is_running)
+        service.add_to_queue(Video(title="new", url="new_url"))
+        assert self._wait_for(lambda: len(started) == 1)
+        service.stop()
+        assert service.active_count == 0
+
+    def test_callback_calling_stop_does_not_deadlock(self, tmp_path):
+        adapter = Mock()
+        adapter.download.side_effect = lambda video, *a, **kw: (
+            setattr(video, "status", DownloadStatus.DONE) or video
+        )
+        service = DownloadService(adapter=adapter, default_output_path=tmp_path, max_concurrent=1)
+
+        def on_event(event):
+            if event.type == DownloadEventType.STARTED:
+                # Emitting STARTED must happen outside the service lock so this
+                # stop() cannot deadlock against the dispatcher.
+                service.stop()
+
+        service.on_event(on_event)
+        service.add_to_queue(Video(title="v", url="u"))
+        service.start()
+        assert self._wait_for(lambda: not service.is_running)
+        assert service._workers == []
+
+    def test_duplicate_queue_entry_ignored_without_double_download(self, mock_adapter, tmp_path):
+        mock_adapter.download.side_effect = lambda video, *a, **kw: (
+            setattr(video, "status", DownloadStatus.DONE) or video
+        )
+        service = DownloadService(adapter=mock_adapter, default_output_path=tmp_path)
+        terminals = []
+        service.on_event(
+            lambda e: terminals.append(e) if e.type == DownloadEventType.COMPLETED else None
+        )
+        v = Video(title="v", url="u")
+        service.add_to_queue(v)
+        service.add_to_queue(Video(title="copy", url="u"))
+        service.start()
+        assert self._wait_for(lambda: len(terminals) == 1)
+        service.stop()
+        assert service.queue_size == 0
+        assert mock_adapter.download.call_count == 1
+
+    def test_finished_video_can_be_requeued_for_retry(self, mock_adapter, tmp_path):
+        mock_adapter.download.side_effect = lambda video, *a, **kw: (
+            setattr(video, "status", DownloadStatus.DONE) or video
+        )
+        service = DownloadService(adapter=mock_adapter, default_output_path=tmp_path)
+        terminals = []
+        service.on_event(
+            lambda e: terminals.append(e) if e.type == DownloadEventType.COMPLETED else None
+        )
+        v = Video(title="v", url="u")
+        service.add_to_queue(v)
+        service.start()
+        assert self._wait_for(lambda: len(terminals) == 1)
+        service.stop()
+        # After finishing, the URL is no longer "known": a retry may re-add it.
+        service.add_to_queue(Video(title="v", url="u"))
+        assert service.queue_size == 1
+
+    def test_concurrency_stress_invariants(self, tmp_path):
+        adapter = Mock()
+        cancel_me = {"url2", "url5"}
+
+        def stress(video, output_path, progress_callback=None, cancel_event=None):
+            final = DownloadStatus.DONE
+            if video.url in cancel_me and cancel_event is not None and cancel_event.wait(0.4):
+                final = DownloadStatus.CANCELLED
+            elif video.url == "url8":
+                raise RuntimeError("boom")
+            time.sleep(0.05)
+            video.status = final
+            return video
+
+        adapter.download.side_effect = stress
+        service = DownloadService(adapter=adapter, default_output_path=tmp_path, max_concurrent=3)
+        videos = [Video(title=f"v{i}", url=f"url{i}") for i in range(10)]
+        service.add_multiple(videos)
+        terminals = []
+        service.on_event(
+            lambda e: (
+                terminals.append(e)
+                if e.type
+                in (
+                    DownloadEventType.COMPLETED,
+                    DownloadEventType.CANCELLED,
+                    DownloadEventType.ERROR,
+                )
+                else None
+            )
+        )
+        service.start()
+        time.sleep(0.2)
+        service.cancel_video(Video(title="x", url="url2"))
+        service.cancel_video(Video(title="x", url="url5"))
+        assert self._wait_for(lambda: len(terminals) == 10, timeout=5.0)
+        service.stop()
+        per_url = {}
+        for e in terminals:
+            assert e.video.url not in per_url, f"duplicate terminal event for {e.video.url}"
+            per_url[e.video.url] = e.type
+        assert service.active_count == 0
+        assert service.queue_size == 0
+        assert service._workers == []
+
+
 class TestDownloadEvents:
     """Tests for download events."""
 

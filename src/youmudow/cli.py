@@ -13,13 +13,42 @@ from youmudow import __version__
 from youmudow.app.config import AppConfig
 from youmudow.domain.enums import DownloadStatus
 from youmudow.domain.models import DownloadOptions, Video
+from youmudow.domain.validators import is_supported_url
 from youmudow.services.download_service import DownloadService
 from youmudow.services.search_service import SearchService
 
-_FORMAT_HELP = "audio (mp3, m4a, flac, wav, ogg, opus, aac) or video (mp4, ...)"
+_AUDIO_FORMATS = frozenset({"mp3", "m4a", "opus", "ogg", "flac", "wav", "aac"})
+_FORMATS = _AUDIO_FORMATS | {"mp4"}
+_QUALITIES = frozenset(
+    {
+        "best",
+        "64kbps",
+        "96kbps",
+        "128kbps",
+        "192kbps",
+        "256kbps",
+        "320kbps",
+        "360p",
+        "480p",
+        "720p",
+        "1080p",
+    }
+)
+
+_FORMAT_HELP = f"audio ({', '.join(sorted(_AUDIO_FORMATS))}) or video (mp4)"
 _QUALITY_HELP = "audio bitrate (64kbps..320kbps) or video resolution (360p..1080p, best)"
 
 CommandFunc = Callable[[argparse.Namespace, AppConfig], int]
+
+
+def _positive_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid int value: {value!r}") from None
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return parsed
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -32,8 +61,13 @@ def _build_parser() -> argparse.ArgumentParser:
 
     download = subparsers.add_parser("download", help="download a single URL")
     download.add_argument("url", help="video or audio URL")
-    download.add_argument("--format", dest="file_format", help=_FORMAT_HELP)
-    download.add_argument("--quality", help=_QUALITY_HELP)
+    download.add_argument(
+        "--format",
+        dest="file_format",
+        choices=sorted(_FORMATS),
+        help=_FORMAT_HELP,
+    )
+    download.add_argument("--quality", choices=sorted(_QUALITIES), help=_QUALITY_HELP)
     download.add_argument(
         "--output",
         type=Path,
@@ -48,7 +82,12 @@ def _build_parser() -> argparse.ArgumentParser:
 
     search = subparsers.add_parser("search", help="search for videos")
     search.add_argument("query", help="search query or URL")
-    search.add_argument("--limit", type=int, default=10, help="number of results (default: 10)")
+    search.add_argument(
+        "--limit",
+        type=_positive_int,
+        default=10,
+        help="number of results (default: 10)",
+    )
     search.set_defaults(func=_cmd_search)
 
     return parser
@@ -68,6 +107,10 @@ def _cmd_download(args: argparse.Namespace, config: AppConfig) -> int:
     output_dir = args.output or config.output_path
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    if not is_supported_url(args.url):
+        print(f"Invalid URL: {args.url}", file=sys.stderr)
+        return 1
+
     service = DownloadService()
     service.set_log_callback(print)
 
@@ -82,7 +125,11 @@ def _cmd_download(args: argparse.Namespace, config: AppConfig) -> int:
         suffix = f" at {speed}" if speed and speed != "Calculating..." else ""
         print(f"\r[download] {percent:5.1f}%{suffix}", end="", flush=True)
 
-    result = service.download_now(video, output_dir, progress_callback=on_progress)
+    try:
+        result = service.download_now(video, output_dir, progress_callback=on_progress)
+    except KeyboardInterrupt:
+        print("\nCancelled", file=sys.stderr)
+        return 130
     print()
 
     if result.status == DownloadStatus.DONE:
