@@ -1,5 +1,6 @@
 """Tests for AppController."""
 
+import copy
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -98,14 +99,16 @@ class TestAppController:
         controller.remove_from_queue(v)
         controller._state_manager.remove_from_queue.assert_called_once_with(v)
 
-    def test_remove_from_queue_syncs_active_downloads(self, controller):
+    def test_remove_from_queue_signals_service(self, controller):
         dl = controller._download_service
         dl.cancel_video = Mock()
         v = Video(title="Active", url="u")
-        controller._state_manager.cancel_download = Mock()
+        sm = controller._state_manager
+        sm.remove_from_queue = Mock()
         controller.remove_from_queue(v)
-        controller._state_manager.cancel_download.assert_called_once_with(v)
+        sm.remove_from_queue.assert_called_once_with(v)
         dl.cancel_video.assert_called_once_with(v)
+        sm.cancel_download.assert_not_called()
 
     def test_set_debug_mode(self, controller):
         controller.set_debug_mode(True)
@@ -210,6 +213,19 @@ class TestControllerSearchFlows:
         controller._state_manager.set_error.assert_called_once()
         controller._state_manager.set_state.assert_called_with(AppState.IDLE)
 
+    def test_perform_search_url_error_ignored_when_stale(self, controller):
+        controller._search_epoch = 5
+        controller._search_service.get_metadata.side_effect = Exception("boom")
+        controller._perform_search_url("https://youtube.com/watch?v=abc", 3)
+        controller._state_manager.set_error.assert_not_called()
+        controller._state_manager.set_state.assert_called_with(AppState.IDLE)
+
+    def test_perform_search_url_keeps_full_url(self, controller):
+        url = "https://youtube.com/watch?v=abc&list=PL123&x=1"
+        controller._search_service.get_metadata.return_value = Video(title="T", url=url)
+        controller._perform_search_url(url, 0)
+        controller._search_service.get_metadata.assert_called_once_with(url)
+
     def test_search_playlist_empty_url(self, controller):
         assert controller.search_playlist("") == []
 
@@ -250,7 +266,13 @@ class TestControllerSearchFlows:
     def test_cancel_download(self, controller):
         v = Video(title="T", url="u")
         controller.cancel_download(v)
-        controller._state_manager.cancel_download.assert_called_once_with(v)
+        controller._state_manager.remove_from_queue.assert_called_once_with(v)
+        controller._download_service.cancel_video.assert_called_once_with(v)
+
+    def test_cancel_download_matching_snapshot_copy(self, controller):
+        v = Video(title="T", url="u")
+        controller.cancel_download(copy.deepcopy(v))
+        controller._download_service.cancel_video.assert_called_once()
 
     def test_set_debug_mode_false(self, controller):
         controller.set_debug_mode(False)
@@ -328,6 +350,15 @@ class TestControllerCallbacks:
         cb(v)
         controller._state_manager.finish_download.assert_called_once_with(v)
         controller._download_complete_callback.assert_called_once_with(v)
+
+    def test_on_cancelled(self, controller):
+        from youmudow.domain.enums import DownloadStatus
+
+        v = Video(title="Song", url="u", status=DownloadStatus.DOWNLOADING)
+        cb = controller._download_service.on_cancelled.call_args[0][0]
+        cb(v)
+        controller._state_manager.cancel_download.assert_called_once_with(v)
+        controller._download_complete_callback.assert_not_called()
 
     def test_on_progress(self, controller):
         from youmudow.services.download_service import DownloadProgress

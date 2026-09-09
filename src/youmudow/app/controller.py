@@ -167,8 +167,7 @@ class AppController:
                     self._state_manager.set_state(AppState.IDLE)
                     return
 
-            base_url = url.split("&")[0] if "&" in url else url
-            video = self._search_service.get_metadata(base_url)
+            video = self._search_service.get_metadata(url)
 
             with self._search_epoch_lock:
                 if epoch != self._search_epoch:
@@ -181,6 +180,10 @@ class AppController:
             if self._search_complete_callback:
                 self._search_complete_callback([video] if video else [])
         except Exception as e:
+            with self._search_epoch_lock:
+                if epoch != self._search_epoch:
+                    self._state_manager.set_state(AppState.IDLE)
+                    return
             self._state_manager.set_error(f"Failed to fetch URL: {e}")
             self._state_manager.set_state(AppState.IDLE)
             logger.exception("URL metadata fetch failed for %s", url)
@@ -220,8 +223,12 @@ class AppController:
             self._state_manager.add_to_queue(video)
 
     def remove_from_queue(self, video: Video) -> None:
+        """Remove a video from the queue, cancelling it if actively downloading.
+
+        For active downloads the state is updated once the worker confirms the
+        cancellation (see the ``on_cancelled`` event handler).
+        """
         self._state_manager.remove_from_queue(video)
-        self._state_manager.cancel_download(video)
         self._download_service.cancel_video(video)
 
     def clear_queue(self) -> None:
@@ -248,7 +255,8 @@ class AppController:
         return self._download_service.download_now(video, path)
 
     def cancel_download(self, video: Video) -> None:
-        self._state_manager.cancel_download(video)
+        """Cancel a single download (queued or active)."""
+        self.remove_from_queue(video)
 
     def set_debug_mode(self, enabled: bool) -> None:
         from youmudow.app.state import AppMode
@@ -303,6 +311,10 @@ class AppController:
             if self._download_complete_callback:
                 self._download_complete_callback(video)
 
+        def on_cancelled(video: Video) -> None:
+            self._state_manager.cancel_download(video)
+            emit_log(f"[CANCELLED] {video.title}", level="warning")
+
         def on_started(video: Video) -> None:
             emit_log(f"[DOWNLOAD] Starting: {video.title}", level="info")
 
@@ -313,6 +325,7 @@ class AppController:
         )
 
         self._download_service.on_error(on_error)
+        self._download_service.on_cancelled(on_cancelled)
 
     def _setup_log_callback(self) -> None:
         def on_log_message(message: str) -> None:

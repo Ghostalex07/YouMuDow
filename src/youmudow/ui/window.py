@@ -238,10 +238,10 @@ class MainWindow:
 
     def _setup_controller_callbacks(self) -> None:
         def on_search_complete(results: list[Video]) -> None:
-            self._root.after(0, self._on_search_complete, results)
+            self._schedule(self._on_search_complete, results)
 
         def on_download_complete(video: Video) -> None:
-            self._root.after(0, self._on_download_complete, video)
+            self._schedule(self._on_download_complete, video)
 
         self._controller.on_search_complete(on_search_complete)
         self._controller.on_download_complete(on_download_complete)
@@ -268,7 +268,7 @@ class MainWindow:
 
     def _setup_state_observer(self) -> None:
         def on_state_change(snapshot: AppStateData) -> None:
-            self._root.after(0, self._update_from_snapshot, snapshot)
+            self._schedule(self._update_from_snapshot, snapshot)
 
         self._controller.state.on_change(on_state_change)
 
@@ -385,11 +385,28 @@ class MainWindow:
         self._set_status("Fetching playlist...")
 
         def do_fetch() -> None:
-            videos = self._controller.search_playlist(url)
-            self._root.after(0, self._on_playlist_complete, videos)
+            try:
+                videos = self._controller.search_playlist(url)
+                self._schedule(self._on_playlist_complete, videos)
+            except (tk.TclError, RuntimeError):
+                logger.debug("Window closed while fetching playlist for %s", url)
 
         thread = threading.Thread(target=do_fetch, daemon=True)
         thread.start()
+
+    def _schedule(self, callback: Callable[..., Any], *args: Any) -> None:
+        """Schedule a callback on the Tk main loop.
+
+        Handles teardown races where a background thread tries to reach the
+        main loop after the window has been destroyed or the loop has stopped.
+        """
+        try:
+            self._root.after(0, callback, *args)
+        except (tk.TclError, RuntimeError):
+            logger.debug(
+                "Main window closed, dropping scheduled callback",
+                exc_info=True,
+            )
 
     def _on_playlist_complete(self, videos: list[Video]) -> None:
         if videos:
@@ -418,10 +435,10 @@ class MainWindow:
         self._set_status("Updating yt-dlp...")
 
         def on_success(version: str) -> None:
-            self._root.after(0, lambda: self._set_status(f"yt-dlp updated to {version}"))
+            self._schedule(lambda: self._set_status(f"yt-dlp updated to {version}"))
 
         def on_error(error: str) -> None:
-            self._root.after(0, lambda: self._set_status(f"Update failed: {error}"))
+            self._schedule(lambda: self._set_status(f"Update failed: {error}"))
 
         update_ytdlp(on_success, on_error)
 
@@ -640,6 +657,7 @@ class MainWindow:
                 self._config.save()
             except (tk.TclError, KeyError, TypeError, ValueError) as e:
                 logger.debug("Could not save config on close: %s", e)
+        self._controller.stop_downloads()
         self.destroy()
 
     def _apply_config(self) -> None:

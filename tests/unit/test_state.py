@@ -1,5 +1,7 @@
 """Tests for StateManager."""
 
+import copy
+
 from youmudow.app.state import AppMode, AppState, AppStateData, StateManager
 from youmudow.domain.enums import DownloadStatus
 from youmudow.domain.models import Video
@@ -95,8 +97,21 @@ class TestStateManager:
         sm.add_to_queue(v)
         sm.start_download(v)
         sm.cancel_download(v)
-        assert v not in sm.get_snapshot().active_downloads
-        assert v in sm.get_queue()
+        snap = sm.get_snapshot()
+        assert v not in snap.active_downloads
+        assert v not in sm.get_queue()
+        assert v.status == DownloadStatus.CANCELLED
+        assert snap.state == AppState.IDLE
+
+    def test_cancel_download_idempotent(self):
+        sm = StateManager()
+        v = Video(title="A", url="a")
+        sm.add_to_queue(v)
+        sm.start_download(v)
+        sm.cancel_download(v)
+        sm.cancel_download(v)
+        assert sm.get_snapshot().active_downloads == []
+        assert v not in sm.get_queue()
 
     def test_stop_all_clears_active(self):
         sm = StateManager()
@@ -141,6 +156,27 @@ class TestStateManager:
         snap = sm.get_snapshot()
         assert isinstance(snap, AppStateData)
         assert v in snap.queue
+
+    def test_snapshot_is_deep_copy(self):
+        sm = StateManager()
+        v = Video(title="Test", url="url")
+        sm.add_to_queue(v)
+        snap = sm.get_snapshot()
+        snap.queue[0].title = "HACKED"
+        snap.queue[0].progress = 99.0
+        assert sm.get_queue()[0].title == "Test"
+        assert sm.get_queue()[0].progress == 0.0
+
+    def test_mutation_tolerant_matching(self):
+        sm = StateManager()
+        v = Video(title="Test", url="url")
+        sm.add_to_queue(v)
+        sm.start_download(v)
+        sm.update_progress(v, 50.0, "1MB/s", "10s")
+        snapshot_copy = copy.deepcopy(v)
+        sm.cancel_download(snapshot_copy)
+        assert v not in sm.get_snapshot().active_downloads
+        assert v.status == DownloadStatus.CANCELLED
 
     def test_on_change_callback(self):
         sm = StateManager()

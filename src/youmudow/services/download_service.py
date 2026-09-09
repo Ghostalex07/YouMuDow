@@ -92,11 +92,19 @@ class DownloadWorker(threading.Thread):
         with self._video_lock:
             return self._current_video
 
-    def submit(self, video: Video) -> None:
+    def submit(self, video: Video) -> bool:
+        """Assign a video to this worker.
+
+        Returns False if the worker is already busy, in which case the caller
+        must keep the video queued.
+        """
         with self._video_lock:
+            if self._current_video is not None:
+                return False
             self._current_video = video
         self._cancel_event.clear()
         self._ready.set()
+        return True
 
     def cancel(self) -> None:
         self._cancel_event.set()
@@ -227,6 +235,7 @@ class DownloadService:
         self._callbacks_lock = threading.Lock()
         self._active_downloads: dict[int, Video] = {}
         self._queue_event = threading.Event()
+        self._queue_thread: threading.Thread | None = None
 
     @property
     def queue_size(self) -> int:
@@ -290,6 +299,16 @@ class DownloadService:
         with self._callbacks_lock:
             self._event_callbacks.append(wrapper)
 
+    def on_cancelled(self, callback: Callable[[Video], None]) -> None:
+        """Register a callback invoked when a worker confirms a cancellation."""
+
+        def wrapper(event: DownloadEvent) -> None:
+            if event.type == DownloadEventType.CANCELLED:
+                callback(event.video)
+
+        with self._callbacks_lock:
+            self._event_callbacks.append(wrapper)
+
     def clear_queue(self) -> None:
         self._queue.clear()
 
@@ -326,7 +345,11 @@ class DownloadService:
             self._workers.append(worker)
             worker.start()
 
-        threading.Thread(target=self._process_queue, daemon=True).start()
+        self._queue_thread = threading.Thread(
+            target=self._process_queue,
+            daemon=True,
+        )
+        self._queue_thread.start()
 
     def stop(self) -> None:
         self._running = False
@@ -338,18 +361,35 @@ class DownloadService:
             worker.stop()
         for worker in workers:
             worker.join(timeout=5)
+            if worker.is_alive():
+                logger.warning("Download worker %s did not terminate within 5s", worker.worker_id)
+        if self._queue_thread is not None:
+            self._queue_thread.join(timeout=1.0)
+            self._queue_thread = None
+        with self._lock:
+            for video in self._active_downloads.values():
+                if video.status == DownloadStatus.DOWNLOADING:
+                    video.status = DownloadStatus.CANCELLED
+            self._active_downloads.clear()
 
-    def cancel_video(self, video: Video) -> None:
+    def cancel_video(self, video: Video) -> bool:
+        """Cancel a video.
+
+        Removes it from the pending queue if present. If a worker is currently
+        processing it, the worker is signalled and the video is only removed
+        from ``active_downloads`` once the worker emits its terminal event.
+
+        Returns True if the video was cancelled synchronously (was still
+        queued); False if the worker will confirm cancellation via an event.
+        """
         self._queue.remove(video)
         with self._lock:
             for worker in self._workers:
-                if worker.current_video is video:
+                current = worker.current_video
+                if current is video or (current is not None and current.url == video.url):
                     worker.cancel()
-                    for wid, vid in list(self._active_downloads.items()):
-                        if vid == video:
-                            del self._active_downloads[wid]
-                            break
-                    break
+                    return False
+        return True
 
     def _process_queue(self) -> None:
         while self._running:
@@ -357,24 +397,33 @@ class DownloadService:
                 self._queue_event.wait(timeout=0.1)
                 self._queue_event.clear()
                 continue
+
             with self._lock:
                 idle_workers = [w for w in self._workers if not w.is_busy]
-            if idle_workers:
-                video = self._queue.get()
-                if video:
-                    worker = idle_workers[0]
-                    with self._lock:
-                        self._active_downloads[worker.worker_id] = video
-                    worker.submit(video)
-                    self._emit_event(
-                        DownloadEvent(
-                            type=DownloadEventType.STARTED,
-                            video=video,
-                        )
-                    )
-            else:
+            if not idle_workers:
                 self._queue_event.wait(timeout=0.05)
                 self._queue_event.clear()
+                continue
+
+            with self._lock:
+                if not self._running:
+                    break
+                worker = idle_workers[0]
+                if worker not in self._workers:
+                    continue
+                video = self._queue.get()
+                if video is None:
+                    continue
+                if not worker.submit(video):
+                    self._queue.add(video)
+                    continue
+                self._active_downloads[worker.worker_id] = video
+                self._emit_event(
+                    DownloadEvent(
+                        type=DownloadEventType.STARTED,
+                        video=video,
+                    )
+                )
 
     def _handle_worker_event(self, event: DownloadEvent) -> None:
         if event.type == DownloadEventType.PROGRESS:

@@ -1,8 +1,9 @@
 """Tests for download service."""
 
+import threading
 import time
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -206,7 +207,7 @@ class TestDownloadServiceExtra:
         events = []
         service.on_event(events.append)
         service.add_to_queue(sample_video)
-        service.cancel_video(sample_video)
+        assert service.cancel_video(sample_video) is True
         assert service.active_count == 0
         assert service.queue_size == 0
 
@@ -227,6 +228,20 @@ class TestDownloadWorker:
         assert worker.current_video is sample_video
         worker.cancel()
         assert worker._cancel_event.is_set()
+
+    def test_submit_twice_rejects_second(self, sample_video):
+        worker = DownloadWorker(
+            worker_id=0,
+            adapter=Mock(),
+            output_path_getter=lambda: Path("/tmp"),
+            progress_callback=Mock(),
+        )
+        first = Video(title="First", url="u1")
+        second = Video(title="Second", url="u2")
+        assert worker.submit(first) is True
+        assert worker.submit(second) is False
+        assert worker.current_video is first
+        assert worker.is_busy is True
 
     def test_worker_id(self):
         worker = DownloadWorker(0, Mock(), lambda: Path("/tmp"), Mock())
@@ -388,6 +403,100 @@ class TestDownloadServiceConcurrency:
         assert self._wait_for(lambda: len(completions) == 2, timeout=3.0)
         service.stop()
         assert v1.status == DownloadStatus.DONE
+
+    def test_cancel_keeps_active_until_worker_confirms(self, tmp_path):
+        """Fase 5: an active download must stay in active_downloads until the
+        worker emits its terminal event."""
+        adapter = Mock()
+        started = threading.Event()
+
+        def cancellable(video, output_path, progress_callback=None, cancel_event=None):
+            started.set()
+            if cancel_event is not None and cancel_event.wait(2.0):
+                video.status = DownloadStatus.CANCELLED
+                return video
+            video.status = DownloadStatus.DONE
+            return video
+
+        adapter.download.side_effect = cancellable
+        service = DownloadService(adapter=adapter, default_output_path=tmp_path, max_concurrent=1)
+        events = []
+        service.on_event(lambda e: events.append(e))
+        v = Video(title="v", url="u")
+        service.add_to_queue(v)
+        service.start()
+        assert started.wait(2.0)
+
+        assert service.cancel_video(v) is False
+        assert service.active_count == 1, "active download removed before worker confirmation"
+
+        assert self._wait_for(lambda: any(e.type == DownloadEventType.CANCELLED for e in events))
+        assert service.active_count == 0
+        service.stop()
+
+    def test_on_cancelled_callback_flagged(self, download_service, sample_video):
+        received = []
+        download_service.on_cancelled(received.append)
+        download_service._emit_event(
+            DownloadEvent(type=DownloadEventType.CANCELLED, video=sample_video)
+        )
+        assert received == [sample_video]
+        download_service._emit_event(
+            DownloadEvent(type=DownloadEventType.COMPLETED, video=sample_video)
+        )
+        assert received == [sample_video]
+
+    def test_stop_clears_active_downloads(self, tmp_path):
+        adapter = Mock()
+
+        def blocking(video, *args, **kwargs):
+            time.sleep(0.2)
+            video.status = DownloadStatus.DONE
+            return video
+
+        adapter.download.side_effect = blocking
+        service = DownloadService(adapter=adapter, default_output_path=tmp_path, max_concurrent=1)
+        service.add_to_queue(Video(title="v", url="u"))
+        service.start()
+        time.sleep(0.05)
+        assert service.active_count >= 1
+        service.stop()
+        assert service.active_count == 0
+        assert service._workers == []
+
+    def test_dispatcher_requeues_on_submit_rejection(self, tmp_path):
+        """A rejected submit (busy worker / stop race) must not lose the video."""
+        adapter = Mock()
+
+        def success(video, *args, **kwargs):
+            video.status = DownloadStatus.DONE
+            return video
+
+        adapter.download.side_effect = success
+        service = DownloadService(adapter=adapter, default_output_path=tmp_path, max_concurrent=1)
+        completed = []
+        service.on_complete(completed.append)
+
+        real_submit = DownloadWorker.submit
+        attempts = {"n": 0}
+
+        def flaky_submit(worker, video):
+            attempts["n"] += 1
+            if attempts["n"] == 1:
+                return False
+            return real_submit(worker, video)
+
+        with patch(
+            "youmudow.services.download_service.DownloadWorker.submit",
+            new=flaky_submit,
+        ):
+            service.add_to_queue(Video(title="v", url="u"))
+            service.start()
+            assert self._wait_for(lambda: len(completed) == 1)
+            service.stop()
+        assert attempts["n"] >= 2
+        assert service.queue_size == 0
+        assert service.active_count == 0
 
     def test_stop_joins_workers(self, mock_adapter, sample_video, tmp_path):
         def success_download(video, *args, **kwargs):

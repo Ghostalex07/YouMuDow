@@ -5,6 +5,7 @@ import os
 import subprocess
 import tempfile
 import threading
+import time
 from unittest.mock import Mock, patch
 
 import pytest
@@ -291,6 +292,7 @@ class TestProgressParsing:
             ),
             ("[download] 75.0% at 2.0MiB/s ETA 00:15", 75.0, "2.0MiB/s", "00:15", ""),
             ("[download] 50.0% of ~10.0MiB", 50.0, "", "", "10.0MiB"),
+            ("[download]   45.2%", 45.2, "", "", ""),
         ],
     )
     def test_parse_progress(self, line, progress, speed, eta, size):
@@ -567,6 +569,230 @@ class TestGetPlaylistVideos:
     def test_error_returns_empty(self, adapter):
         with patch("subprocess.run", side_effect=FileNotFoundError):
             assert adapter.get_playlist_videos("https://youtube.com/playlist?list=abc") == []
+
+
+class TestPlaylistUrlNormalization:
+    """Playlist URL handling must not be YouTube-coupled."""
+
+    def test_non_youtube_passthrough(self):
+        url = "https://soundcloud.com/user/sets/album-x"
+        assert YtdlpAdapter()._normalize_playlist_url(url) == url
+
+    def test_youtube_watch_with_list_normalized(self):
+        url = "https://youtube.com/watch?v=abc&list=PL123"
+        assert YtdlpAdapter()._normalize_playlist_url(url) == (
+            "https://www.youtube.com/playlist?list=PL123"
+        )
+
+    def test_youtube_playlist_kept(self):
+        url = "https://youtube.com/playlist?list=PL123"
+        assert YtdlpAdapter()._normalize_playlist_url(url) == url
+
+    def test_youtube_watch_without_list_kept(self):
+        url = "https://youtube.com/watch?v=abc"
+        assert YtdlpAdapter()._normalize_playlist_url(url) == url
+
+    def test_non_youtube_playlist_passed_to_subprocess(self, adapter):
+        mock_result = Mock()
+        mock_result.returncode = 0
+        mock_result.stdout = ""
+        mock_result.stderr = ""
+        cmd_args = {}
+
+        def fake_run(args, *a, **kw):
+            cmd_args["args"] = args
+            return mock_result
+
+        with patch("subprocess.run", side_effect=fake_run):
+            adapter.get_playlist_videos("https://soundcloud.com/user/sets/album-x")
+        assert "https://soundcloud.com/user/sets/album-x" in cmd_args["args"]
+
+    def test_youtube_watch_list_normalized_to_playlist_url(self, adapter):
+        mock_result = Mock()
+        mock_result.returncode = 0
+        mock_result.stdout = ""
+        mock_result.stderr = ""
+        cmd_args = {}
+
+        def fake_run(args, *a, **kw):
+            cmd_args["args"] = args
+            return mock_result
+
+        with patch("subprocess.run", side_effect=fake_run):
+            adapter.get_playlist_videos("https://youtube.com/watch?v=x&list=PL9")
+        assert "https://www.youtube.com/playlist?list=PL9" in cmd_args["args"]
+
+
+class TestMetadataRobustness:
+    """get_metadata must tolerate noisy output and corrupt values."""
+
+    def _run(self, adapter, stdout):
+        mock_result = Mock()
+        mock_result.returncode = 0
+        mock_result.stdout = stdout
+        mock_result.stderr = ""
+        with patch("subprocess.run", return_value=mock_result):
+            return adapter.get_metadata("https://youtube.com/watch?v=test")
+
+    def test_log_prefix_before_json(self, adapter):
+        stdout = (
+            "[debug] Command-line config: ['-U']\n"
+            '{"title": "Song", "uploader": "Artist", "duration": 120, "thumbnail": "th"}\n'
+        )
+        video = self._run(adapter, stdout)
+        assert video is not None
+        assert video.title == "Song"
+        assert video.duration == 120
+
+    def test_json_on_single_line_with_garbage(self, adapter):
+        stdout = (
+            '{"title": "Song", "uploader": null, "duration": "n/a", '
+            '"thumbnail": ""} trailing garbage'
+        )
+        video = self._run(adapter, stdout)
+        assert video is not None
+        assert video.title == "Song"
+        assert video.uploader == ""
+        assert video.duration == 0
+        assert video.thumbnail == ""
+
+    def test_missing_fields_defaulted(self, adapter):
+        video = self._run(adapter, '{"title": "Song"}')
+        assert video is not None
+        assert video.uploader == ""
+        assert video.duration == 0
+        assert video.thumbnail == ""
+
+    def test_thumbnails_fallback(self, adapter):
+        stdout = '{"title": "Song", "duration": 10, "thumbnails": [{"url": "th_url"}]}'
+        video = self._run(adapter, stdout)
+        assert video is not None
+        assert video.thumbnail == "th_url"
+
+
+class TestCookieFallbackNoMutation:
+    """Browser cookie fallback must not modify video options."""
+
+    def test_fallback_does_not_mutate_options(self):
+        video = make_video(
+            use_cookies=True,
+            cookies_from_browser="chrome",
+            cookies_profile="Prof",
+        )
+        adapter = YtdlpAdapter()
+        logs = []
+        adapter.set_log_callback(logs.append)
+        with (
+            patch(
+                "youmudow.adapters.ytdlp_adapter.check_browser_profile",
+                return_value=(False, "chrome not installed"),
+            ),
+            patch(
+                "youmudow.adapters.ytdlp_adapter.get_fallback_browser",
+                return_value="firefox",
+            ),
+        ):
+            args = adapter._build_base_args(video)
+        assert "firefox" in args
+        assert video.options.cookies_from_browser == "chrome"
+        assert video.options.cookies_profile == "Prof"
+        assert any("Falling back to Firefox" in log for log in logs)
+
+
+class BlockingFakeProcess:
+    """Fake subprocess that stays running until terminated/killed."""
+
+    def __init__(self):
+        self.stdout = io.StringIO("")
+        self._terminated = False
+        self.returncode = None
+
+    def poll(self):
+        return None if not self._terminated else 5
+
+    def wait(self, timeout=None):
+        deadline = time.monotonic() + (timeout or 5)
+        while not self._terminated:
+            if time.monotonic() >= deadline:
+                raise subprocess.TimeoutExpired("yt-dlp", timeout)
+            time.sleep(0.005)
+        return self.returncode
+
+    def terminate(self):
+        self._terminated = True
+        self.returncode = 5
+
+    def kill(self):
+        self._terminated = True
+        self.returncode = 5
+
+
+class TestRunProcessCancel:
+    """Cancellation must work even with zero subprocess output."""
+
+    def test_cancel_already_set_with_no_output(self, tmp_path, sample_video):
+        adapter = YtdlpAdapter()
+        cancel = threading.Event()
+        cancel.set()
+        fake = BlockingFakeProcess()
+        with patch("subprocess.Popen", return_value=fake):
+            code, _ = adapter._run_process(["yt-dlp"], tmp_path, sample_video, cancel, None)
+        assert fake._terminated
+        assert code == 5
+
+    def test_cancel_during_run_with_no_output(self, tmp_path, sample_video):
+        adapter = YtdlpAdapter()
+        cancel = threading.Event()
+
+        def set_later():
+            time.sleep(0.15)
+            cancel.set()
+
+        threading.Thread(target=set_later, daemon=True).start()
+        fake = BlockingFakeProcess()
+        start = time.monotonic()
+        with patch("subprocess.Popen", return_value=fake):
+            code, _ = adapter._run_process(["yt-dlp"], tmp_path, sample_video, cancel, None)
+        assert fake._terminated
+        assert code == 5
+        assert time.monotonic() - start < 3.0
+
+    def test_timeout_via_polling(self, tmp_path, sample_video):
+        adapter = YtdlpAdapter(YtdlpConfig(download_timeout=1))
+        fake = BlockingFakeProcess()
+        with patch("subprocess.Popen", return_value=fake):
+            code, _ = adapter._run_process(
+                ["yt-dlp"], tmp_path, sample_video, threading.Event(), None
+            )
+        assert code == -2
+
+
+class TestDownloadRetryCancel:
+    """Retry backoff delay must be interruptible by cancellation."""
+
+    def test_cancel_during_retry_delay_aborts(self, tmp_path):
+        adapter = YtdlpAdapter(YtdlpConfig(max_retries=3))
+        cancel = threading.Event()
+
+        def set_later():
+            time.sleep(0.1)
+            cancel.set()
+
+        threading.Thread(target=set_later, daemon=True).start()
+        calls = []
+
+        def fake_run(args, output_path, video, cancel_event, progress_callback):
+            calls.append(1)
+            return (1, ["ERROR: private video"])
+
+        with (
+            patch.object(adapter, "_run_process", side_effect=fake_run),
+            patch("time.sleep") as sleep,
+        ):
+            result = adapter.download(make_video(file_format="mp3"), tmp_path, cancel_event=cancel)
+        assert result.status == DownloadStatus.CANCELLED
+        assert len(calls) == 1, "no retry attempt should start after cancel during wait"
+        sleep.assert_not_called()
 
 
 class TestLogDownloadMessages:

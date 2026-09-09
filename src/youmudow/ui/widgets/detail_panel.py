@@ -545,7 +545,7 @@ class DetailPanel(tk.Frame):
                 from urllib.request import urlopen
 
                 data = urlopen(thumbnail_url, timeout=5).read()
-                self._mw._root.after(0, _set_thumbnail, data, thumbnail_url)
+                self._mw._schedule(_set_thumbnail, data, thumbnail_url)
             except (OSError, ValueError) as e:
                 logger.debug("Could not fetch thumbnail %s: %s", thumbnail_url, e)
 

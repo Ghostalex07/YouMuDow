@@ -4,6 +4,7 @@ Thread-safe state container for managing search results, download queue,
 and application status.
 """
 
+import copy
 import threading
 import time
 from collections.abc import Callable
@@ -122,8 +123,9 @@ class StateManager:
 
     def remove_from_queue(self, video: Video) -> None:
         with self._lock:
-            if video in self._queue:
-                self._queue.remove(video)
+            index = self._find_index(self._queue, video)
+            if index >= 0:
+                self._queue.pop(index)
         self._notify_change()
 
     def clear_queue(self) -> None:
@@ -133,8 +135,9 @@ class StateManager:
 
     def start_download(self, video: Video) -> None:
         with self._lock:
-            if video in self._queue:
-                self._queue.remove(video)
+            index = self._find_index(self._queue, video)
+            if index >= 0:
+                self._queue.pop(index)
             video.status = DownloadStatus.DOWNLOADING
             self._active_downloads.append(video)
             if self._state != AppState.DOWNLOADING:
@@ -155,19 +158,23 @@ class StateManager:
 
     def finish_download(self, video: Video) -> None:
         with self._lock:
-            if video in self._active_downloads:
-                self._active_downloads.remove(video)
-            self._completed_downloads.append(video)
+            index = self._find_index(self._active_downloads, video)
+            actual = self._active_downloads.pop(index) if index >= 0 else video
+            self._completed_downloads.append(actual)
             if not self._active_downloads:
                 self._state = AppState.IDLE
         self._notify_change()
 
     def cancel_download(self, video: Video) -> None:
+        """Mark a download as cancelled and remove it from active downloads.
+
+        Does not requeue the video; a cancelled download is a terminal state.
+        """
         with self._lock:
-            if video in self._active_downloads:
-                self._active_downloads.remove(video)
-                video.status = DownloadStatus.READY
-                self._queue.append(video)
+            index = self._find_index(self._active_downloads, video)
+            if index >= 0:
+                active_video = self._active_downloads.pop(index)
+                active_video.status = DownloadStatus.CANCELLED
             if not self._active_downloads:
                 self._state = AppState.IDLE
         self._notify_change()
@@ -182,19 +189,12 @@ class StateManager:
         self._notify_change()
 
     def on_change(self, callback: Callable[[AppStateData], None]) -> None:
-        self._change_callbacks.append(callback)
+        with self._lock:
+            self._change_callbacks.append(callback)
 
     def get_snapshot(self) -> AppStateData:
         with self._lock:
-            return AppStateData(
-                search_results=list(self._search_results),
-                queue=list(self._queue),
-                active_downloads=list(self._active_downloads),
-                completed_downloads=list(self._completed_downloads),
-                state=self._state,
-                mode=self._mode,
-                error_message=self._error_message,
-            )
+            return self._snapshot()
 
     def reset(self) -> None:
         with self._lock:
@@ -206,17 +206,29 @@ class StateManager:
             self._error_message = ""
         self._notify_change()
 
+    @staticmethod
+    def _find_index(items: list[Video], video: Video) -> int:
+        """Locate a video by identity or URL inside a list."""
+        for i, item in enumerate(items):
+            if item is video or item.url == video.url:
+                return i
+        return -1
+
+    def _snapshot(self) -> AppStateData:
+        """Build an immutable snapshot: lists and contained videos are copies."""
+        return AppStateData(
+            search_results=[copy.deepcopy(v) for v in self._search_results],
+            queue=[copy.deepcopy(v) for v in self._queue],
+            active_downloads=[copy.deepcopy(v) for v in self._active_downloads],
+            completed_downloads=[copy.deepcopy(v) for v in self._completed_downloads],
+            state=self._state,
+            mode=self._mode,
+            error_message=self._error_message,
+        )
+
     def _notify_change(self) -> None:
         with self._lock:
-            snapshot = AppStateData(
-                search_results=list(self._search_results),
-                queue=list(self._queue),
-                active_downloads=list(self._active_downloads),
-                completed_downloads=list(self._completed_downloads),
-                state=self._state,
-                mode=self._mode,
-                error_message=self._error_message,
-            )
+            snapshot = self._snapshot()
             callbacks = list(self._change_callbacks)
         for callback in callbacks:
             callback(snapshot)

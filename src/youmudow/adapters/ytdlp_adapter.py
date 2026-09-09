@@ -14,6 +14,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 from youmudow.adapters.browser_profiles import check_browser_profile, get_fallback_browser
 from youmudow.domain.enums import DownloadStatus
@@ -162,6 +163,7 @@ class YtdlpAdapter:
             if opts.use_cookies:
                 if opts.cookies_from_browser:
                     browser = opts.cookies_from_browser.lower()
+                    profile = opts.cookies_profile
                     exists, message = check_browser_profile(browser)
                     if not exists:
                         self._log(f"[AUTH] {message}")
@@ -169,9 +171,7 @@ class YtdlpAdapter:
                         if fallback and fallback != browser:
                             self._log(f"[AUTH] Falling back to {fallback.capitalize()}")
                             browser = fallback
-                            opts.cookies_from_browser = fallback
-                            opts.cookies_profile = None
-                    profile = opts.cookies_profile
+                            profile = None
                     cookie_arg = browser
                     if profile and profile.lower() not in ["default", "main"]:
                         cookie_arg = f"{browser}:{profile}"
@@ -277,6 +277,48 @@ class YtdlpAdapter:
                 line=line,
             )
 
+        # Fallback: bare percentage (no speed/ETA), e.g. "[download]  45.2%"
+        bare_match = re.search(r"\[download\]\s+(\d+\.?\d*)%", line)
+        if bare_match:
+            return ProgressInfo(
+                progress=float(bare_match.group(1)),
+                speed="",
+                eta="",
+                size="",
+                line=line,
+            )
+
+        return None
+
+    @staticmethod
+    def _parse_json_output(stdout: str) -> dict | None:
+        """Parse yt-dlp JSON output, tolerating surrounding log lines."""
+        decoder = json.JSONDecoder()
+
+        def try_parse(text: str) -> dict | None:
+            text = text.lstrip()
+            if not text:
+                return None
+            try:
+                data, _ = decoder.raw_decode(text)
+                return data if isinstance(data, dict) else None
+            except (json.JSONDecodeError, ValueError):
+                return None
+
+        data = try_parse(stdout)
+        if data:
+            return data
+
+        first_brace = stdout.find("{")
+        if first_brace >= 0:
+            data = try_parse(stdout[first_brace:])
+            if data:
+                return data
+
+        for line in stdout.strip().splitlines():
+            data = try_parse(line)
+            if data:
+                return data
         return None
 
     def _parse_flat_results(self, stdout: str) -> list[Video]:
@@ -362,15 +404,30 @@ class YtdlpAdapter:
             )
 
             if result.returncode == 0 and result.stdout:
-                data = json.loads(result.stdout)
-                self._log(f"[METADATA] Got: {data.get('title', 'Unknown')}")
-                return Video(
-                    title=data.get("title", "Unknown"),
-                    url=url,
-                    uploader=data.get("uploader", ""),
-                    duration=data.get("duration", 0) or 0,
-                    thumbnail=data.get("thumbnail", ""),
-                )
+                data = self._parse_json_output(result.stdout)
+                if data:
+                    title = str(data.get("title") or "Unknown")
+                    uploader = str(data.get("uploader") or data.get("uploader_id") or "")
+                    duration = data.get("duration") or 0
+                    try:
+                        duration = int(duration)
+                    except (TypeError, ValueError):
+                        duration = 0
+                    thumbnail = data.get("thumbnail") or ""
+                    if not thumbnail:
+                        thumbnails = data.get("thumbnails")
+                        if isinstance(thumbnails, list) and thumbnails:
+                            first = thumbnails[0]
+                            if isinstance(first, dict):
+                                thumbnail = str(first.get("url") or "")
+                    self._log(f"[METADATA] Got: {title}")
+                    return Video(
+                        title=title,
+                        url=url,
+                        uploader=uploader,
+                        duration=duration,
+                        thumbnail=thumbnail,
+                    )
             elif result.returncode != 0:
                 error_msg = result.stderr.strip() if result.stderr else "Unknown error"
                 first_line = error_msg.split("\n")[0][:120]
@@ -389,14 +446,19 @@ class YtdlpAdapter:
         return None
 
     def get_playlist_videos(self, url: str, limit: int = 50) -> list[Video]:
-        """Fetch all videos from a playlist."""
+        """Fetch all videos from a playlist.
+
+        Non-YouTube URLs (SoundCloud sets, Bandcamp albums, ...) are passed
+        through unchanged. YouTube watch URLs carrying a ``list`` parameter
+        are normalized to their playlist URL.
+        """
         args = self._build_base_args(None)
         args.extend(
             [
                 "--flat-playlist",
                 "--print",
                 "%(url)s | %(title)s | %(uploader)s | %(duration)s",
-                f"https://www.youtube.com/playlist?list={url.split('list=')[-1].split('&')[0]}",
+                self._normalize_playlist_url(url),
             ]
         )
 
@@ -429,6 +491,21 @@ class YtdlpAdapter:
             self._log(f"[PLAYLIST] yt-dlp not found or error: {e}")
             logger.warning("Playlist fetch failed: %s", e)
             return []
+
+    @staticmethod
+    def _normalize_playlist_url(url: str) -> str:
+        """Normalize YouTube watch URLs carrying a list param to playlist URLs.
+
+        Non-YouTube URLs are returned unchanged.
+        """
+        parsed = urlparse(url)
+        if "youtube.com" in parsed.netloc or "youtu.be" in parsed.netloc:
+            query = parse_qs(parsed.query)
+            if "list" in query and not (
+                parsed.path.startswith("/playlist") or parsed.path.startswith("/music/playlist")
+            ):
+                return f"https://www.youtube.com/playlist?list={query['list'][0]}"
+        return url
 
     def _log_download_start(self, video: Video, fmt: str) -> None:
         """Log download start information."""
@@ -527,13 +604,35 @@ class YtdlpAdapter:
         reader = threading.Thread(target=read_output, daemon=True)
         reader.start()
 
+        timeout_reached = False
         try:
-            process.wait(timeout=self._config.download_timeout)
+            if cancel_event is None:
+                process.wait(timeout=self._config.download_timeout)
+            else:
+                deadline = time.monotonic() + self._config.download_timeout
+                while process.poll() is None:
+                    if cancel_event.is_set():
+                        self._log("[CANCEL] Cancelled, terminating process")
+                        process.terminate()
+                        try:
+                            process.wait(timeout=2)
+                        except subprocess.TimeoutExpired:
+                            process.kill()
+                        break
+                    if time.monotonic() >= deadline:
+                        self._log("[ERROR] Download timed out")
+                        process.kill()
+                        try:
+                            process.wait(timeout=2)
+                        except subprocess.TimeoutExpired:
+                            pass
+                        timeout_reached = True
+                        break
+                    time.sleep(0.1)
         except subprocess.TimeoutExpired:
             self._log("[ERROR] Download timed out")
             process.kill()
-            reader.join(timeout=1)
-            return -2, error_lines
+            timeout_reached = True
         finally:
             if process.poll() is None:
                 process.terminate()
@@ -542,10 +641,13 @@ class YtdlpAdapter:
                 except subprocess.TimeoutExpired:
                     process.kill()
 
-        reader.join(timeout=1)
+        reader.join(timeout=2)
         with output_lock:
             if destinations:
                 self._last_destination = Path(destinations[-1])
+
+        if timeout_reached:
+            return -2, error_lines
         return process.returncode, error_lines
 
     def _is_cookie_error(self, error_output: str) -> bool:
@@ -602,7 +704,12 @@ class YtdlpAdapter:
                     self._log(
                         f"[RETRY] Attempt {attempt}/{self._config.max_retries}, waiting {wait}s..."
                     )
-                    time.sleep(wait)
+                    if cancel_event:
+                        if cancel_event.wait(wait):
+                            cancelled = True
+                            break
+                    else:
+                        time.sleep(wait)
 
                 returncode, error_lines = self._run_process(
                     args, output_path, video, cancel_event, progress_callback
