@@ -70,8 +70,8 @@ def _get_browser_profile_paths() -> dict[str, list[str]]:
 
 
 def _expand(path: str) -> str:
-    """Expand user shortcuts only on POSIX systems."""
-    if platform.system() == "Linux":
+    """Expand user shortcuts on POSIX systems only."""
+    if platform.system() in ("Linux", "Darwin"):
         return os.path.expanduser(path)
     return path
 

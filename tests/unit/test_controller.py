@@ -98,6 +98,15 @@ class TestAppController:
         controller.remove_from_queue(v)
         controller._state_manager.remove_from_queue.assert_called_once_with(v)
 
+    def test_remove_from_queue_syncs_active_downloads(self, controller):
+        dl = controller._download_service
+        dl.cancel_video = Mock()
+        v = Video(title="Active", url="u")
+        controller._state_manager.cancel_download = Mock()
+        controller.remove_from_queue(v)
+        controller._state_manager.cancel_download.assert_called_once_with(v)
+        dl.cancel_video.assert_called_once_with(v)
+
     def test_set_debug_mode(self, controller):
         controller.set_debug_mode(True)
         assert controller._debug_mode is True
@@ -142,7 +151,7 @@ class TestControllerSearchFlows:
         v = Video(title="T", url="https://youtube.com/watch?v=abc", thumbnail="")
         controller._search_service.search.return_value = [v]
         controller._thumbnail_service.get_thumbnail_url.return_value = "thumb"
-        controller._perform_search("query")
+        controller._perform_search("query", 0)
         assert v.thumbnail == "thumb"
         controller._state_manager.set_search_results.assert_called_once_with([v])
         controller._state_manager.set_state.assert_called_with(AppState.IDLE)
@@ -151,20 +160,36 @@ class TestControllerSearchFlows:
     def test_perform_search_keeps_existing_thumbnail(self, controller):
         v = Video(title="T", url="https://youtube.com/watch?v=abc", thumbnail="existing")
         controller._search_service.search.return_value = [v]
-        controller._perform_search("query")
+        controller._perform_search("query", 0)
         controller._thumbnail_service.get_thumbnail_url.assert_not_called()
 
     def test_perform_search_non_youtube_no_thumbnail(self, controller):
         v = Video(title="T", url="https://soundcloud.com/track/x", thumbnail="")
         controller._search_service.search.return_value = [v]
-        controller._perform_search("query")
+        controller._perform_search("query", 0)
         controller._thumbnail_service.get_thumbnail_url.assert_not_called()
         controller._search_complete_callback.assert_called_once_with([v])
 
     def test_perform_search_error(self, controller):
         controller._search_service.search.side_effect = Exception("boom")
-        controller._perform_search("query")
+        controller._perform_search("query", 0)
         controller._state_manager.set_error.assert_called_once()
+
+    def test_perform_search_stale_epoch_ignores_results(self, controller):
+        v = Video(title="T", url="https://youtube.com/watch?v=abc")
+        controller._search_service.search.return_value = [v]
+        controller._search_epoch = 5
+        controller._perform_search("query", 3)
+        controller._state_manager.set_search_results.assert_not_called()
+        controller._state_manager.set_state.assert_called_with(AppState.IDLE)
+        controller._search_complete_callback.assert_not_called()
+
+    def test_perform_search_stale_epoch_error_ignored(self, controller):
+        controller._search_service.search.side_effect = Exception("boom")
+        controller._search_epoch = 5
+        controller._perform_search("query", 3)
+        controller._state_manager.set_error.assert_not_called()
+        controller._state_manager.set_state.assert_called_with(AppState.IDLE)
 
     def test_perform_search_url_success(self, controller):
         v = Video(title="T", url="https://youtube.com/watch?v=abc")
@@ -213,7 +238,7 @@ class TestControllerSearchFlows:
 
     def test_stop_downloads_sets_idle(self, controller):
         controller.stop_downloads()
-        controller._state_manager.set_state.assert_called_with(AppState.IDLE)
+        controller._state_manager.stop_all.assert_called_once()
 
     def test_download_now(self, controller):
         v = Video(title="T", url="u")

@@ -63,7 +63,6 @@ class AppController:
 
         self._search_thread: threading.Thread | None = None
         self._url_search_thread: threading.Thread | None = None
-        self._search_cancel_event = threading.Event()
         self._search_epoch = 0
         self._search_epoch_lock = threading.Lock()
         self._download_complete_callback: DownloadCompleteCallback | None = None
@@ -97,25 +96,39 @@ class AppController:
         if not query or not query.strip():
             return
 
+        with self._search_epoch_lock:
+            self._search_epoch += 1
+            epoch = self._search_epoch
+
         self._state_manager.set_state(AppState.SEARCHING)
         self._state_manager.clear_search_results()
 
         self._search_thread = threading.Thread(
             target=self._perform_search,
-            args=(query,),
+            args=(query, epoch),
             daemon=True,
         )
         self._search_thread.start()
 
-    def _perform_search(self, query: str) -> None:
+    def _perform_search(self, query: str, epoch: int) -> None:
         try:
             results = self._search_service.search(query)
+
+            with self._search_epoch_lock:
+                if epoch != self._search_epoch:
+                    self._state_manager.set_state(AppState.IDLE)
+                    return
 
             for video in results:
                 if video.thumbnail:
                     continue
                 if is_valid_youtube_url(video.url):
                     video.thumbnail = self._thumbnail_service.get_thumbnail_url(video.url)
+
+            with self._search_epoch_lock:
+                if epoch != self._search_epoch:
+                    self._state_manager.set_state(AppState.IDLE)
+                    return
 
             self._state_manager.set_search_results(results)
             self._state_manager.set_state(AppState.IDLE)
@@ -124,6 +137,10 @@ class AppController:
                 self._search_complete_callback(results)
 
         except Exception as e:
+            with self._search_epoch_lock:
+                if epoch != self._search_epoch:
+                    self._state_manager.set_state(AppState.IDLE)
+                    return
             self._state_manager.set_error(f"Search failed: {e}")
             logger.exception("Search failed for query %r", query)
 
@@ -204,6 +221,7 @@ class AppController:
 
     def remove_from_queue(self, video: Video) -> None:
         self._state_manager.remove_from_queue(video)
+        self._state_manager.cancel_download(video)
         self._download_service.cancel_video(video)
 
     def clear_queue(self) -> None:
@@ -223,7 +241,7 @@ class AppController:
 
     def stop_downloads(self) -> None:
         self._download_service.stop()
-        self._state_manager.set_state(AppState.IDLE)
+        self._state_manager.stop_all()
 
     def download_now(self, video: Video, path: Path | None = None) -> Video:
         self._state_manager.start_download(video)

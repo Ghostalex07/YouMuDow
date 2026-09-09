@@ -64,15 +64,16 @@ class DownloadWorker(threading.Thread):
         self,
         worker_id: int,
         adapter: YtdlpAdapter,
-        output_path: Path,
+        output_path_getter: Callable[[], Path],
         progress_callback: Callable[[DownloadEvent], None],
     ) -> None:
         super().__init__(daemon=True)
         self._worker_id = worker_id
         self._adapter = adapter
-        self._output_path = output_path
+        self._output_path_getter = output_path_getter
         self._progress_callback = progress_callback
         self._current_video: Video | None = None
+        self._video_lock = threading.Lock()
         self._cancel_event = threading.Event()
         self._ready = threading.Event()
         self._shutdown = threading.Event()
@@ -83,14 +84,17 @@ class DownloadWorker(threading.Thread):
 
     @property
     def is_busy(self) -> bool:
-        return self._current_video is not None
+        with self._video_lock:
+            return self._current_video is not None
 
     @property
     def current_video(self) -> Video | None:
-        return self._current_video
+        with self._video_lock:
+            return self._current_video
 
     def submit(self, video: Video) -> None:
-        self._current_video = video
+        with self._video_lock:
+            self._current_video = video
         self._cancel_event.clear()
         self._ready.set()
 
@@ -124,7 +128,8 @@ class DownloadWorker(threading.Thread):
             if self._shutdown.is_set():
                 break
 
-            video = self._current_video
+            with self._video_lock:
+                video = self._current_video
             if video is None:
                 continue
 
@@ -133,20 +138,27 @@ class DownloadWorker(threading.Thread):
 
             try:
                 self._adapter.download(
-                    video, self._output_path, progress_callback_fn, cancel_event=self._cancel_event
+                    video,
+                    self._output_path_getter(),
+                    progress_callback_fn,
+                    cancel_event=self._cancel_event,
                 )
             except Exception as e:
                 video.status = DownloadStatus.ERROR
                 video.error_message = str(e)
                 logger.exception("Download worker failed for %s", video.url)
 
-            self._current_video = None
-            self._progress_callback(
-                DownloadEvent(
-                    type=DownloadEventType.COMPLETED,
-                    video=video,
-                )
-            )
+            with self._video_lock:
+                self._current_video = None
+
+            if video.status == DownloadStatus.CANCELLED:
+                event_type = DownloadEventType.CANCELLED
+            elif video.status == DownloadStatus.ERROR:
+                event_type = DownloadEventType.ERROR
+            else:
+                event_type = DownloadEventType.COMPLETED
+
+            self._progress_callback(DownloadEvent(type=event_type, video=video))
 
 
 class DownloadQueue:
@@ -212,6 +224,7 @@ class DownloadService:
         self._running = False
         self._event_callbacks: list[Callable[[DownloadEvent], None]] = []
         self._lock = threading.Lock()
+        self._callbacks_lock = threading.Lock()
         self._active_downloads: dict[int, Video] = {}
         self._queue_event = threading.Event()
 
@@ -230,41 +243,52 @@ class DownloadService:
 
     @property
     def max_concurrent(self) -> int:
-        return self._max_concurrent
+        with self._lock:
+            return self._max_concurrent
+
+    def set_max_concurrent(self, value: int) -> None:
+        with self._lock:
+            self._max_concurrent = max(1, value)
 
     def set_log_callback(self, callback) -> None:
         if hasattr(self._adapter, "set_log_callback"):
             self._adapter.set_log_callback(callback)
 
     def set_output_path(self, path: Path) -> None:
-        self._output_path = path
+        with self._lock:
+            self._output_path = path
 
     def get_output_path(self) -> Path:
-        return self._output_path
+        with self._lock:
+            return self._output_path
 
     def on_event(self, callback: Callable[[DownloadEvent], None]) -> None:
-        self._event_callbacks.append(callback)
+        with self._callbacks_lock:
+            self._event_callbacks.append(callback)
 
     def on_progress(self, callback: Callable[[DownloadProgress], None]) -> None:
         def wrapper(event: DownloadEvent) -> None:
             if event.type == DownloadEventType.PROGRESS and event.progress:
                 callback(event.progress)
 
-        self._event_callbacks.append(wrapper)
+        with self._callbacks_lock:
+            self._event_callbacks.append(wrapper)
 
     def on_complete(self, callback: Callable[[Video], None]) -> None:
         def wrapper(event: DownloadEvent) -> None:
             if event.type == DownloadEventType.COMPLETED:
                 callback(event.video)
 
-        self._event_callbacks.append(wrapper)
+        with self._callbacks_lock:
+            self._event_callbacks.append(wrapper)
 
     def on_error(self, callback: Callable[[Video], None]) -> None:
         def wrapper(event: DownloadEvent) -> None:
             if event.type == DownloadEventType.ERROR:
                 callback(event.video)
 
-        self._event_callbacks.append(wrapper)
+        with self._callbacks_lock:
+            self._event_callbacks.append(wrapper)
 
     def clear_queue(self) -> None:
         self._queue.clear()
@@ -283,6 +307,10 @@ class DownloadService:
         for video in videos:
             self.add_to_queue(video)
 
+    def _get_output_path(self) -> Path:
+        with self._lock:
+            return self._output_path
+
     def start(self) -> None:
         if self._running:
             return
@@ -292,7 +320,7 @@ class DownloadService:
             worker = DownloadWorker(
                 worker_id=i,
                 adapter=self._adapter,
-                output_path=self._output_path,
+                output_path_getter=self._get_output_path,
                 progress_callback=self._handle_worker_event,
             )
             self._workers.append(worker)
@@ -302,10 +330,14 @@ class DownloadService:
 
     def stop(self) -> None:
         self._running = False
-        for worker in self._workers:
+        with self._lock:
+            workers = list(self._workers)
+            self._workers.clear()
+        for worker in workers:
             worker.cancel()
             worker.stop()
-        self._workers.clear()
+        for worker in workers:
+            worker.join(timeout=5)
 
     def cancel_video(self, video: Video) -> None:
         self._queue.remove(video)
@@ -318,12 +350,6 @@ class DownloadService:
                             del self._active_downloads[wid]
                             break
                     break
-        self._emit_event(
-            DownloadEvent(
-                type=DownloadEventType.CANCELLED,
-                video=video,
-            )
-        )
 
     def _process_queue(self) -> None:
         while self._running:
@@ -353,41 +379,29 @@ class DownloadService:
     def _handle_worker_event(self, event: DownloadEvent) -> None:
         if event.type == DownloadEventType.PROGRESS:
             self._emit_event(event)
-        elif event.type == DownloadEventType.COMPLETED:
-            with self._lock:
-                video_id = None
-                for wid, vid in self._active_downloads.items():
-                    if vid == event.video:
-                        video_id = wid
-                        break
-                if video_id is not None:
-                    del self._active_downloads[video_id]
+            return
 
-            if event.video.status == DownloadStatus.DONE:
-                self._emit_event(
-                    DownloadEvent(
-                        type=DownloadEventType.COMPLETED,
-                        video=event.video,
-                    )
+        with self._lock:
+            for wid, vid in list(self._active_downloads.items()):
+                if vid is event.video:
+                    del self._active_downloads[wid]
+                    break
+
+        if event.type == DownloadEventType.ERROR:
+            self._emit_event(
+                DownloadEvent(
+                    type=DownloadEventType.ERROR,
+                    video=event.video,
+                    error=event.video.error_message or "Download failed",
                 )
-            elif event.video.status == DownloadStatus.CANCELLED:
-                self._emit_event(
-                    DownloadEvent(
-                        type=DownloadEventType.CANCELLED,
-                        video=event.video,
-                    )
-                )
-            else:
-                self._emit_event(
-                    DownloadEvent(
-                        type=DownloadEventType.ERROR,
-                        video=event.video,
-                        error=event.video.error_message or "Download failed",
-                    )
-                )
+            )
+        elif event.type in (DownloadEventType.COMPLETED, DownloadEventType.CANCELLED):
+            self._emit_event(event)
 
     def _emit_event(self, event: DownloadEvent) -> None:
-        for callback in self._event_callbacks:
+        with self._callbacks_lock:
+            callbacks = list(self._event_callbacks)
+        for callback in callbacks:
             try:
                 callback(event)
             except Exception:

@@ -172,6 +172,15 @@ class StateManager:
                 self._state = AppState.IDLE
         self._notify_change()
 
+    def stop_all(self) -> None:
+        """Cancel all active downloads and reset to IDLE."""
+        with self._lock:
+            for video in list(self._active_downloads):
+                video.status = DownloadStatus.CANCELLED
+            self._active_downloads.clear()
+            self._state = AppState.IDLE
+        self._notify_change()
+
     def on_change(self, callback: Callable[[AppStateData], None]) -> None:
         self._change_callbacks.append(callback)
 

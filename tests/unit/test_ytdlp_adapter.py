@@ -752,6 +752,60 @@ class TestRunProcess:
             _, _ = adapter._run_process(["yt-dlp"], tmp_path, sample_video, cancel, None)
         assert fake.terminated
 
+    def test_captures_destination(self, tmp_path, sample_video):
+        adapter = YtdlpAdapter()
+        dest = tmp_path / "Actual_Output_File.mp3"
+        fake = FakeProcess([f"[download] Destination: {dest}"], 0)
+        with patch("subprocess.Popen", return_value=fake):
+            code, _ = adapter._run_process(["yt-dlp"], tmp_path, sample_video, None, None)
+        assert code == 0
+        assert adapter._last_destination == dest
+
+    def test_captures_already_downloaded(self, tmp_path, sample_video):
+        adapter = YtdlpAdapter()
+        dest = tmp_path / "Existing.mp3"
+        fake = FakeProcess([f"[download] {dest} has already been downloaded"], 0)
+        with patch("subprocess.Popen", return_value=fake):
+            code, _ = adapter._run_process(["yt-dlp"], tmp_path, sample_video, None, None)
+        assert code == 0
+        assert adapter._last_destination == dest
+
+
+class TestDownloadDestinationResolution:
+    """Download() should use the captured destination path when available."""
+
+    def test_uses_captured_destination(self, tmp_path):
+        adapter = YtdlpAdapter()
+        video = make_video(file_format="mp3")
+        dest_file = tmp_path / "Real_File.mp3"
+        dest_file.write_text("x")
+
+        def fake_run(args, output_path, video, cancel_event, progress_callback):
+            adapter._last_destination = dest_file
+            return (0, [])
+
+        with patch.object(adapter, "_run_process", side_effect=fake_run):
+            result = adapter.download(video, tmp_path)
+
+        assert result.status == DownloadStatus.DONE
+        assert result.path == dest_file
+
+    def test_falls_back_to_sanitized_glob(self, tmp_path):
+        adapter = YtdlpAdapter()
+        video = Video(
+            title="Weird / Title!",
+            url="https://youtube.com/watch?v=x",
+            options=DownloadOptions(file_format="mp3"),
+        )
+        dest_file = tmp_path / "Weird _ Title!.mp3"
+        dest_file.write_text("x")
+
+        with patch.object(adapter, "_run_process", return_value=(0, [])):
+            result = adapter.download(video, tmp_path)
+
+        assert result.status == DownloadStatus.DONE
+        assert result.path == dest_file
+
 
 class TestDownloadFlows:
     """End-to-end download() flows with a mocked process runner."""
