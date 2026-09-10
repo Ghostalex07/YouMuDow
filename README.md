@@ -127,3 +127,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and how to submit c
 ## License
 
 [MIT](LICENSE)
+
+## AI/ML Use Restriction
+
+This project publishes [`robots.txt`](robots.txt) and [`ai.txt`](ai.txt) to explicitly prohibit the use of its contents for AI/ML training, dataset creation, evaluation, or model development. See [`ai.txt`](ai.txt) for full details.
