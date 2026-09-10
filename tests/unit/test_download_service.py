@@ -975,6 +975,166 @@ class TestStaleTerminalEventDropped:
         service.stop()
 
 
+class TestCallbackReentrancy:
+    """Callbacks run outside the service/queue locks, so they may safely call
+    back into the service (register, cancel, enqueue) without deadlocking."""
+
+    def test_callback_can_register_another_callback(self, download_service, sample_video):
+        """The callback snapshot means a callback registered mid-dispatch is
+        only invoked for the next event, never the current one."""
+        second_calls = []
+
+        def first(event):
+            download_service.on_event(second_calls.append)
+
+        download_service.on_event(first)
+        download_service._emit_event(
+            DownloadEvent(type=DownloadEventType.QUEUED, video=sample_video)
+        )
+        assert second_calls == []
+
+        download_service._emit_event(
+            DownloadEvent(type=DownloadEventType.QUEUED, video=sample_video)
+        )
+        assert len(second_calls) == 1
+
+    def test_callback_calling_cancel_video_is_safe(self, mock_adapter, tmp_path):
+        service = DownloadService(adapter=mock_adapter, default_output_path=tmp_path)
+        other = Video(title="b", url="b")
+        service.add_to_queue(other)
+        events = []
+        service.on_event(events.append)
+        v = Video(title="a", url="a")
+
+        def cancelling_callback(event):
+            if event.video is v:
+                assert service.cancel_video(other) is True
+
+        service.on_event(cancelling_callback)
+        service.add_to_queue(v)
+        cancelled = [e for e in events if e.type == DownloadEventType.CANCELLED]
+        assert any(e.video.url == "b" for e in cancelled)
+        assert other.status == DownloadStatus.CANCELLED
+
+    def test_callback_calling_add_to_queue_is_safe_and_self_terminating(
+        self, mock_adapter, tmp_path
+    ):
+        service = DownloadService(adapter=mock_adapter, default_output_path=tmp_path)
+        extra = Video(title="extra", url="extra")
+
+        def enqueue_on_event(event):
+            service.add_to_queue(extra)
+
+        service.on_event(enqueue_on_event)
+        service.add_to_queue(Video(title="v", url="v"))
+        # original + extra; the QUEUED(extra) event re-enters the callback but
+        # _is_known() already rejects the duplicate, so it cannot loop.
+        assert service.queue_size == 2
+
+
+class TestCancelRaces:
+    """Deterministic cancel vs completion/stop races: a terminal event must
+    be emitted exactly once with a consistent (non-active) state."""
+
+    def _wait_for(self, predicate, timeout=4.0):
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if predicate():
+                return True
+            time.sleep(0.02)
+        return False
+
+    def test_cancel_racing_completion_emits_single_completed(self, tmp_path):
+        """If the worker finishes the download before confirming the cancel,
+        the terminal event is COMPLETED (completion wins) — exactly one terminal
+        event, and the video is removed from active before the callback runs."""
+        adapter = Mock()
+        started = threading.Event()
+
+        def completes_on_cancel(video, output_path, progress_callback=None, cancel_event=None):
+            started.set()
+            if cancel_event is not None:
+                cancel_event.wait(2.0)
+            video.status = DownloadStatus.DONE
+            return video
+
+        adapter.download.side_effect = completes_on_cancel
+        service = DownloadService(adapter=adapter, default_output_path=tmp_path, max_concurrent=1)
+        active_observed = []
+        events = []
+
+        def terminal(event):
+            if event.type in (
+                DownloadEventType.COMPLETED,
+                DownloadEventType.CANCELLED,
+                DownloadEventType.ERROR,
+            ):
+                # The video must already be gone from active_downloads when the
+                # terminal callback runs.
+                active_observed.append(event.video in service._active_downloads.values())
+
+        service.on_event(terminal)
+        service.on_event(events.append)
+        v = Video(title="v", url="u")
+        service.add_to_queue(v)
+        service.start()
+        assert started.wait(2.0)
+        assert service.cancel_video(v) is False
+
+        assert self._wait_for(lambda: any(e.type == DownloadEventType.COMPLETED for e in events))
+        terminal_events = [
+            e
+            for e in events
+            if e.type
+            in (
+                DownloadEventType.COMPLETED,
+                DownloadEventType.CANCELLED,
+                DownloadEventType.ERROR,
+            )
+        ]
+        assert len(terminal_events) == 1
+        assert terminal_events[0].type == DownloadEventType.COMPLETED
+        assert terminal_events[0].video is v
+        assert v.status == DownloadStatus.DONE
+        assert service.active_count == 0
+        assert active_observed == [False]
+        service.stop()
+
+    def test_cancel_racing_stop_suppresses_events(self, tmp_path):
+        """When stop() shuts the service down concurrently with a cancel, no
+        terminal event reaches callbacks: the stop gate drops it and the video
+        is internally marked CANCELLED (consistent, non-active)."""
+        adapter = Mock()
+        started = threading.Event()
+
+        def blocking(video, output_path, progress_callback=None, cancel_event=None):
+            started.set()
+            if cancel_event is not None:
+                cancel_event.wait(2.0)
+            video.status = DownloadStatus.CANCELLED
+            return video
+
+        adapter.download.side_effect = blocking
+        service = DownloadService(adapter=adapter, default_output_path=tmp_path, max_concurrent=1)
+        events = []
+        service.on_event(events.append)
+        v = Video(title="v", url="u")
+        service.add_to_queue(v)
+        service.start()
+        assert started.wait(2.0)
+
+        assert service.cancel_video(v) is False
+        service.stop()
+        service.stop()  # idempotent
+
+        assert not any(e.type == DownloadEventType.CANCELLED for e in events)
+        assert not any(e.type == DownloadEventType.COMPLETED for e in events)
+        assert not any(e.type == DownloadEventType.ERROR for e in events)
+        assert service.active_count == 0
+        assert service._workers == []
+        assert v.status == DownloadStatus.CANCELLED
+
+
 class TestLifecycleRace:
     """start()/stop() serialization: a racing start can never ghost workers."""
 
