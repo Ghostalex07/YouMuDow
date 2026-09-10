@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 Package script: builds the executable and creates a distributable folder
-with ffmpeg and yt-dlp bundled (Windows only for now).
+(the executable plus a README.txt). ffmpeg and yt-dlp are not bundled; the
+README lists them as external requirements.
 
 Usage:
     python scripts/package.py

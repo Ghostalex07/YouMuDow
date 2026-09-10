@@ -52,7 +52,7 @@ youmudow/
 ## Key Constants
 
 - `SUPPORTED_BROWSERS` in adapters/browser_profiles.py - List of supported browsers
-- `COLORS` in ui/window.py - UI color scheme
+- `Colors`/`DARK_COLORS`/`LIGHT_COLORS` in ui/styles/colors.py - UI color scheme
 - `YtdlpConfig` in adapters/ytdlp_adapter.py - Download configuration
 
 ## Important Notes

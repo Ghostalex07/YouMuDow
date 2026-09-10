@@ -9,10 +9,6 @@ class YouMuDowError(Exception):
     """Base class for all YouMuDow errors."""
 
 
-class InvalidUrlError(YouMuDowError, ValueError):
-    """Raised when a provided URL is empty, malformed or unsupported."""
-
-
 class DownloadError(YouMuDowError):
     """Raised when a download operation fails."""
 
@@ -23,7 +19,3 @@ class YtDlpError(DownloadError):
 
 class YtDlpNotFoundError(YtDlpError):
     """Raised when the yt-dlp binary is not available on the system."""
-
-
-class ConfigurationError(YouMuDowError):
-    """Raised when application configuration is invalid or unreadable."""

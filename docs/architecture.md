@@ -58,8 +58,7 @@ Pure data models and validation, no I/O.
 - `validators.py` — URL validation (`is_valid_youtube_url`, `is_playlist_url`),
   filename sanitization, rate-limit validation.
 - `exceptions.py` — exception hierarchy rooted at `YouMuDowError`
-  (`InvalidUrlError`, `DownloadError`, `YtDlpError`, `YtDlpNotFoundError`,
-  `ConfigurationError`).
+  (`DownloadError` → `YtDlpError` → `YtDlpNotFoundError`).
 
 ## Adapters Layer (`adapters/`)
 

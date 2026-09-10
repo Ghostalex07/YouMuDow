@@ -50,6 +50,20 @@ All notable changes to this project will be documented in this file.
   identity instead of `url`, so a stale same-URL event from an earlier run can
   never delete or finalise a brand-new download of that URL
 
+### Removed
+- Dead `InvalidUrlError` and `ConfigurationError` exceptions (never raised or
+  caught anywhere; zero references in source, tests or scripts); the hierarchy
+  is now `YouMuDowError` → `DownloadError` → `YtDlpError` →
+  `YtDlpNotFoundError`, and `docs/architecture.md` was updated to match
+- Redundant empty `tests/unit/.gitkeep` (the directory holds real test files)
+
+### Fixed
+- `scripts/package.py` docstring claimed ffmpeg/yt-dlp were "bundled
+  (Windows only for now)"; nothing is bundled — the deliverable is the
+  executable plus a README that lists them as external requirements
+- `AGENTS.md` pointed `COLORS` at `ui/window.py`; the palette lives in
+  `ui/styles/colors.py`
+
 ### Changed
 - Centralized format/quality sets (`SUPPORTED_FORMATS`, `SUPPORTED_QUALITIES`) in
   `domain/validators.py`, reused by the CLI, the GUI detail panel and the adapter
