@@ -41,17 +41,3 @@ def sample_video(sample_options: DownloadOptions) -> Video:
         status=DownloadStatus.READY,
         options=sample_options,
     )
-
-
-@pytest.fixture
-def error_video(sample_options: DownloadOptions) -> Video:
-    """A Video instance in ERROR state for testing retry logic."""
-    return Video(
-        title="Failed Video",
-        url="https://www.youtube.com/watch?v=error123",
-        uploader="Test Channel",
-        duration=100,
-        status=DownloadStatus.ERROR,
-        error_message="Download failed",
-        options=sample_options,
-    )

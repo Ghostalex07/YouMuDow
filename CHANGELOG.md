@@ -56,6 +56,11 @@ All notable changes to this project will be documented in this file.
   is now `YouMuDowError` → `DownloadError` → `YtDlpError` →
   `YtDlpNotFoundError`, and `docs/architecture.md` was updated to match
 - Redundant empty `tests/unit/.gitkeep` (the directory holds real test files)
+- `scripts/run_dev.py`: not referenced by the Makefile, CI, docs or any other
+  consumer — `make run` provides the same command and, unlike it, also works in
+  a fresh clone (`python scripts/run_dev.py` runs `-m youmudow.main` without
+  `PYTHONPATH=src`, so it only worked after installation)
+- Unused `error_video` pytest fixture in `tests/conftest.py` (no test requests it)
 
 ### Fixed
 - `scripts/package.py` docstring claimed ffmpeg/yt-dlp were "bundled
