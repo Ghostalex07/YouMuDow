@@ -233,13 +233,29 @@ class StateManager:
                 return i
         return -1
 
+    @staticmethod
+    def _copy_video(video: Video) -> Video:
+        """Return an independent copy of a video for a snapshot.
+
+        Every ``Video`` field is a value type (str/int/float/bool/path/enum);
+        the only nested object is ``options``, whose fields are all value types
+        too. Two shallow copies therefore produce the same isolation as
+        ``copy.deepcopy`` at a fraction of the cost, which matters because a
+        snapshot is built on every state change (including throttled progress
+        notifications).
+        """
+        independent = copy.copy(video)
+        if video.options is not None:
+            independent.options = copy.copy(video.options)
+        return independent
+
     def _snapshot(self) -> AppStateData:
         """Build an immutable snapshot: lists and contained videos are copies."""
         return AppStateData(
-            search_results=[copy.deepcopy(v) for v in self._search_results],
-            queue=[copy.deepcopy(v) for v in self._queue],
-            active_downloads=[copy.deepcopy(v) for v in self._active_downloads],
-            completed_downloads=[copy.deepcopy(v) for v in self._completed_downloads],
+            search_results=[self._copy_video(v) for v in self._search_results],
+            queue=[self._copy_video(v) for v in self._queue],
+            active_downloads=[self._copy_video(v) for v in self._active_downloads],
+            completed_downloads=[self._copy_video(v) for v in self._completed_downloads],
             state=self._state,
             mode=self._mode,
             error_message=self._error_message,

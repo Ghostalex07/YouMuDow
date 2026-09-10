@@ -991,6 +991,34 @@ class TestLifecycleRace:
         service.stop()
         assert service._workers == []
 
+    def test_clear_queue_wakes_queue_event(self, mock_adapter, tmp_path):
+        service = DownloadService(adapter=mock_adapter, default_output_path=tmp_path)
+        service.add_to_queue(Video(title="v", url="u"))
+        service._queue_event.clear()
+        service.clear_queue()
+        assert service._queue_event.is_set()
+
+    def test_stop_returns_cleanly_with_running_service(self, mock_adapter, tmp_path):
+        service = DownloadService(adapter=mock_adapter, default_output_path=tmp_path)
+        service.start()
+        service._queue_event.clear()
+        service.stop()
+        assert service._workers == []
+        assert not service.is_running
+
+    def test_terminal_worker_event_wakes_queue_event(self, mock_adapter, tmp_path):
+        service = DownloadService(adapter=mock_adapter, default_output_path=tmp_path)
+        service._run_event.set()
+        v = Video(title="v", url="u")
+        with service._lock:
+            service._active_downloads["1"] = v
+        service._queue_event.clear()
+        service._handle_worker_event(DownloadEvent(type=DownloadEventType.COMPLETED, video=v))
+        assert v not in service._active_downloads.values()
+        assert service._queue_event.is_set()
+        service._run_event.clear()
+        service.stop()
+
 
 class TestDownloadNowException:
     """download_now must not leak adapter exceptions or phantom active state."""

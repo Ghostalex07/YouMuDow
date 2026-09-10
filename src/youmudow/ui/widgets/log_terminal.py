@@ -205,6 +205,7 @@ class LogTerminal(ttk.Frame):
         with self._lock:
             ts = timestamp or datetime.datetime.now().astimezone().strftime("%H:%M:%S")
             self._log_buffer.append(f"[{ts}] [{level.upper()}] {message}")
+            self._trim_buffer()
             self._pending_messages.append((message, level, timestamp))
             if self._processing:
                 return
@@ -276,22 +277,6 @@ class LogTerminal(ttk.Frame):
             return "info"
         return level
 
-    def append_separator(self, text: str = "") -> None:
-        """Append a separator line (thread-safe)."""
-        sep_text = f" {'─' * 40} "
-        if text:
-            sep_text = f" {'─' * 15} {text} {'─' * 15} "
-
-        def do_append() -> None:
-            try:
-                self._text.configure(state="normal")
-                self._text.insert("end", sep_text + "\n", "separator")
-                self._text.configure(state="disabled")
-            except tk.TclError:
-                pass
-
-        self.after_idle(do_append)
-
     def clear(self) -> None:
         """Clear all log output (thread-safe)."""
 
@@ -315,6 +300,11 @@ class LogTerminal(ttk.Frame):
             return "\n".join(self._log_buffer)
 
     def export_to_file(self, path: Path) -> None:
+        """Export the buffered logs to ``path``.
+
+        The buffer is capped (see ``_trim_buffer``), so exports reflect only the
+        most recent lines that fit within the cap.
+        """
         content = self.get_logs()
         with open(path, "w", encoding="utf-8") as f:
             f.write(content)
@@ -327,6 +317,14 @@ class LogTerminal(ttk.Frame):
             self._text.delete("1.0", "2.0")
         self._line_count = max(0, self._line_count - lines_to_remove)
 
-    def set_auto_scroll(self, enabled: bool) -> None:
-        """Enable or disable auto-scrolling."""
-        self._auto_scroll_var.set(enabled)
+    def _trim_buffer(self) -> None:
+        """Bound the in-memory log buffer to limit memory.
+
+        ``get_logs``/``export_to_file`` reflect only the lines that fit within
+        this cap; without it the buffer would grow without bound for the whole
+        session.
+        """
+        cap = max(self._max_lines * 5, MAX_LINES)
+        overflow = len(self._log_buffer) - cap
+        if overflow > 0:
+            del self._log_buffer[:overflow]
