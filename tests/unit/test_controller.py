@@ -321,6 +321,46 @@ class TestControllerSearchFlows:
         assert isinstance(controller._download_service, DownloadService)
         controller._state_manager.reset.assert_called_once()
 
+    def test_reset_preserves_max_concurrent_from_config(self):
+        config = Mock()
+        config.get.return_value = 3
+        c = AppController(
+            search_service=Mock(),
+            download_service=Mock(),
+            thumbnail_service=Mock(),
+            state_manager=Mock(),
+            history_service=Mock(),
+            config=config,
+        )
+        c.reset()
+        assert c._download_service.max_concurrent == 3
+
+    def test_reset_preserves_output_path(self):
+        dl = Mock()
+        dl.get_output_path.return_value = Path("/preserved/output")
+        c = AppController(
+            search_service=Mock(),
+            download_service=dl,
+            thumbnail_service=Mock(),
+            state_manager=Mock(),
+            history_service=Mock(),
+        )
+        c.reset()
+        assert c._download_service._output_path == Path("/preserved/output")
+
+    def test_reset_reattaches_log_callback(self):
+        search = Mock()
+        c = AppController(
+            search_service=search,
+            download_service=Mock(),
+            thumbnail_service=Mock(),
+            state_manager=Mock(),
+            history_service=Mock(),
+        )
+        before = search.set_log_callback.call_count
+        c.reset()
+        assert search.set_log_callback.call_count > before
+
 
 class TestControllerCallbacks:
     """Download and log callbacks registered by the controller."""

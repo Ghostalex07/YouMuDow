@@ -18,6 +18,26 @@ INVALID_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
 MAX_FILENAME_LENGTH = 200
 
+AUDIO_FORMATS: frozenset[str] = frozenset({"mp3", "m4a", "opus", "ogg", "flac", "wav", "aac"})
+VIDEO_FORMATS: frozenset[str] = frozenset({"mp4"})
+SUPPORTED_FORMATS: frozenset[str] = AUDIO_FORMATS | VIDEO_FORMATS
+
+AUDIO_QUALITIES: frozenset[str] = frozenset(
+    {"64kbps", "96kbps", "128kbps", "192kbps", "256kbps", "320kbps"}
+)
+VIDEO_QUALITIES: frozenset[str] = frozenset({"360p", "480p", "720p", "1080p"})
+SUPPORTED_QUALITIES: frozenset[str] = AUDIO_QUALITIES | VIDEO_QUALITIES | {"best"}
+
+
+def is_valid_format(file_format: str | None) -> bool:
+    """True when the format is one this application can hand to yt-dlp."""
+    return file_format in SUPPORTED_FORMATS
+
+
+def is_valid_quality(quality: str | None) -> bool:
+    """True when the quality is one of the supported audio/video qualities."""
+    return quality in SUPPORTED_QUALITIES
+
 
 def is_valid_youtube_url(url: str) -> bool:
     """Validate if a string is a valid YouTube URL."""

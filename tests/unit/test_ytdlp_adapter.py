@@ -777,7 +777,7 @@ class TestRunProcessCancel:
         cancel.set()
         fake = BlockingFakeProcess()
         with patch("subprocess.Popen", return_value=fake):
-            code, _, _ = adapter._run_process(["yt-dlp"], tmp_path, sample_video, cancel, None)
+            code, _, _, _ = adapter._run_process(["yt-dlp"], tmp_path, sample_video, cancel, None)
         assert fake._terminated
         assert code == 5
 
@@ -793,7 +793,7 @@ class TestRunProcessCancel:
         fake = BlockingFakeProcess()
         start = time.monotonic()
         with patch("subprocess.Popen", return_value=fake):
-            code, _, _ = adapter._run_process(["yt-dlp"], tmp_path, sample_video, cancel, None)
+            code, _, _, _ = adapter._run_process(["yt-dlp"], tmp_path, sample_video, cancel, None)
         assert fake._terminated
         assert code == 5
         assert time.monotonic() - start < 3.0
@@ -802,7 +802,7 @@ class TestRunProcessCancel:
         adapter = YtdlpAdapter(YtdlpConfig(download_timeout=1))
         fake = BlockingFakeProcess()
         with patch("subprocess.Popen", return_value=fake):
-            code, _, _ = adapter._run_process(
+            code, _, _, _ = adapter._run_process(
                 ["yt-dlp"], tmp_path, sample_video, threading.Event(), None
             )
         assert code == -2
@@ -982,7 +982,7 @@ class TestRunProcess:
         ]
         fake = FakeProcess(lines, 0)
         with patch("subprocess.Popen", return_value=fake):
-            code, errors, _ = adapter._run_process(
+            code, errors, _, _ = adapter._run_process(
                 ["yt-dlp"],
                 tmp_path,
                 sample_video,
@@ -1006,7 +1006,7 @@ class TestRunProcess:
         fake = FakeProcess([], 0)
         fake.timeout_wait = True
         with patch("subprocess.Popen", return_value=fake):
-            code, _, _ = adapter._run_process(["yt-dlp"], tmp_path, sample_video, None, None)
+            code, _, _, _ = adapter._run_process(["yt-dlp"], tmp_path, sample_video, None, None)
         assert code == -2
         assert fake.killed
 
@@ -1016,7 +1016,7 @@ class TestRunProcess:
         cancel.set()
         fake = FakeProcess(["line1"], 5)
         with patch("subprocess.Popen", return_value=fake):
-            _, _, _ = adapter._run_process(["yt-dlp"], tmp_path, sample_video, cancel, None)
+            _, _, _, _ = adapter._run_process(["yt-dlp"], tmp_path, sample_video, cancel, None)
         assert fake.terminated
 
     def test_captures_destination(self, tmp_path, sample_video):
@@ -1024,7 +1024,7 @@ class TestRunProcess:
         dest = tmp_path / "Actual_Output_File.mp3"
         fake = FakeProcess([f"[download] Destination: {dest}"], 0)
         with patch("subprocess.Popen", return_value=fake):
-            code, _, destinations = adapter._run_process(
+            code, _, destinations, _ = adapter._run_process(
                 ["yt-dlp"], tmp_path, sample_video, None, None
             )
         assert code == 0
@@ -1036,12 +1036,13 @@ class TestRunProcess:
         dest = tmp_path / "Existing.mp3"
         fake = FakeProcess([f"[download] {dest} has already been downloaded"], 0)
         with patch("subprocess.Popen", return_value=fake):
-            code, _, destinations = adapter._run_process(
+            code, _, destinations, already = adapter._run_process(
                 ["yt-dlp"], tmp_path, sample_video, None, None
             )
         assert code == 0
         assert adapter._last_destination == dest
         assert destinations == [str(dest)]
+        assert already == [str(dest)]
 
 
 class TestDownloadDestinationResolution:
@@ -1095,7 +1096,9 @@ class TestDownloadDestinationResolution:
         with patch.object(adapter, "_run_process", return_value=(0, [])):
             result = adapter.download(video, tmp_path)
 
-        assert result.status == DownloadStatus.DONE
+        # A successful exit that produced no new file is a failure, never a
+        # COMPLETED download pointing at a pre-existing file.
+        assert result.status == DownloadStatus.ERROR
         assert result.path is None
 
     def test_stale_last_destination_not_reused_across_downloads(self, tmp_path):
@@ -1129,9 +1132,17 @@ class TestDownloadFlows:
 
     def test_success(self, tmp_path, sample_video):
         adapter = YtdlpAdapter()
-        with patch.object(adapter, "_run_process", return_value=(0, [])):
+        dest_file = tmp_path / "Test Video.mp3"
+
+        def fake_run(args, output_path, video, cancel_event, progress_callback):
+            # The file appears only during the run, so it is not pre-existing.
+            dest_file.write_text("data")
+            return (0, [], [str(dest_file)])
+
+        with patch.object(adapter, "_run_process", side_effect=fake_run):
             result = self._download(sample_video, tmp_path, adapter=adapter)
         assert result.status == DownloadStatus.DONE
+        assert result.path == dest_file
 
     def test_retries_then_error(self, tmp_path, sample_video):
         adapter = YtdlpAdapter(YtdlpConfig(max_retries=2))
@@ -1151,6 +1162,7 @@ class TestDownloadFlows:
         video = make_video(use_cookies=True, cookies_from_browser="chrome")
         adapter = YtdlpAdapter(YtdlpConfig(max_retries=2))
         skipped = []
+        dest_file = tmp_path / "Test.mp3"
 
         def fake_build(video, skip_cookies=False):
             skipped.append(skip_cookies)
@@ -1159,7 +1171,8 @@ class TestDownloadFlows:
         def fake_run(args, output_path, video, cancel_event, progress_callback):
             if "--cookies-from-browser" in args:
                 return (1, ["ERROR: could not find chrome cookies"])
-            return (0, [])
+            dest_file.write_text("data")
+            return (0, [], [str(dest_file)])
 
         with (
             patch.object(adapter, "_build_download_args", side_effect=fake_build),
@@ -1225,3 +1238,57 @@ class TestDownloadFlows:
         assert result.status == DownloadStatus.ERROR
         assert run.call_count == 1
         sleep.assert_not_called()
+
+
+class TestNoOutputPolicy:
+    """Completion requires a result file attributed to the run."""
+
+    def _download(self, video, tmp_path, adapter=None):
+        adapter = adapter or YtdlpAdapter()
+        return adapter.download(video, tmp_path)
+
+    def test_code_zero_with_no_output_is_error(self, tmp_path, sample_video):
+        adapter = YtdlpAdapter()
+        with patch.object(adapter, "_run_process", return_value=(0, [])):
+            result = self._download(sample_video, tmp_path, adapter=adapter)
+        assert result.status == DownloadStatus.ERROR
+        assert result.path is None
+        assert "no output file" in result.error_message
+
+    def test_already_downloaded_pre_existing_file_is_valid(self, tmp_path, sample_video):
+        """yt-dlp explicitly attributes the existing file to this run, so a
+        pre-existing file may be reported as the result."""
+        adapter = YtdlpAdapter()
+        existing = tmp_path / "Test Song.mp3"
+        existing.write_text("old content")
+
+        def fake_run(args, output_path, video, cancel_event, progress_callback):
+            return (0, [], [str(existing)], [str(existing)])
+
+        with patch.object(adapter, "_run_process", side_effect=fake_run):
+            result = self._download(sample_video, tmp_path, adapter=adapter)
+        assert result.status == DownloadStatus.DONE
+        assert result.path == existing
+
+    def test_new_destination_preferred_over_already_downloaded(self, tmp_path, sample_video):
+        adapter = YtdlpAdapter()
+        existing = tmp_path / "Old.mp3"
+        existing.write_text("old")
+        new_file = tmp_path / "New.mp3"
+
+        def fake_run(args, output_path, video, cancel_event, progress_callback):
+            new_file.write_text("data")
+            return (0, [], [str(new_file), str(existing)], [str(existing)])
+
+        with patch.object(adapter, "_run_process", side_effect=fake_run):
+            result = self._download(sample_video, tmp_path, adapter=adapter)
+        assert result.status == DownloadStatus.DONE
+        assert result.path == new_file
+
+    def test_old_mock_two_element_run_still_tolerated(self, tmp_path, sample_video):
+        """Legacy mocks returning a 2-tuple keep working: no crash, no COMPLETED."""
+        adapter = YtdlpAdapter()
+        with patch.object(adapter, "_run_process", return_value=(0, [])):
+            result = self._download(sample_video, tmp_path, adapter=adapter)
+        assert result.status == DownloadStatus.ERROR
+        assert result.error_message

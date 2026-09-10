@@ -11,7 +11,11 @@ from youmudow.adapters.browser_profiles import get_all_browser_profiles, get_ava
 from youmudow.app.state import AppStateData
 from youmudow.domain.enums import DownloadStatus
 from youmudow.domain.models import DownloadOptions, Video
-from youmudow.domain.validators import is_valid_rate_limit
+from youmudow.domain.validators import (
+    SUPPORTED_FORMATS,
+    SUPPORTED_QUALITIES,
+    is_valid_rate_limit,
+)
 from youmudow.ui.styles.constants import FONT, SPACING, _c, add_hover_effect
 
 logger = logging.getLogger(__name__)
@@ -225,7 +229,7 @@ class DetailPanel(tk.Frame):
         format_combo = ttk.Combobox(
             format_row,
             textvariable=self._format_var,
-            values=["mp3", "mp4", "m4a", "best"],
+            values=sorted(SUPPORTED_FORMATS),
             state="readonly",
             width=8,
             font=FONT["body"],
@@ -248,7 +252,7 @@ class DetailPanel(tk.Frame):
         quality_combo = ttk.Combobox(
             quality_row,
             textvariable=self._quality_var,
-            values=["best", "320kbps", "256kbps", "192kbps", "1080p", "720p", "480p"],
+            values=sorted(SUPPORTED_QUALITIES),
             state="readonly",
             width=10,
             font=FONT["body"],

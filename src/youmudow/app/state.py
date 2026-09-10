@@ -116,7 +116,20 @@ class StateManager:
         self._notify_change()
 
     def add_to_queue(self, video: Video) -> None:
+        """Add a video to the queue, rejecting duplicate URLs.
+
+        Mirrors ``DownloadService._is_known``: a URL already queued or actively
+        downloading is not re-added, so the observable state stays consistent
+        with the service (which would otherwise ignore the duplicate silently,
+        leaving a phantom entry).
+        """
         with self._lock:
+            for item in self._queue:
+                if item.url == video.url:
+                    return
+            for item in self._active_downloads:
+                if item.url == video.url:
+                    return
             video.status = DownloadStatus.QUEUED
             self._queue.append(video)
         self._notify_change()
