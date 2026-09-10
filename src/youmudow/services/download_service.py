@@ -224,12 +224,21 @@ class DownloadQueue:
         with self._lock:
             self._queue.clear()
 
-    def remove(self, video: Video) -> None:
+    def remove(self, video: Video) -> Video | None:
+        """Remove a video from the queue, matching by identity or URL.
+
+        Returns the removed video, or ``None`` if it was not present. Matching
+        mirrors ``StateManager._find_index`` so a deep-copied snapshot entry
+        can still cancel the original.
+        """
         with self._lock:
-            try:
-                self._queue.remove(video)
-            except ValueError:
-                pass
+            n = len(self._queue)
+            for i in range(n):
+                item = self._queue[i]
+                if item is video or item.url == video.url:
+                    del self._queue[i]
+                    return item
+            return None
 
 
 class DownloadService:
@@ -257,6 +266,7 @@ class DownloadService:
         self._run_event = threading.Event()
         self._event_callbacks: list[Callable[[DownloadEvent], None]] = []
         self._lock = threading.Lock()
+        self._lifecycle_lock = threading.Lock()
         self._callbacks_lock = threading.Lock()
         self._active_downloads: dict[int, Video] = {}
         self._queue_event = threading.Event()
@@ -373,8 +383,14 @@ class DownloadService:
             return self._output_path
 
     def start(self) -> None:
-        """Start the dispatch loop and spawn workers. Idempotent."""
-        with self._lock:
+        """Start the dispatch loop and spawn workers. Idempotent.
+
+        Serialized with ``stop()`` through ``_lifecycle_lock``: a ``start()``
+        racing a ``stop()`` either wins completely (fresh workers, service
+        running) or loses completely (the fresh workers are shut down by the
+        stop), so no worker thread is ever orphaned.
+        """
+        with self._lifecycle_lock:
             if self._run_event.is_set():
                 # Already running (or a caller raced with us): do not spawn a
                 # second set of workers or a second queue thread.
@@ -385,7 +401,10 @@ class DownloadService:
                 # not end up with two queue threads draining the same queue.
                 previous_thread.join(timeout=1.0)
             self._run_event.set()
-            for i in range(self._max_concurrent):
+            self._workers.clear()
+            with self._lock:
+                max_concurrent = self._max_concurrent
+            for i in range(max_concurrent):
                 worker = DownloadWorker(
                     worker_id=i,
                     adapter=self._adapter,
@@ -408,30 +427,52 @@ class DownloadService:
         to ``timeout`` seconds. A worker (or its subprocess) that refuses to
         terminate is reported with a clear log message instead of being hidden.
         No further download events are broadcast once the service is stopped.
+
+        Serialized with ``start()`` through ``_lifecycle_lock``. Workers and the
+        queue thread are joined while the lock is held (with bounded timeouts),
+        which guarantees a concurrent ``start()`` can never leave workers in a
+        half-stopped state or leak threads.
         """
-        with self._lock:
+        with self._lifecycle_lock:
+            if not self._run_event.is_set() and not self._workers:
+                return
+
             self._run_event.clear()
             workers = list(self._workers)
 
-        for worker in workers:
-            worker.cancel()
-            worker.stop()
-        for worker in workers:
-            if worker is threading.current_thread():
-                # A callback running on the worker's own thread may call stop().
-                continue
-            worker.join(timeout=timeout)
-            if worker.is_alive():
-                logger.error(
-                    "Worker %s did not terminate within %.1fs; its subprocess may "
-                    "have ignored the terminate/cancel request. It can no longer "
-                    "affect application state.",
-                    worker.worker_id,
-                    timeout,
-                )
+            for worker in workers:
+                worker.cancel()
+                worker.stop()
+            for worker in workers:
+                if worker is threading.current_thread():
+                    # A callback running on the worker's own thread may call
+                    # stop().
+                    continue
+                worker.join(timeout=timeout)
+                if worker.is_alive():
+                    logger.error(
+                        "Worker %s did not terminate within %.1fs; its subprocess "
+                        "may have ignored the terminate/cancel request. It can no "
+                        "longer affect application state.",
+                        worker.worker_id,
+                        timeout,
+                    )
+
+            # A racing start() may have spawned a fresh worker set while we were
+            # joining. If it did, that set becomes the live one; otherwise any
+            # leftover workers are shut down so none can be orphaned.
+            if self._workers and not self._run_event.is_set():
+                stray = [w for w in self._workers if w not in workers]
+                self._workers.clear()
+                for worker in stray:
+                    worker.stop()
+                for worker in stray:
+                    if worker is not threading.current_thread():
+                        worker.join(timeout=min(timeout, 1.0))
+            else:
+                self._workers = [w for w in self._workers if w not in workers]
 
         with self._lock:
-            self._workers.clear()
             still_active = list(self._active_downloads.values())
             self._active_downloads.clear()
         for video in still_active:
@@ -452,20 +493,30 @@ class DownloadService:
     def cancel_video(self, video: Video) -> bool:
         """Cancel a video.
 
-        Removes it from the pending queue if present. If a worker is currently
+        Removes it from the pending queue if present, marking it CANCELLED and
+        emitting a single ``CANCELLED`` event. If a worker is currently
         processing it, the worker is signalled and the video is only removed
         from ``active_downloads`` once the worker emits its terminal event.
 
         Returns True if the video was cancelled synchronously (was still
         queued); False if the worker will confirm cancellation via an event.
         """
-        self._queue.remove(video)
+        removed = self._queue.remove(video)
         with self._lock:
             for worker in self._workers:
                 current = worker.current_video
                 if current is video or (current is not None and current.url == video.url):
                     worker.cancel()
                     return False
+        if removed is not None:
+            removed.status = DownloadStatus.CANCELLED
+            removed.error_message = "Cancelled by user"
+            self._emit_event(
+                DownloadEvent(
+                    type=DownloadEventType.CANCELLED,
+                    video=removed,
+                )
+            )
         return True
 
     def _process_queue(self) -> None:
@@ -522,10 +573,26 @@ class DownloadService:
             return
 
         with self._lock:
+            found = False
             for wid, vid in list(self._active_downloads.items()):
-                if vid is event.video:
+                if vid is event.video or vid.url == event.video.url:
                     del self._active_downloads[wid]
+                    found = True
                     break
+
+        if not found:
+            # A terminal event for a video that is no longer active: either a
+            # duplicate broadcast or a leftover from an earlier run (after a
+            # stop/start restart). Broadcasting it could corrupt the state (e.g.
+            # a COMPLETED for a fresh retry of the same URL), so drop it.
+            # A same-URL collision cannot be legitimate because duplicate URLs
+            # are rejected while queued/active.
+            logger.debug(
+                "Ignoring %s event for %s: video is not active",
+                event.type.value,
+                event.video.url,
+            )
+            return
 
         if event.type == DownloadEventType.ERROR:
             self._emit_event(
@@ -554,7 +621,21 @@ class DownloadService:
         progress_callback: ProgressCallback | None = None,
     ) -> Video:
         output_path = path or self._output_path
-        result_video = self._adapter.download(video, output_path, progress_callback)
+        try:
+            result_video = self._adapter.download(video, output_path, progress_callback)
+        except Exception as e:
+            video.status = DownloadStatus.ERROR
+            video.error_message = str(e)
+            logger.exception("download_now failed for %s", video.url)
+            result_video = video
+            self._emit_event(
+                DownloadEvent(
+                    type=DownloadEventType.ERROR,
+                    video=result_video,
+                    error=result_video.error_message or "Download failed",
+                )
+            )
+            return result_video
 
         if result_video.status == DownloadStatus.DONE:
             self._emit_event(

@@ -1,10 +1,60 @@
 """Tests for domain validators."""
 
 from youmudow.domain.validators import (
+    AUDIO_FORMATS,
+    SUPPORTED_FORMATS,
+    SUPPORTED_QUALITIES,
     is_playlist_url,
+    is_valid_format,
+    is_valid_quality,
     is_valid_youtube_url,
     sanitize_filename,
 )
+
+
+class TestFormatsAndQualities:
+    """Centralized format/quality rules shared by CLI, GUI and adapter."""
+
+    def test_audio_formats_are_supported(self):
+        assert {"mp3", "m4a", "opus", "ogg", "flac", "wav", "aac"} <= AUDIO_FORMATS
+
+    def test_mp4_is_supported_format(self):
+        assert "mp4" in SUPPORTED_FORMATS
+        assert is_valid_format("mp4")
+
+    def test_audio_formats_valid(self):
+        for fmt in AUDIO_FORMATS:
+            assert is_valid_format(fmt)
+
+    def test_invalid_format_rejected(self):
+        assert not is_valid_format("wma")
+        assert not is_valid_format("best")
+        assert not is_valid_format(None)
+
+    def test_qualities_valid(self):
+        for quality in ("best", "64kbps", "320kbps", "360p", "1080p"):
+            assert is_valid_quality(quality), quality
+
+    def test_qualities_cover_expected_set(self):
+        expected = {
+            "best",
+            "64kbps",
+            "96kbps",
+            "128kbps",
+            "192kbps",
+            "256kbps",
+            "320kbps",
+            "360p",
+            "480p",
+            "720p",
+            "1080p",
+        }
+        assert SUPPORTED_QUALITIES == expected
+
+    def test_invalid_quality_rejected(self):
+        assert not is_valid_quality("4k")
+        assert not is_valid_quality("lossless")
+        assert not is_valid_quality(None)
 
 
 class TestIsValidYoutubeUrl:

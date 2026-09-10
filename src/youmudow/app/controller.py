@@ -275,11 +275,28 @@ class AppController:
         return output_dir / f"{sanitize_filename(video.title or 'unknown')}.{file_format}"
 
     def reset(self) -> None:
+        """Reset download state while preserving the configured concurrency and
+        output path across the fresh service instance."""
         self._search_thread = None
+        output_path = self._download_service.get_output_path()
         self._download_service.stop()
-        self._download_service = DownloadService()
+        self._download_service = DownloadService(max_concurrent=self._max_concurrent())
+        self._download_service.set_output_path(output_path)
         self._setup_download_callbacks()
+        self._setup_log_callback()
         self._state_manager.reset()
+
+    def _max_concurrent(self) -> int:
+        config = self._config
+        if config:
+            try:
+                return max(1, int(config.get("concurrent_downloads", 1) or 1))
+            except (TypeError, ValueError):
+                return 1
+        try:
+            return max(1, int(self._download_service.max_concurrent))
+        except (TypeError, ValueError):
+            return 1
 
     def _setup_download_callbacks(self) -> None:
         def on_progress(progress: DownloadProgress) -> None:

@@ -20,13 +20,12 @@ from youmudow.adapters.browser_profiles import check_browser_profile, get_fallba
 from youmudow.domain.enums import DownloadStatus
 from youmudow.domain.exceptions import YtDlpError, YtDlpNotFoundError
 from youmudow.domain.models import Video
-from youmudow.domain.validators import sanitize_filename
+from youmudow.domain.validators import AUDIO_FORMATS, sanitize_filename
 
 logger = logging.getLogger(__name__)
 
 _DESTINATION_LOCK = threading.Lock()
 
-AUDIO_FORMATS: frozenset[str] = frozenset({"mp3", "m4a", "opus", "ogg", "flac", "wav", "aac"})
 THUMBNAIL_EMBED_FORMATS: frozenset[str] = frozenset({"mp3", "m4a", "opus"})
 
 _VIDEO_QUALITY_SELECTORS: dict[str, str] = {
@@ -558,16 +557,19 @@ class YtdlpAdapter:
         video: Video,
         cancel_event: threading.Event | None,
         progress_callback: ProgressCallback | None,
-    ) -> tuple[int, list[str], list[str]]:
+    ) -> tuple[int, list[str], list[str], list[str]]:
         """
         Run yt-dlp subprocess and stream output.
 
-        Returns a ``(returncode, error_lines, destinations)`` tuple; the
-        destinations are the output files yt-dlp reported for this run.
-        Returns (-1, [], []) if cancelled before process starts.
+        Returns a ``(returncode, error_lines, destinations, already_downloaded)``
+        tuple; the destinations are the output files yt-dlp reported for this
+        run, and ``already_downloaded`` lists the files yt-dlp reported as
+        already present (a pre-existing file explicitly attributed to this run).
+        Returns (-1, [], [], []) if cancelled before process starts.
         """
         error_lines: list[str] = []
         destinations: list[str] = []
+        already_downloaded: list[str] = []
         output_lock = threading.Lock()
 
         try:
@@ -606,6 +608,7 @@ class YtdlpAdapter:
                             already_match = _ALREADY_DOWNLOADED_RE.search(stripped)
                             if already_match:
                                 destinations.append(already_match.group(1))
+                                already_downloaded.append(already_match.group(1))
                         self._log(stripped)
                         if progress_callback:
                             info = self._parse_progress(stripped)
@@ -672,8 +675,8 @@ class YtdlpAdapter:
                 self._last_destination = Path(destinations[-1])
 
         if timeout_reached:
-            return -2, error_lines, destinations
-        return process.returncode, error_lines, destinations
+            return -2, error_lines, destinations, already_downloaded
+        return process.returncode, error_lines, destinations, already_downloaded
 
     def _is_cookie_error(self, error_output: str) -> bool:
         """Check if error output indicates a cookie/auth problem."""
@@ -751,9 +754,11 @@ class YtdlpAdapter:
                 )
                 returncode = result[0]
                 error_lines = result[1]
-                # _run_process reports per-call destinations as a third element.
-                # Older mocks in tests may return a 2-tuple; tolerate that.
+                # _run_process reports per-call destinations and already-
+                # downloaded files as the third and fourth elements. Older
+                # mocks in tests may return a shorter tuple; tolerate that.
                 destinations: list[str] = result[2] if len(result) > 2 else []
+                already_downloaded: list[str] = result[3] if len(result) > 3 else []
                 if destinations:
                     last_destination = Path(destinations[-1])
                     with _DESTINATION_LOCK:
@@ -811,8 +816,15 @@ class YtdlpAdapter:
             video.error_message = video.error_message or last_error or "Download failed"
         else:
             video.path = self._resolve_destination(
-                destinations, output_path, safe_title, pre_existing
+                destinations, output_path, safe_title, pre_existing, already_downloaded
             )
+            if video.path is None:
+                # Completion is only valid when a result file can be attributed
+                # to this run. A successful exit that left no file is a failure,
+                # not a COMPLETED download with an unknown path.
+                video.status = DownloadStatus.ERROR
+                video.error_message = "yt-dlp reported success but produced no output file"
+                self._log(f"[ERROR] {video.error_message}")
 
         return video
 
@@ -822,16 +834,23 @@ class YtdlpAdapter:
         output_path: Path,
         safe_title: str,
         preexisting: set[Path],
+        already_downloaded: list[str] | None = None,
     ) -> Path | None:
         """Resolve the file created by this run, never a pre-existing one.
 
         Per-call ``destinations`` (parsed from yt-dlp output) are authoritative;
-        only a destination that did not exist before the run counts. Otherwise
-        fall back to globbing for newly created files.
+        only a destination that did not exist before the run counts. A file
+        reported via the "has already been downloaded" line is accepted even if
+        pre-existing, because yt-dlp explicitly attributes it to this run.
+        Otherwise fall back to globbing for newly created files.
         """
         for raw in destinations:
             candidate = Path(raw)
             if candidate.is_file() and candidate not in preexisting:
+                return candidate
+        for raw in already_downloaded or []:
+            candidate = Path(raw)
+            if candidate.is_file():
                 return candidate
         with _DESTINATION_LOCK:
             captured = self._last_destination

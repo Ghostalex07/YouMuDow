@@ -13,29 +13,19 @@ from youmudow import __version__
 from youmudow.app.config import AppConfig
 from youmudow.domain.enums import DownloadStatus
 from youmudow.domain.models import DownloadOptions, Video
-from youmudow.domain.validators import is_supported_url
+from youmudow.domain.validators import (
+    AUDIO_FORMATS,
+    SUPPORTED_FORMATS,
+    SUPPORTED_QUALITIES,
+    is_supported_url,
+)
 from youmudow.services.download_service import DownloadService
 from youmudow.services.search_service import SearchService
 
-_AUDIO_FORMATS = frozenset({"mp3", "m4a", "opus", "ogg", "flac", "wav", "aac"})
-_FORMATS = _AUDIO_FORMATS | {"mp4"}
-_QUALITIES = frozenset(
-    {
-        "best",
-        "64kbps",
-        "96kbps",
-        "128kbps",
-        "192kbps",
-        "256kbps",
-        "320kbps",
-        "360p",
-        "480p",
-        "720p",
-        "1080p",
-    }
-)
+_FORMATS = SUPPORTED_FORMATS
+_QUALITIES = SUPPORTED_QUALITIES
 
-_FORMAT_HELP = f"audio ({', '.join(sorted(_AUDIO_FORMATS))}) or video (mp4)"
+_FORMAT_HELP = f"audio ({', '.join(sorted(AUDIO_FORMATS))}) or video (mp4)"
 _QUALITY_HELP = "audio bitrate (64kbps..320kbps) or video resolution (360p..1080p, best)"
 
 CommandFunc = Callable[[argparse.Namespace, AppConfig], int]

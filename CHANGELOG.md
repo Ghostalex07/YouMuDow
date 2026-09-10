@@ -4,7 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Centralized format/quality sets (`SUPPORTED_FORMATS`, `SUPPORTED_QUALITIES`) in
+  `domain/validators.py`, reused by the CLI, the GUI detail panel and the adapter
+- `is_valid_format`/`is_valid_quality` validators for a single source of truth
+
 ### Changed
+- `DownloadService.start()`/`stop()` are now serialized by a dedicated
+  `_lifecycle_lock`: a `start()` racing a `stop()` either wins completely or
+  loses completely, so worker threads are never orphaned ("ghost workers")
 - Download lifecycle: activation is now event-driven — a video moves to active
   only when the service reports it started, keeping `StateManager` and the
   service queue/active state consistent; `StateManager.start_download` is
@@ -13,10 +21,21 @@ All notable changes to this project will be documented in this file.
   refuse to stop; downloads can restart cleanly after stop
 - Duplicate queue entries (same URL already queued/active) are ignored, while a
   finished download can still be re-queued for retry
+- Cancelling a queued video now closes its lifecycle: it is removed, marked
+  `CANCELLED` and emits one `CANCELLED` event (idempotent across double-cancel)
+- `StateManager.add_to_queue` mirrors the service's duplicate-URL guard, so the
+  observable queue stays consistent with what the service actually processes
+- `controller.reset()` preserves the configured concurrency and output path and
+  re-attaches the log callback to the fresh service
+- yt-dlp success with no attributable output file is now `ERROR` (previously it
+  reported a bare `DONE` with no path); a file explicitly confirmed by yt-dlp's
+  "already been downloaded" line is a valid result
 
 ### Fixed
 - A terminal `COMPLETED` was emitted even when a download did not end in `DONE`
   (unknown/partial statuses now map to `ERROR`; only `DONE` maps to `COMPLETED`)
+- Terminal events for videos no longer active (duplicates or leftovers from a
+  previous run after restart) are dropped instead of corrupting the state
 - Deadlock when a download event callback called `stop()`/`add_to_queue` (the
   STARTED event was broadcast while holding the service lock)
 - Late worker events could still fire after stop(); they are now dropped once
@@ -29,6 +48,8 @@ All notable changes to this project will be documented in this file.
 - Huge playlists were fully enumerated even with a small limit (`--playlist-end`)
 - CLI accepted invalid formats/qualities and unauthenticated-scheme URLs; it now
   validates URL/format/quality and returns 130 on Ctrl+C
+- `DownloadService.download_now` no longer leaks adapter exceptions as phantom
+  active downloads: failures map to `ERROR` and emit an `ERROR` event
 
 ## [5.0.0] - 2026-08-04
 

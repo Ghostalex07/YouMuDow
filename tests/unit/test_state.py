@@ -49,6 +49,46 @@ class TestStateManager:
         assert v in sm.get_queue()
         assert v.status == DownloadStatus.QUEUED
 
+    def test_add_to_queue_duplicate_url_ignored(self):
+        """Mirrors DownloadService: a URL already queued is not re-added."""
+        sm = StateManager()
+        v = Video(title="Test", url="url")
+        sm.add_to_queue(v)
+        dup = Video(title="Copy", url="url")
+        sm.add_to_queue(dup)
+        assert len(sm.get_queue()) == 1
+        assert sm.get_queue()[0] is v
+        assert dup.status != DownloadStatus.QUEUED
+
+    def test_add_to_queue_duplicate_active_ignored(self):
+        sm = StateManager()
+        v = Video(title="Test", url="url")
+        sm.add_to_queue(v)
+        sm.start_download(v)
+        dup = Video(title="Copy", url="url")
+        sm.add_to_queue(dup)
+        assert len(sm.get_queue()) == 0
+        assert len(sm.get_snapshot().active_downloads) == 1
+
+    def test_add_to_queue_same_url_allowed_after_finish(self):
+        """A finished download may be queued again for retry."""
+        sm = StateManager()
+        v = Video(title="Test", url="url")
+        sm.add_to_queue(v)
+        sm.start_download(v)
+        sm.finish_download(v)
+        again = Video(title="Retry", url="url")
+        sm.add_to_queue(again)
+        assert len(sm.get_queue()) == 1
+
+    def test_add_to_queue_same_object_allowed_after_clear(self):
+        sm = StateManager()
+        v = Video(title="Test", url="url")
+        sm.add_to_queue(v)
+        sm.clear_queue()
+        sm.add_to_queue(v)
+        assert len(sm.get_queue()) == 1
+
     def test_remove_from_queue(self):
         sm = StateManager()
         v = Video(title="Test", url="url")
