@@ -346,6 +346,7 @@ class DownloadService:
 
     def clear_queue(self) -> None:
         self._queue.clear()
+        self._queue_event.set()
 
     def add_to_queue(self, video: Video) -> None:
         if self._is_known(video):
@@ -475,10 +476,15 @@ class DownloadService:
         with self._lock:
             still_active = list(self._active_downloads.values())
             self._active_downloads.clear()
+
         for video in still_active:
             if video.status in (DownloadStatus.DOWNLOADING, DownloadStatus.QUEUED):
                 video.status = DownloadStatus.CANCELLED
                 video.error_message = "Cancelled by shutdown"
+
+        # Wake the dispatcher so it observes the stop immediately instead of
+        # finishing its current wait cycle.
+        self._queue_event.set()
 
         queue_thread = self._queue_thread
         if queue_thread is not None and queue_thread is not threading.current_thread():
@@ -522,6 +528,8 @@ class DownloadService:
     def _process_queue(self) -> None:
         while self._run_event.is_set():
             if self._queue.is_empty():
+                # Woken immediately by add_to_queue/clear_queue/stop; the
+                # timeout is only a safety net if a signal is missed.
                 self._queue_event.wait(timeout=0.1)
                 self._queue_event.clear()
                 continue
@@ -529,6 +537,9 @@ class DownloadService:
             with self._lock:
                 idle_workers = [w for w in self._workers if not w.is_busy]
             if not idle_workers:
+                # Woken immediately when a worker finishes its current video
+                # (_handle_worker_event sets the event); the timeout is only a
+                # safety net, not a poll interval.
                 self._queue_event.wait(timeout=0.05)
                 self._queue_event.clear()
                 continue
@@ -593,6 +604,11 @@ class DownloadService:
                 event.video.url,
             )
             return
+
+        # The emitting worker has finished its current video, so it is free for
+        # the next dispatch. Wake the queue thread immediately instead of
+        # letting it poll (it also re-checks on the next add/stop signal).
+        self._queue_event.set()
 
         if event.type == DownloadEventType.ERROR:
             self._emit_event(

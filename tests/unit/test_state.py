@@ -279,6 +279,39 @@ class TestStateManager:
 
         assert len(calls) <= 3, f"Too many callbacks: {len(calls)}"
 
+    def test_snapshot_video_independence(self):
+        sm = StateManager()
+        v = Video(title="T", url="u")
+        sm.add_to_queue(v)
+        snap = sm.get_snapshot()
+        snap_video = snap.queue[0]
+        snap_video.title = "MUTATED"
+        snap_video.status = DownloadStatus.DONE
+        assert sm.get_queue()[0].title == "T"
+        assert sm.get_queue()[0].status == DownloadStatus.QUEUED
+
+    def test_snapshot_options_independence(self):
+        from youmudow.domain.models import DownloadOptions
+
+        opts = DownloadOptions(quality="720p")
+        v = Video(title="T", url="u", options=opts)
+        sm = StateManager()
+        sm.add_to_queue(v)
+        snap = sm.get_snapshot()
+        snap_opts = snap.queue[0].options
+        snap_opts.quality = "MUTATED"
+        orig = sm.get_queue()[0].options
+        assert orig is not None
+        assert orig.quality == "720p"
+
+    def test_snapshot_newly_returned_is_independent(self):
+        sm = StateManager()
+        v = Video(title="T", url="u")
+        sm.add_to_queue(v)
+        snap = sm.get_snapshot()
+        v.title = "CHANGED"
+        assert snap.queue[0].title == "T"
+
 
 class TestAppStateData:
     def test_defaults(self):

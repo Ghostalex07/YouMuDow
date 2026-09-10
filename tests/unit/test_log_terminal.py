@@ -38,3 +38,14 @@ def test_log_terminal_trim_updates_line_count(tk_root):
     terminal._text.configure(state="disabled")
     terminal._trim_lines()
     assert terminal._line_count == max(0, 15 - 10 // 10)
+
+
+def test_log_terminal_buffer_is_capped(tk_root):
+    from youmudow.ui.widgets.log_terminal import MAX_LINES, LogTerminal
+
+    terminal = LogTerminal(tk_root, max_lines=MAX_LINES)
+    for i in range(5000):
+        terminal.append(f"msg {i}")
+    lines = terminal.get_logs().split("\n")
+    assert len(lines) <= MAX_LINES * 5 + 1
+    assert any(l.endswith("msg 4999") for l in lines)

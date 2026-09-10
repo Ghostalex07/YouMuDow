@@ -5,11 +5,36 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- `StateManager.get_snapshot()` copies are now built from cheap shallow video
+  copies instead of `copy.deepcopy`: every `Video`/`DownloadOptions` field is a
+  value type, so isolation is identical at a fraction of the cost (~5.6x faster
+  on queue-sized snapshots, measured over 2000 videos)
+- `DownloadService` wakes its queue dispatcher immediately when a worker
+  finishes a video, on `clear_queue()` and on `stop()` instead of relying on the
+  poll timeouts (the waits remain as a safety net)
+- Log terminal `_log_buffer` is now bounded (`max(5 * max_lines, 1000)`), so
+  long sessions cannot grow it unbounded; `export_to_file()`/`get_logs()` return
+  only the most recent lines that fit within the cap
+- Removed unused `LogTerminal.append_separator()`/`set_auto_scroll()` (no
+  callers in source or tests)
+- PyInstaller build (`scripts/build.py`): dropped the redundant `--add-data`
+  copy of `src/youmudow` (the compiled modules already live in the PYZ), hidden
+  imports for the lazy `youmudow.ui.icon` and
+  `youmudow.services.notification_service` modules, reduced Pillow to the
+  plugins YouMuDow actually uses (JPEG/PNG/GIF/WebP via a
+  `scripts/hooks/hook-PIL.Image.py` override), `--strip` on non-Windows and
+  excludes for analysis-time-only environment modules (gi->GTK, keyring,
+  pkg_resources/setuptools, matplotlib, numpy, ...). The Linux onefile bundle
+  dropped from ~44.7 MB to ~17.3 MB (~61%) and starts in ~0.32 s instead of
+  ~0.75 s
+- Fixed a latent build bug: `PIL._imagingtk`/`PIL._tkinter_finder` are now
+  bundled so thumbnails actually render through `ImageTk` in the frozen app
+  (`hook-PIL.py` excludes `_tkinter_finder` because it imports `tkinter`)
+
+### Changed
 - Centralized format/quality sets (`SUPPORTED_FORMATS`, `SUPPORTED_QUALITIES`) in
   `domain/validators.py`, reused by the CLI, the GUI detail panel and the adapter
 - `is_valid_format`/`is_valid_quality` validators for a single source of truth
-
-### Changed
 - `DownloadService.start()`/`stop()` are now serialized by a dedicated
   `_lifecycle_lock`: a `start()` racing a `stop()` either wins completely or
   loses completely, so worker threads are never orphaned ("ghost workers")
