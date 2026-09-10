@@ -4,6 +4,7 @@
 Usage:
     python scripts/bump_version.py 5.0.0
 """
+
 import re
 import sys
 from pathlib import Path
@@ -17,23 +18,25 @@ def bump(new_version: str) -> None:
     # package metadata (importlib.metadata), so it needs no edit here.
     p = ROOT / "pyproject.toml"
     content = p.read_text()
-    content = re.sub(r'(?<=^version = ")[\d.]+', new_version, content, flags=re.M)
+    content = re.sub(r'(?<=^version = ")[\d.]+', new_version, content, flags=re.MULTILINE)
     p.write_text(content)
     print(f"  pyproject.toml -> {new_version}")
 
     # README.md badge
     p = ROOT / "README.md"
     content = p.read_text()
-    content = re.sub(r'version-[\d.]+-green', f'version-{new_version}-green', content)
+    content = re.sub(r"version-[\d.]+-green", f"version-{new_version}-green", content)
     p.write_text(content)
     print(f"  README.md badge -> {new_version}")
 
-    print(f"\nRemember to add a CHANGELOG.md entry for v{new_version}.\n"
-          f"Done. To release:\n"
-          f"  git add -A\n"
-          f"  git commit -m 'chore: bump version to {new_version}'\n"
-          f"  git tag v{new_version}\n"
-          f"  git push origin main --tags")
+    print(
+        f"\nRemember to add a CHANGELOG.md entry for v{new_version}.\n"
+        f"Done. To release:\n"
+        f"  git add -A\n"
+        f"  git commit -m 'chore: bump version to {new_version}'\n"
+        f"  git tag v{new_version}\n"
+        f"  git push origin main --tags"
+    )
 
 
 if __name__ == "__main__":

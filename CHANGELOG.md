@@ -43,6 +43,12 @@ All notable changes to this project will be documented in this file.
   `PIL._imagingtk`/`PIL._tkinter_finder`) since the whole youmudow package
   graph is already reached statically from `main.py`. The Linux onefile bundle
   shrunk from ~17.3 MB to ~14.5 MB (~16%)
+- `_handle_worker_event` now gates *every* worker event (including `PROGRESS`)
+  on the `run_event`, so a lingering worker can no longer keep painting
+  progress after `stop()` — coincidentally also hardening the restart path;
+  and terminal events are matched against `active_downloads` by object
+  identity instead of `url`, so a stale same-URL event from an earlier run can
+  never delete or finalise a brand-new download of that URL
 
 ### Changed
 - Centralized format/quality sets (`SUPPORTED_FORMATS`, `SUPPORTED_QUALITIES`) in

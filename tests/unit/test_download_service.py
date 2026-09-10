@@ -974,6 +974,56 @@ class TestStaleTerminalEventDropped:
         assert len(terminal) == 1
         service.stop()
 
+    def test_stale_terminal_same_url_cannot_remove_new_active(self, mock_adapter, tmp_path):
+        """A terminal event from an earlier run for the same URL must not
+        finalise or remove a brand-new active download (identity match only)."""
+        service = DownloadService(adapter=mock_adapter, default_output_path=tmp_path)
+        service._run_event.set()
+        events = []
+        service.on_event(events.append)
+
+        old_video = Video(title="old", url="u")
+        new_video = Video(title="new", url="u")
+        with service._lock:
+            service._active_downloads[0] = new_video
+
+        service._handle_worker_event(
+            DownloadEvent(type=DownloadEventType.COMPLETED, video=old_video)
+        )
+        with service._lock:
+            assert list(service._active_downloads.values()) == [new_video]
+        terminal = [e for e in events if e.type == DownloadEventType.COMPLETED]
+        assert terminal == []
+
+    def test_progress_blocked_when_service_stopped(self, mock_adapter, tmp_path):
+        """Progress (like terminal) events must be dropped once the service is
+        not running, so a lingering worker cannot paint progress on a stopped
+        or restarted download."""
+        service = DownloadService(adapter=mock_adapter, default_output_path=tmp_path)
+        progress = []
+        service.on_progress(lambda p: progress.append(p))
+        v = Video(title="v", url="u")
+
+        service._run_event.set()
+        service._handle_worker_event(
+            DownloadEvent(
+                type=DownloadEventType.PROGRESS,
+                video=v,
+                progress=DownloadProgress(video=v, progress=10.0),
+            )
+        )
+        assert len(progress) == 1
+
+        service._run_event.clear()
+        service._handle_worker_event(
+            DownloadEvent(
+                type=DownloadEventType.PROGRESS,
+                video=v,
+                progress=DownloadProgress(video=v, progress=60.0),
+            )
+        )
+        assert len(progress) == 1
+
 
 class TestCallbackReentrancy:
     """Callbacks run outside the service/queue locks, so they may safely call
@@ -1030,6 +1080,50 @@ class TestCallbackReentrancy:
         # original + extra; the QUEUED(extra) event re-enters the callback but
         # _is_known() already rejects the duplicate, so it cannot loop.
         assert service.queue_size == 2
+
+    def test_callback_runs_without_service_lock(self, download_service, sample_video):
+        """While a callback runs, the service lock must be free: a callback can
+        acquire it immediately (it would deadlock/block if events were emitted
+        under _lock)."""
+        acquired = threading.Event()
+
+        def cb(event):
+            with download_service._lock:
+                acquired.set()
+
+        download_service.on_event(cb)
+        download_service._emit_event(
+            DownloadEvent(type=DownloadEventType.QUEUED, video=sample_video)
+        )
+        assert acquired.is_set()
+
+    def test_callback_can_remove_another_callback(self, download_service, sample_video):
+        """Removing a callback during dispatch only affects later events: the
+        current dispatch runs off a snapshot of the callback list."""
+        calls = []
+
+        def remove_me(event):
+            calls.append("remove_me")
+
+        download_service._event_callbacks.append(remove_me)
+
+        def remover(event):
+            if "remover" not in calls:
+                download_service._event_callbacks.remove(remove_me)
+            calls.append("remover")
+
+        download_service.on_event(remover)
+        download_service._emit_event(
+            DownloadEvent(type=DownloadEventType.QUEUED, video=sample_video)
+        )
+        assert calls.count("remove_me") == 1
+        assert calls.count("remover") == 1
+
+        download_service._emit_event(
+            DownloadEvent(type=DownloadEventType.QUEUED, video=sample_video)
+        )
+        assert calls.count("remove_me") == 1
+        assert calls.count("remover") == 2
 
 
 class TestCancelRaces:
@@ -1098,6 +1192,39 @@ class TestCancelRaces:
         assert v.status == DownloadStatus.DONE
         assert service.active_count == 0
         assert active_observed == [False]
+        service.stop()
+
+    def test_double_cancel_active_single_event(self, tmp_path):
+        """Cancelling an active download twice must still yield exactly one
+        CANCELLED event and leave no phantom entry in active_downloads."""
+        adapter = Mock()
+        started = threading.Event()
+
+        def cancellable(video, output_path, progress_callback=None, cancel_event=None):
+            started.set()
+            if cancel_event is not None and cancel_event.wait(2.0):
+                video.status = DownloadStatus.CANCELLED
+                return video
+            video.status = DownloadStatus.DONE
+            return video
+
+        adapter.download.side_effect = cancellable
+        service = DownloadService(adapter=adapter, default_output_path=tmp_path, max_concurrent=1)
+        events = []
+        service.on_event(events.append)
+        v = Video(title="v", url="u")
+        service.add_to_queue(v)
+        service.start()
+        assert started.wait(2.0)
+
+        assert service.cancel_video(v) is False
+        assert service.cancel_video(v) is False
+        assert self._wait_for(lambda: any(e.type == DownloadEventType.CANCELLED for e in events))
+        cancelled = [e for e in events if e.type == DownloadEventType.CANCELLED]
+        assert len(cancelled) == 1
+        assert cancelled[0].video is v
+        assert service.active_count == 0
+        assert service.queue_size == 0
         service.stop()
 
     def test_cancel_racing_stop_suppresses_events(self, tmp_path):

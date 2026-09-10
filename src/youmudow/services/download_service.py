@@ -572,13 +572,9 @@ class DownloadService:
             )
 
     def _handle_worker_event(self, event: DownloadEvent) -> None:
-        if event.type == DownloadEventType.PROGRESS:
-            self._emit_event(event)
-            return
-
         if not self._run_event.is_set():
-            # The service has been stopped: no terminal (or late) event from a
-            # lingering worker may reach callbacks or mutate state again.
+            # The service has been stopped: no event (progress or terminal) from
+            # a lingering worker may reach callbacks or mutate state again.
             logger.debug(
                 "Ignoring %s event for %s: service stopped",
                 event.type.value,
@@ -586,10 +582,14 @@ class DownloadService:
             )
             return
 
+        if event.type == DownloadEventType.PROGRESS:
+            self._emit_event(event)
+            return
+
         with self._lock:
             found = False
             for wid, vid in list(self._active_downloads.items()):
-                if vid is event.video or vid.url == event.video.url:
+                if vid is event.video:
                     del self._active_downloads[wid]
                     found = True
                     break
@@ -599,8 +599,9 @@ class DownloadService:
             # duplicate broadcast or a leftover from an earlier run (after a
             # stop/start restart). Broadcasting it could corrupt the state (e.g.
             # a COMPLETED for a fresh retry of the same URL), so drop it.
-            # A same-URL collision cannot be legitimate because duplicate URLs
-            # are rejected while queued/active.
+            # Matching is by object identity: only the exact active download may
+            # be finalised, so a stale same-URL event can never delete or
+            # finalise a newer download of that URL.
             logger.debug(
                 "Ignoring %s event for %s: video is not active",
                 event.type.value,

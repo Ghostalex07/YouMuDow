@@ -12,7 +12,5 @@ _KEEP = (
 )
 
 hiddenimports = [
-    name
-    for name in collect_submodules("PIL", lambda mod: "ImagePlugin" in mod)
-    if name in _KEEP
+    name for name in collect_submodules("PIL", lambda mod: "ImagePlugin" in mod) if name in _KEEP
 ]

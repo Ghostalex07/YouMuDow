@@ -7,7 +7,7 @@ import sys
 def run_dev() -> None:
     """Run the application in development mode."""
     print("Starting YouMuDow in development mode...")
-    subprocess.run([sys.executable, "-m", "youmudow.main"])
+    subprocess.run([sys.executable, "-m", "youmudow.main"], check=False)
 
 
 if __name__ == "__main__":

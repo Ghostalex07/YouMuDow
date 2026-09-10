@@ -25,7 +25,7 @@ PKG_DIR = DIST / PKG_NAME
 
 
 def run_build() -> None:
-    result = subprocess.run([sys.executable, str(ROOT / "scripts" / "build.py")])
+    result = subprocess.run([sys.executable, str(ROOT / "scripts" / "build.py")], check=False)
     if result.returncode != 0:
         sys.exit(1)
 
