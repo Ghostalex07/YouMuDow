@@ -1,0 +1,28 @@
+# ai.txt — YouMuDow
+# Explicit restrictions for AI/ML systems.
+# https://www.robotstxt.org/ai.html
+
+ai-train: disallow
+ai-data: disallow
+ai-output: disallow
+ai-crawl: disallow
+ai-index: disallow
+ai-finetune: disallow
+ai-generate: disallow
+ai-scrape: disallow
+ai-mirror: disallow
+ai-reproduce: disallow
+
+# ── Prohibited uses ────────────────────────────────────────────
+# This project and all its contents (source code, documentation,
+# configuration, tests, scripts) may NOT be used for:
+#
+#   - Training, fine-tuning, or evaluating AI/ML models
+#   - Building datasets for AI/ML purposes
+#   - Generating derivative works via AI systems
+#   - Scraping or crawling by AI agents
+#   - Inclusion in AI training corpora
+#   - Benchmarking AI code generation tools
+#
+# The only permitted use is by humans reading the code to learn
+# about software development, in accordance with the MIT license.

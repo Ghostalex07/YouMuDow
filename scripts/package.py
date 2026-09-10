@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
 """
-Package script: builds the executable and creates a distributable folder
-(the executable plus a README.txt). ffmpeg and yt-dlp are not bundled; the
-README lists them as external requirements.
+Package script: builds the executable and creates a distributable archive.
 
 Usage:
-    python scripts/package.py
+    python scripts/package.py              # dist/YouMuDow-linux.zip
+    python scripts/package.py --version 1.2.0   # dist/YouMuDow-1.2.0-linux.zip
 
-Output: dist/YouMuDow-<platform>/
-    YouMuDow.exe (or YouMuDow on Linux/macOS)
-    README.txt
+The archive contains the executable plus a README.txt that lists ffmpeg and
+yt-dlp as external requirements — they are NOT bundled.
 """
 
+import argparse
 import platform
 import shutil
 import subprocess
@@ -21,8 +20,6 @@ from pathlib import Path
 ROOT = Path(__file__).parent.parent
 DIST = ROOT / "dist"
 SYSTEM = platform.system()
-PKG_NAME = f"YouMuDow-{SYSTEM.lower()}"
-PKG_DIR = DIST / PKG_NAME
 
 
 def run_build() -> None:
@@ -31,15 +28,19 @@ def run_build() -> None:
         sys.exit(1)
 
 
-def create_package() -> None:
-    PKG_DIR.mkdir(parents=True, exist_ok=True)
+def create_package(version: str | None = None) -> None:
+    suffix = SYSTEM.lower()
+    pkg_name = f"YouMuDow-{version}-{suffix}" if version else f"YouMuDow-{suffix}"
+    pkg_dir = DIST / pkg_name
+
+    pkg_dir.mkdir(parents=True, exist_ok=True)
 
     exe_name = "YouMuDow.exe" if SYSTEM == "Windows" else "YouMuDow"
     exe_src = DIST / exe_name
     if exe_src.exists():
-        shutil.copy2(exe_src, PKG_DIR / exe_name)
+        shutil.copy2(exe_src, pkg_dir / exe_name)
 
-    readme = PKG_DIR / "README.txt"
+    readme = pkg_dir / "README.txt"
     readme.write_text(
         "YouMuDow\n"
         "========\n\n"
@@ -50,10 +51,17 @@ def create_package() -> None:
         "  Run YouMuDow (or YouMuDow.exe on Windows)\n"
     )
 
-    archive = shutil.make_archive(str(DIST / PKG_NAME), "zip", DIST, PKG_NAME)
+    archive = shutil.make_archive(str(DIST / pkg_name), "zip", DIST, pkg_name)
     print(f"\nPackage created: {archive}")
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Package YouMuDow for distribution.")
+    parser.add_argument(
+        "--version",
+        help="Version string to include in the archive name (e.g. 1.2.0)",
+        default=None,
+    )
+    args = parser.parse_args()
     run_build()
-    create_package()
+    create_package(args.version)

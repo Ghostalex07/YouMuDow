@@ -25,6 +25,12 @@ env/
 .coverage
 htmlcov/
 
+# Type checking
+.mypy_cache/
+
+# Environment
+.env
+
 # OS
 .DS_Store
 Thumbs.db
