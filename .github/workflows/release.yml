@@ -159,6 +159,10 @@ jobs:
         with:
           name: YouMuDow ${{ github.ref_name }}
           body: |
+            ## What's New
+
+            ${{ steps.changelog.outputs.notes }}
+
             ## Downloads
 
             | Platform | File | SHA256 |
@@ -168,8 +172,6 @@ jobs:
             | macOS | `YouMuDow-${{ github.ref_name }}-darwin.zip` | see `SHA256SUMS` |
 
             **Requirements:** [ffmpeg](https://ffmpeg.org/download.html) and [yt-dlp](https://github.com/yt-dlp/yt-dlp) must be installed separately.
-
-            ---
           files: |
             assets/YouMuDow-${{ github.ref_name }}-linux.zip
             assets/YouMuDow-${{ github.ref_name }}-windows.zip
