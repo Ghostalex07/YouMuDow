@@ -1,22 +1,31 @@
 """Log terminal widget for YouMuDow.
 
 Displays real-time log output in a terminal-like format.
-Modern dark theme with syntax highlighting.
 """
 
 import datetime
+import platform
 import threading
 import tkinter as tk
 from pathlib import Path
 from tkinter import ttk
 
-MAX_LINES = 1000
+_MAX_LINES = 1000
+MAX_LINES = _MAX_LINES
 
-TERMINAL_SPACING = {
+_TERMINAL_SPACING = {
     "xs": 4,
     "sm": 8,
     "md": 16,
 }
+
+_SYSTEM = platform.system()
+if _SYSTEM == "Windows":
+    _MONO_FONT = "Cascadia Code"
+elif _SYSTEM == "Darwin":
+    _MONO_FONT = "Menlo"
+else:
+    _MONO_FONT = "Ubuntu Mono"
 
 
 _TERMINAL_COLORS_DARK = {
@@ -55,7 +64,7 @@ class LogTerminal(ttk.Frame):
         self,
         parent: tk.Widget,
         show_timestamp: bool = True,
-        max_lines: int = MAX_LINES,
+        max_lines: int = _MAX_LINES,
         dark_mode: bool = True,
     ) -> None:
         super().__init__(parent)
@@ -159,14 +168,14 @@ class LogTerminal(ttk.Frame):
         self._text = tk.Text(
             text_frame,
             wrap="none",
-            font=("Cascadia Code", 10),
+            font=(_MONO_FONT, 10),
             bg=c["background"],
             fg=c["foreground"],
             insertbackground=c["foreground"],
             relief="flat",
             bd=0,
-            padx=TERMINAL_SPACING["sm"],
-            pady=TERMINAL_SPACING["sm"],
+            padx=_TERMINAL_SPACING["sm"],
+            pady=_TERMINAL_SPACING["sm"],
             state="disabled",
             highlightthickness=0,
         )
@@ -189,7 +198,7 @@ class LogTerminal(ttk.Frame):
         c = self._colors
         self._text.tag_configure("info", foreground=c["info"])
         self._text.tag_configure("warning", foreground=c["warning"])
-        self._text.tag_configure("error", foreground=c["error"], font=("Cascadia Code", 10, "bold"))
+        self._text.tag_configure("error", foreground=c["error"], font=(_MONO_FONT, 10, "bold"))
         self._text.tag_configure("success", foreground=c["success"])
         self._text.tag_configure("timestamp", foreground=c["timestamp"])
         self._text.tag_configure("debug", foreground=c["debug"])
@@ -324,7 +333,7 @@ class LogTerminal(ttk.Frame):
         this cap; without it the buffer would grow without bound for the whole
         session.
         """
-        cap = max(self._max_lines * 5, MAX_LINES)
+        cap = max(self._max_lines * 5, _MAX_LINES)
         overflow = len(self._log_buffer) - cap
         if overflow > 0:
             del self._log_buffer[:overflow]

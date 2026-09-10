@@ -22,8 +22,8 @@ class ResultsTable(tk.Frame):
             row=1,
             column=0,
             sticky="nsew",
-            padx=(SPACING["md"], SPACING["sm"]),
-            pady=(0, SPACING["md"]),
+            padx=(SPACING["xl"], SPACING["sm"]),
+            pady=(0, SPACING["lg"]),
         )
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
@@ -82,7 +82,7 @@ class ResultsTable(tk.Frame):
             foreground=_c("text"),
             fieldbackground=_c("surface"),
             borderwidth=0,
-            rowheight=44,
+            rowheight=40,
             font=FONT["body"],
         )
         style.configure(
@@ -90,7 +90,7 @@ class ResultsTable(tk.Frame):
             background=_c("bg"),
             foreground=_c("text_secondary"),
             borderwidth=0,
-            padding=(12, 8),
+            padding=(8, 6),
             font=FONT["label"],
         )
         style.map(

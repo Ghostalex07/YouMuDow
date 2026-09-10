@@ -10,7 +10,7 @@ class StatusBar(tk.Frame):
         super().__init__(parent, bg=_c("surface"))
         self._mw = main_window
         self._bg_key = "surface"
-        self.grid(row=1, column=0, sticky="ew", padx=SPACING["md"], pady=SPACING["sm"])
+        self.grid(row=1, column=0, sticky="ew", padx=SPACING["xl"], pady=(0, SPACING["sm"]))
         self.columnconfigure(0, weight=1)
 
         self._status_var = tk.StringVar(value="Ready")
@@ -24,23 +24,23 @@ class StatusBar(tk.Frame):
         )
         self._status_label.grid(row=0, column=0, sticky="w")
 
-        progress_frame = tk.Frame(self, bg=_c("surface"), height=6)
+        progress_frame = tk.Frame(self, bg=_c("surface"), height=4)
         progress_frame._bg_key = "surface"
-        progress_frame.grid(row=1, column=0, sticky="ew", pady=(SPACING["sm"], 0))
+        progress_frame.grid(row=1, column=0, sticky="ew", pady=(SPACING["xs"], 0))
         progress_frame.columnconfigure(0, weight=1)
 
         self._progress_var = tk.DoubleVar(value=0)
         self._progress_bar = tk.Canvas(
             progress_frame,
-            bg=_c("surface"),
-            height=6,
+            bg=_c("border"),
+            height=4,
             highlightthickness=0,
             relief="flat",
         )
-        self._progress_bar._bg_key = "bg"
+        self._progress_bar._bg_key = "border"
         self._progress_bar.pack(fill="x")
         self._progress_rect = self._progress_bar.create_rectangle(
-            0, 0, 0, 6, fill=_c("primary"), outline=""
+            0, 0, 0, 4, fill=_c("primary"), outline=""
         )
 
     def set_status(self, message: str) -> None:
@@ -52,7 +52,7 @@ class StatusBar(tk.Frame):
             width = max(width, 1)
             progress = self._progress_var.get() / 100.0
             x_pos = width * progress
-            self._progress_bar.coords(self._progress_rect, 0, 0, x_pos, 6)
+            self._progress_bar.coords(self._progress_rect, 0, 0, x_pos, 4)
         except tk.TclError:
             pass
 

@@ -32,8 +32,8 @@ class DetailPanel(tk.Frame):
             row=1,
             column=1,
             sticky="nsew",
-            padx=(SPACING["sm"], SPACING["md"]),
-            pady=(0, SPACING["md"]),
+            padx=(0, SPACING["xl"]),
+            pady=(0, SPACING["lg"]),
         )
 
         header_frame = tk.Frame(self, bg=_c("bg"))
@@ -41,7 +41,7 @@ class DetailPanel(tk.Frame):
 
         self._detail_toggle_btn = tk.Button(
             header_frame,
-            text="▶ OPTIONS",
+            text="OPTIONS",
             bg=_c("bg"),
             fg=_c("text_secondary"),
             font=FONT["label"],
@@ -51,6 +51,7 @@ class DetailPanel(tk.Frame):
         )
         self._detail_toggle_btn._theme = {"bg": "bg", "fg": "text_secondary"}
         self._detail_toggle_btn.pack(side="left")
+        add_hover_effect(self._detail_toggle_btn, "hover", "bg", _c("text"), _c("text_secondary"))
 
         self._thumbnail_label = tk.Label(
             self,
@@ -71,7 +72,7 @@ class DetailPanel(tk.Frame):
             text="Title:",
             bg=_c("surface"),
             fg=_c("text_secondary"),
-            font=FONT["body"],
+            font=FONT["small"],
             width=10,
             anchor="w",
         ).pack(side="left")
@@ -94,7 +95,7 @@ class DetailPanel(tk.Frame):
             text="Uploader:",
             bg=_c("surface"),
             fg=_c("text_secondary"),
-            font=FONT["body"],
+            font=FONT["small"],
             width=10,
             anchor="w",
         ).pack(side="left")
@@ -103,7 +104,9 @@ class DetailPanel(tk.Frame):
         )
         self._detail_uploader.pack(side="left")
 
-        tk.Frame(self, height=2, bg=_c("bg")).pack(fill="x", pady=(0, SPACING["md"]))
+        tk.Frame(self, height=1, bg=_c("border")).pack(
+            fill="x", pady=(SPACING["sm"], SPACING["md"])
+        )
 
         self._download_btn = tk.Button(
             self,
@@ -113,7 +116,9 @@ class DetailPanel(tk.Frame):
             activebackground=_c("secondary"),
             activeforeground="#FFFFFF",
             relief="flat",
-            font=FONT["body"],
+            bd=0,
+            font=FONT["h3"],
+            pady=8,
             command=lambda: self._mw._on_download_now(),
         )
         self._download_btn._theme = {
@@ -122,24 +127,26 @@ class DetailPanel(tk.Frame):
             "activebg": "secondary",
             "activefg": "#FFFFFF",
         }
-        self._download_btn.pack(fill="x", pady=(0, SPACING["xs"]))
+        self._download_btn.pack(fill="x", pady=(0, SPACING["sm"]))
         add_hover_effect(self._download_btn, "secondary", "primary")
 
         self._retry_btn = tk.Button(
             self,
-            text="↺ Retry",
+            text="Retry",
             bg=_c("warning"),
             fg="#000000",
-            activebackground=_c("secondary"),
+            activebackground=_c("warning"),
             activeforeground="#000000",
             relief="flat",
+            bd=0,
             font=FONT["body"],
+            pady=6,
             command=self._on_retry_download,
         )
         self._retry_btn._theme = {
             "bg": "warning",
             "fg": "#000000",
-            "activebg": "secondary",
+            "activebg": "warning",
             "activefg": "#000000",
         }
 
@@ -154,7 +161,9 @@ class DetailPanel(tk.Frame):
             activebackground=_c("hover"),
             activeforeground=_c("text"),
             relief="flat",
+            bd=0,
             font=FONT["body"],
+            pady=4,
             command=self._mw._on_open_folder,
         )
         self._open_folder_btn._theme = {
@@ -174,7 +183,9 @@ class DetailPanel(tk.Frame):
             activebackground=_c("hover"),
             activeforeground=_c("text"),
             relief="flat",
+            bd=0,
             font=FONT["body"],
+            pady=4,
             command=self._add_all_to_queue,
         )
         self._add_all_btn._theme = {
@@ -188,13 +199,15 @@ class DetailPanel(tk.Frame):
 
         self._queue_toggle_btn = tk.Button(
             btn_row,
-            text="Queue ▾",
+            text="Queue",
             bg=_c("surface"),
             fg=_c("text"),
             activebackground=_c("hover"),
             activeforeground=_c("text"),
             relief="flat",
+            bd=0,
             font=FONT["body"],
+            pady=4,
             command=self._toggle_queue_panel,
         )
         self._queue_toggle_btn._theme = {
@@ -215,13 +228,13 @@ class DetailPanel(tk.Frame):
         of = self._options_frame
         format_row = tk.Frame(of, bg=_c("surface"))
         format_row._bg_key = "surface"
-        format_row.pack(fill="x", pady=(0, SPACING["md"]))
+        format_row.pack(fill="x", pady=(SPACING["sm"], SPACING["md"]))
         tk.Label(
             format_row,
             text="Format:",
             bg=_c("surface"),
             fg=_c("text_secondary"),
-            font=FONT["body"],
+            font=FONT["small"],
             width=10,
             anchor="w",
         ).pack(side="left")
@@ -238,13 +251,13 @@ class DetailPanel(tk.Frame):
 
         quality_row = tk.Frame(of, bg=_c("surface"))
         quality_row._bg_key = "surface"
-        quality_row.pack(fill="x", pady=(SPACING["sm"], SPACING["md"]))
+        quality_row.pack(fill="x", pady=(0, SPACING["md"]))
         tk.Label(
             quality_row,
             text="Quality:",
             bg=_c("surface"),
             fg=_c("text_secondary"),
-            font=FONT["body"],
+            font=FONT["small"],
             width=10,
             anchor="w",
         ).pack(side="left")
@@ -261,14 +274,14 @@ class DetailPanel(tk.Frame):
 
         concurrent_row = tk.Frame(of, bg=_c("surface"))
         concurrent_row._bg_key = "surface"
-        concurrent_row.pack(fill="x", pady=(SPACING["sm"], SPACING["md"]))
+        concurrent_row.pack(fill="x", pady=(0, SPACING["md"]))
         tk.Label(
             concurrent_row,
-            text="Concurrent DL:",
+            text="Concurrent:",
             bg=_c("surface"),
             fg=_c("text_secondary"),
-            font=FONT["body"],
-            width=12,
+            font=FONT["small"],
+            width=10,
             anchor="w",
         ).pack(side="left")
         self._concurrent_var = tk.IntVar(value=1)
@@ -290,16 +303,16 @@ class DetailPanel(tk.Frame):
             text="(1-4)",
             bg=_c("surface"),
             fg=_c("text_secondary"),
-            font=("Segoe UI", 8),
+            font=FONT["small"],
         ).pack(side="left")
 
         subtitles_row = tk.Frame(of, bg=_c("surface"))
         subtitles_row._bg_key = "surface"
-        subtitles_row.pack(fill="x", pady=(SPACING["sm"], SPACING["md"]))
+        subtitles_row.pack(fill="x", pady=(0, SPACING["md"]))
         self._subtitles_var = tk.BooleanVar(value=False)
         subtitles_check = tk.Checkbutton(
             subtitles_row,
-            text="Download subtitles",
+            text="Subtitles",
             variable=self._subtitles_var,
             bg=_c("surface"),
             fg=_c("text"),
@@ -318,7 +331,7 @@ class DetailPanel(tk.Frame):
             bg=_c("input_bg"),
             fg=_c("text"),
             relief="flat",
-            font=("Segoe UI", 9),
+            font=FONT["small"],
             width=10,
         )
         self._subtitle_lang_entry.pack(side="left", padx=(SPACING["sm"], 0))
@@ -327,7 +340,7 @@ class DetailPanel(tk.Frame):
             text="(en,es,fr...)",
             bg=_c("surface"),
             fg=_c("text_secondary"),
-            font=("Segoe UI", 8),
+            font=FONT["small"],
         ).pack(side="left", padx=(2, 0))
         self._embed_subs_var = tk.BooleanVar(value=False)
         self._embed_subs_check = tk.Checkbutton(
@@ -340,19 +353,19 @@ class DetailPanel(tk.Frame):
             activeforeground=_c("text"),
             selectcolor=_c("surface"),
             relief="flat",
-            font=("Segoe UI", 9),
+            font=FONT["small"],
         )
         self._embed_subs_check.pack(side="left", padx=(SPACING["sm"], 0))
 
         auth_row = tk.Frame(of, bg=_c("surface"))
         auth_row._bg_key = "surface"
-        auth_row.pack(fill="x", pady=(SPACING["sm"], SPACING["md"]))
+        auth_row.pack(fill="x", pady=(0, SPACING["md"]))
         tk.Label(
             auth_row,
             text="Auth:",
             bg=_c("surface"),
             fg=_c("text_secondary"),
-            font=("Segoe UI", 9),
+            font=FONT["small"],
             width=10,
             anchor="w",
         ).pack(side="left")
@@ -369,7 +382,7 @@ class DetailPanel(tk.Frame):
             activeforeground=_c("text"),
             selectcolor=_c("surface"),
             relief="flat",
-            font=("Segoe UI", 9),
+            font=FONT["small"],
             command=self._on_cookies_toggle,
         )
         cookies_check.pack(side="left")
@@ -382,7 +395,7 @@ class DetailPanel(tk.Frame):
             values=installed_browsers if installed_browsers else ["chrome"],
             state="readonly",
             width=8,
-            font=("Segoe UI", 9),
+            font=FONT["small"],
         )
         browser_combo.pack(side="left", padx=(SPACING["sm"], 0))
         browser_combo.bind("<<ComboboxSelected>>", self._on_browser_changed)
@@ -393,16 +406,16 @@ class DetailPanel(tk.Frame):
             values=["Default"],
             state="readonly",
             width=10,
-            font=("Segoe UI", 9),
+            font=FONT["small"],
         )
         self._profile_combo.pack(side="left", padx=(SPACING["sm"], 0))
         self._cookies_file_btn = tk.Button(
             auth_row,
-            text="📁",
+            text="...",
             bg=_c("surface"),
             fg=_c("text"),
             relief="flat",
-            font=("Segoe UI", 10),
+            font=FONT["body"],
             width=2,
             command=self._on_select_cookies_file,
         )
@@ -412,13 +425,13 @@ class DetailPanel(tk.Frame):
 
         extra_row = tk.Frame(of, bg=_c("surface"))
         extra_row._bg_key = "surface"
-        extra_row.pack(fill="x", pady=(SPACING["sm"], SPACING["md"]))
+        extra_row.pack(fill="x", pady=(0, SPACING["md"]))
         tk.Label(
             extra_row,
             text="Options:",
             bg=_c("surface"),
             fg=_c("text_secondary"),
-            font=("Segoe UI", 9),
+            font=FONT["small"],
             width=10,
             anchor="w",
         ).pack(side="left")
@@ -429,7 +442,7 @@ class DetailPanel(tk.Frame):
             bg=_c("input_bg"),
             fg=_c("text"),
             relief="flat",
-            font=("Segoe UI", 9),
+            font=FONT["small"],
             width=8,
         )
         rate_entry.pack(side="left", padx=(0, SPACING["sm"]))
@@ -438,7 +451,7 @@ class DetailPanel(tk.Frame):
             text="Rate (e.g. 1M)",
             bg=_c("surface"),
             fg=_c("text_secondary"),
-            font=("Segoe UI", 8),
+            font=FONT["small"],
         ).pack(side="left", padx=(0, SPACING["md"]))
         self._split_chapters_var = tk.BooleanVar(value=False)
         split_check = tk.Checkbutton(
@@ -451,7 +464,7 @@ class DetailPanel(tk.Frame):
             activeforeground=_c("text"),
             selectcolor=_c("surface"),
             relief="flat",
-            font=("Segoe UI", 9),
+            font=FONT["small"],
         )
         split_check.pack(side="left")
 
@@ -463,7 +476,7 @@ class DetailPanel(tk.Frame):
         self._queue_frame = tk.Frame(parent, bg=_c("surface"))
         self._queue_frame._bg_key = "surface"
         self._queue_frame.grid(
-            row=2, column=0, columnspan=2, sticky="ew", padx=SPACING["md"], pady=(0, SPACING["md"])
+            row=2, column=0, columnspan=2, sticky="ew", padx=SPACING["xl"], pady=(0, SPACING["lg"])
         )
 
         qheader = tk.Frame(self._queue_frame, bg=_c("surface"))
@@ -534,7 +547,7 @@ class DetailPanel(tk.Frame):
         if self._retry_btn.winfo_ismapped():
             self._retry_btn.pack_forget()
         if video.status == DownloadStatus.ERROR:
-            self._retry_btn.pack(fill="x", pady=(0, SPACING["xs"]))
+            self._retry_btn.pack(fill="x", pady=(0, SPACING["sm"]))
             add_hover_effect(self._retry_btn, "warning", "warning")
 
     def _load_thumbnail(self, video: Video) -> None:
@@ -589,12 +602,12 @@ class DetailPanel(tk.Frame):
     def _toggle_options(self) -> None:
         if self._options_frame.winfo_ismapped():
             self._options_frame.pack_forget()
-            self._detail_toggle_btn.configure(text="▶ OPTIONS")
+            self._detail_toggle_btn.configure(text="OPTIONS")
         else:
             self._options_frame.pack(
                 fill="both", expand=True, padx=SPACING["md"], pady=(0, SPACING["md"])
             )
-            self._detail_toggle_btn.configure(text="▼ OPTIONS")
+            self._detail_toggle_btn.configure(text="OPTIONS")
 
     def _on_concurrent_change(self) -> None:
         val = self._concurrent_var.get()
@@ -693,11 +706,11 @@ class DetailPanel(tk.Frame):
         if self._queue_panel_visible:
             self._queue_frame.grid_remove()
             self._queue_panel_visible = False
-            self._queue_toggle_btn.configure(text="Queue ▸")
+            self._queue_toggle_btn.configure(text="Queue")
         else:
             self._queue_frame.grid()
             self._queue_panel_visible = True
-            self._queue_toggle_btn.configure(text="Queue ▾")
+            self._queue_toggle_btn.configure(text="Queue")
             self._update_queue_display()
 
     def _update_queue_display(self, snapshot: AppStateData | None = None) -> None:

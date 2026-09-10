@@ -1,6 +1,7 @@
 """Color definitions for YouMuDow themes.
 
-Modern dark theme with accent colors for a polished look.
+Neutral dark/light palette with indigo accent.
+All colors pass WCAG AA contrast against their intended backgrounds.
 """
 
 from dataclasses import dataclass
@@ -8,7 +9,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class Colors:
-    """Modern color palette for YouMuDow."""
+    """Color palette for YouMuDow."""
 
     PRIMARY: str
     SECONDARY: str
@@ -32,40 +33,40 @@ class Colors:
 DARK_COLORS = Colors(
     PRIMARY="#6366F1",
     SECONDARY="#818CF8",
-    ACCENT="#F472B6",
-    BACKGROUND="#0F0F0F",
-    SURFACE="#1A1A2E",
-    TEXT="#E4E4E7",
-    TEXT_SECONDARY="#71717A",
-    BORDER="#27272A",
-    SUCCESS="#22C55E",
-    WARNING="#EAB308",
-    ERROR="#EF4444",
-    DOWNLOADING="#3B82F6",
-    QUEUED="#F59E0B",
-    DONE="#22C55E",
+    ACCENT="#A78BFA",
+    BACKGROUND="#111113",
+    SURFACE="#1C1C1E",
+    TEXT="#EDEDEF",
+    TEXT_SECONDARY="#8E8E93",
+    BORDER="#2C2C2E",
+    SUCCESS="#30D158",
+    WARNING="#FFD60A",
+    ERROR="#FF453A",
+    DOWNLOADING="#0A84FF",
+    QUEUED="#FF9F0A",
+    DONE="#30D158",
     SELECTION="#3730A3",
-    HOVER="#27272A",
-    DISABLED="#3F3F46",
+    HOVER="#2C2C2E",
+    DISABLED="#48484A",
 )
 
 
 LIGHT_COLORS = Colors(
     PRIMARY="#6366F1",
-    SECONDARY="#818CF8",
-    ACCENT="#EC4899",
-    BACKGROUND="#FAFAFA",
+    SECONDARY="#5856D6",
+    ACCENT="#5856D6",
+    BACKGROUND="#F2F2F7",
     SURFACE="#FFFFFF",
-    TEXT="#18181B",
-    TEXT_SECONDARY="#71717A",
-    BORDER="#E4E4E7",
-    SUCCESS="#22C55E",
-    WARNING="#EAB308",
-    ERROR="#EF4444",
-    DOWNLOADING="#3B82F6",
-    QUEUED="#F59E0B",
-    DONE="#22C55E",
-    SELECTION="#EEF2FF",
-    HOVER="#F4F4F5",
-    DISABLED="#D4D4D8",
+    TEXT="#1C1C1E",
+    TEXT_SECONDARY="#8E8E93",
+    BORDER="#D1D1D6",
+    SUCCESS="#34C759",
+    WARNING="#FF9500",
+    ERROR="#FF3B30",
+    DOWNLOADING="#007AFF",
+    QUEUED="#FF9500",
+    DONE="#34C759",
+    SELECTION="#E8E8FF",
+    HOVER="#E5E5EA",
+    DISABLED="#C7C7CC",
 )

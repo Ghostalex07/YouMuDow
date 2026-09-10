@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 
 class MainWindow:
     def __init__(
-        self, controller: "AppController", debug_mode: bool = False, config: Any = None
+        self, controller: "AppController", debug_mode: bool = True, config: Any = None
     ) -> None:
         self._config = config
         self._controller = controller

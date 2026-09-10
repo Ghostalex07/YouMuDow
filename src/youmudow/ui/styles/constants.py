@@ -1,24 +1,39 @@
 """UI constants, color resolution, and shared helpers."""
 
+import platform
 import tkinter as tk
 
 from youmudow.ui.styles.theme import get_theme_manager
 
+_SYSTEM = platform.system()
+
+if _SYSTEM == "Windows":
+    _SANS = "Segoe UI"
+    _MONO = "Cascadia Code"
+elif _SYSTEM == "Darwin":
+    _SANS = "SF Pro Text"
+    _MONO = "Menlo"
+else:
+    _SANS = "Ubuntu"
+    _MONO = "Ubuntu Mono"
+
 SPACING = {
     "xs": 4,
     "sm": 8,
-    "md": 16,
-    "lg": 24,
-    "xl": 32,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
 }
 
 FONT = {
-    "h1": ("Segoe UI", 12, "bold"),
-    "h2": ("Segoe UI", 10, "bold"),
-    "body": ("Segoe UI", 10),
-    "small": ("Segoe UI", 9),
-    "label": ("Segoe UI", 9, "bold"),
-    "mono": ("Cascadia Code", 10, "normal"),
+    "h1": (_SANS, 14, "bold"),
+    "h2": (_SANS, 12, "bold"),
+    "h3": (_SANS, 11, "bold"),
+    "body": (_SANS, 10),
+    "small": (_SANS, 9),
+    "label": (_SANS, 9, "bold"),
+    "mono": (_MONO, 10),
 }
 
 _COLOR_MAP = {

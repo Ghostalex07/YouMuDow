@@ -12,7 +12,7 @@ class SearchBar(tk.Frame):
         super().__init__(parent, bg=_c("bg"))
         self._mw = main_window
         self.grid(
-            row=0, column=0, columnspan=2, sticky="ew", padx=SPACING["md"], pady=SPACING["md"]
+            row=0, column=0, columnspan=2, sticky="ew", padx=SPACING["xl"], pady=SPACING["lg"]
         )
 
         entry_frame = tk.Frame(
@@ -29,11 +29,11 @@ class SearchBar(tk.Frame):
         self._search_combo = ttk.Combobox(
             entry_frame,
             textvariable=self._search_var,
-            font=("Segoe UI", 12),
+            font=FONT["h2"],
             style="Search.TCombobox",
         )
         self._search_combo.grid(
-            row=0, column=0, sticky="ew", padx=SPACING["md"], pady=SPACING["md"]
+            row=0, column=0, sticky="ew", padx=SPACING["md"], pady=SPACING["sm"]
         )
 
         def _on_paste(event) -> str | None:
@@ -68,7 +68,9 @@ class SearchBar(tk.Frame):
             activeforeground="#FFFFFF",
             relief="flat",
             bd=0,
-            font=FONT["h2"],
+            font=FONT["h3"],
+            padx=16,
+            pady=6,
             command=lambda: self._mw._on_search(),
         )
         self._search_btn._theme = {
@@ -90,6 +92,8 @@ class SearchBar(tk.Frame):
             relief="flat",
             bd=0,
             font=FONT["body"],
+            padx=12,
+            pady=6,
             command=lambda: self._mw._on_cancel_search(),
         )
         self._cancel_btn._theme = {
@@ -104,25 +108,27 @@ class SearchBar(tk.Frame):
 
         self._cancel_dl_btn = tk.Button(
             self,
-            text="Stop DL",
+            text="Stop",
             bg=_c("error"),
             fg="#FFFFFF",
-            activebackground=_c("warning"),
-            activeforeground="#000000",
+            activebackground=_c("error"),
+            activeforeground="#FFFFFF",
             relief="flat",
             bd=0,
             font=FONT["body"],
+            padx=12,
+            pady=6,
             command=lambda: self._mw._on_cancel_download(),
         )
         self._cancel_dl_btn._theme = {
             "bg": "error",
             "fg": "#FFFFFF",
-            "activebg": "warning",
-            "activefg": "#000000",
+            "activebg": "error",
+            "activefg": "#FFFFFF",
         }
         self._cancel_dl_btn.pack(side="left", padx=(SPACING["xs"], 0))
         self._cancel_dl_btn.configure(state="disabled")
-        add_hover_effect(self._cancel_dl_btn, "warning", "error")
+        add_hover_effect(self._cancel_dl_btn, "error", "error")
 
         self._placeholder = "Search or paste URL (YouTube, SoundCloud, Vimeo...)"
         self._search_combo.set("")
