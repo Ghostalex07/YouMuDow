@@ -212,6 +212,10 @@ class DownloadQueue:
         with self._lock:
             return list(self._queue)
 
+    def has_url(self, url: str) -> bool:
+        with self._lock:
+            return any(item.url == url for item in self._queue)
+
     def is_empty(self) -> bool:
         with self._lock:
             return len(self._queue) == 0
@@ -371,9 +375,8 @@ class DownloadService:
     def _is_known(self, video: Video) -> bool:
         """True when a video with the same URL is queued or active."""
         with self._lock:
-            for item in self._queue.peek():
-                if item.url == video.url:
-                    return True
+            if self._queue.has_url(video.url):
+                return True
             for item in self._active_downloads.values():
                 if item.url == video.url:
                     return True

@@ -165,6 +165,13 @@ class TestDownloadQueueEdgeCases:
         assert removed is sample_video
         assert queue.is_empty()
 
+    def test_has_url(self, sample_video):
+        queue = DownloadQueue()
+        assert not queue.has_url(sample_video.url)
+        queue.add(sample_video)
+        assert queue.has_url(sample_video.url)
+        assert not queue.has_url("https://example.com/other")
+
 
 class TestDownloadServiceExtra:
     """Additional DownloadService behaviors."""
@@ -203,6 +210,36 @@ class TestDownloadServiceExtra:
         download_service._emit_event(
             DownloadEvent(type=DownloadEventType.QUEUED, video=sample_video)
         )
+
+    def test_emit_event_does_not_hold_callback_lock(self, download_service, sample_video):
+        callback_started = threading.Event()
+        release = threading.Event()
+        lock_granted = threading.Event()
+
+        def slow_callback(event):
+            callback_started.set()
+            release.wait(timeout=5)
+
+        download_service.on_event(slow_callback)
+
+        event = DownloadEvent(type=DownloadEventType.ERROR, video=sample_video, error="x")
+        emitter = threading.Thread(target=download_service._emit_event, args=(event,))
+        emitter.start()
+
+        assert callback_started.wait(timeout=1)
+
+        def try_lock() -> None:
+            with download_service._callbacks_lock:
+                lock_granted.set()
+
+        probe = threading.Thread(target=try_lock)
+        probe.start()
+        probe.join(timeout=0.5)
+        assert not probe.is_alive(), "callbacks must not run while _callbacks_lock is held"
+        assert lock_granted.is_set()
+
+        release.set()
+        emitter.join(timeout=5)
 
     def test_add_to_queue_emits_event(self, download_service, sample_video):
         events = []

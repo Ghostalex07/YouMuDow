@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- `DownloadQueue.has_url()` short-circuits the duplicate check in
+  `DownloadService._is_known()` without copying the whole queue per `add`
+  (previously `peek()` rebuilt a full list on every queued URL)
+- Regression test proving event callbacks run outside `_callbacks_lock`: a
+  blocked/slow callback no longer stalls `_emit_event()` for other emitters
 - `StateManager.get_snapshot()` copies are now built from cheap shallow video
   copies instead of `copy.deepcopy`: every `Video`/`DownloadOptions` field is a
   value type, so isolation is identical at a fraction of the cost (~5.6x faster
@@ -30,6 +35,14 @@ All notable changes to this project will be documented in this file.
 - Fixed a latent build bug: `PIL._imagingtk`/`PIL._tkinter_finder` are now
   bundled so thumbnails actually render through `ImageTk` in the frozen app
   (`hook-PIL.py` excludes `_tkinter_finder` because it imports `tkinter`)
+- PyInstaller build: excluded the Ubuntu `apport_python_hook` chain
+  (`apt`, `apt_pkg`) that analysis was pulling in, dropping
+  `libapt-pkg.so`/`libsystemd.so`/`libgcrypt.so` from the bundle; hidden
+  imports were reduced to the genuinely lazy modules (`youmudow.ui.icon`,
+  `youmudow.services.notification_service`, `PIL.Image`/`PIL.ImageTk`,
+  `PIL._imagingtk`/`PIL._tkinter_finder`) since the whole youmudow package
+  graph is already reached statically from `main.py`. The Linux onefile bundle
+  shrunk from ~17.3 MB to ~14.5 MB (~16%)
 
 ### Changed
 - Centralized format/quality sets (`SUPPORTED_FORMATS`, `SUPPORTED_QUALITIES`) in

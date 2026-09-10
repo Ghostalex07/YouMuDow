@@ -47,7 +47,9 @@ ENVIRONMENT_EXCLUDES = [
     "jack",
     "jwt",
     "apport",
+    "apport_python_hook",
     "apt",
+    "apt_pkg",
     "dbus",
     "pkg_resources",
     "setuptools",
@@ -84,37 +86,13 @@ def build() -> None:
         "--noconfirm",
         "--additional-hooks-dir",
         str(HOOKS),
-        "--hidden-import",
-        "youmudow",
-        "--hidden-import",
-        "youmudow.ui",
-        "--hidden-import",
-        "youmudow.ui.styles",
-        "--hidden-import",
-        "youmudow.ui.styles.colors",
-        "--hidden-import",
-        "youmudow.ui.styles.theme",
-        "--hidden-import",
-        "youmudow.ui.styles.styles",
-        "--hidden-import",
-        "youmudow.ui.widgets",
-        "--hidden-import",
-        "youmudow.app",
-        "--hidden-import",
-        "youmudow.services",
-        "--hidden-import",
-        "youmudow.adapters",
-        "--hidden-import",
-        "youmudow.domain",
-        "--hidden-import",
-        "PIL",
-        "--hidden-import",
-        "PIL.Image",
-        "--hidden-import",
-        "PIL.ImageTk",
     ]
 
-    for mod in LAZY_HIDDEN_IMPORTS + PIL_TK_HIDDEN_IMPORTS:
+    # The whole youmudow package graph (styles, widgets, app, services,
+    # adapters, domain) is already reached statically from main.py, so only the
+    # genuinely lazy modules need explicit hidden imports. PIL.Image /
+    # PIL.ImageTk are imported lazily by DetailPanel.
+    for mod in LAZY_HIDDEN_IMPORTS + ["PIL.Image", "PIL.ImageTk"] + PIL_TK_HIDDEN_IMPORTS:
         args += ["--hidden-import", mod]
 
     if system != "Windows":
@@ -125,7 +103,7 @@ def build() -> None:
     args.append(str(ENTRY))
 
     print(f"Building for {system}...")
-    result = subprocess.run(args, cwd=ROOT)
+    result = subprocess.run(args, cwd=ROOT, check=False)
     if result.returncode == 0:
         output = DIST / ("YouMuDow.exe" if system == "Windows" else "YouMuDow")
         print(f"\nBuild successful: {output}")
