@@ -156,10 +156,9 @@ class DownloadWorker(threading.Thread):
                 video.error_message = str(e)
                 logger.exception("Download worker failed for %s", video.url)
 
-            with self._video_lock:
-                self._current_video = None
-
             if self._shutdown.is_set():
+                with self._video_lock:
+                    self._current_video = None
                 # Service is shutting down: the terminal state is managed by
                 # DownloadService.stop() itself, so no event is broadcast.
                 logger.debug("Worker %s bailing during shutdown for %s", self._worker_id, video.url)
@@ -187,7 +186,14 @@ class DownloadWorker(threading.Thread):
                         )
                 event_type = DownloadEventType.ERROR
 
+            # Deliver the terminal event before the worker is reported idle. If
+            # _current_video were cleared first, the dispatcher could dispatch a
+            # new video to this worker and overwrite its _active_downloads entry
+            # before the terminal event is applied, silently dropping it and
+            # leaving a phantom active download in the UI.
             self._progress_callback(DownloadEvent(type=event_type, video=video))
+            with self._video_lock:
+                self._current_video = None
 
 
 class DownloadQueue:

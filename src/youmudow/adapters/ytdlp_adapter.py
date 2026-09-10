@@ -24,8 +24,6 @@ from youmudow.domain.validators import AUDIO_FORMATS, sanitize_filename
 
 logger = logging.getLogger(__name__)
 
-_DESTINATION_LOCK = threading.Lock()
-
 THUMBNAIL_EMBED_FORMATS: frozenset[str] = frozenset({"mp3", "m4a", "opus"})
 
 _VIDEO_QUALITY_SELECTORS: dict[str, str] = {
@@ -134,7 +132,18 @@ class YtdlpAdapter:
     def __init__(self, config: YtdlpConfig | None = None) -> None:
         self._config = config or YtdlpConfig()
         self._log_callback: LogCallback | None = None
-        self._last_destination: Path | None = None
+        self._destination_local = threading.local()
+
+    @property
+    def _last_destination(self) -> Path | None:
+        # The captured destination is thread-local: several DownloadWorker
+        # threads may run download() concurrently on this single adapter, and
+        # one run's destination must never be attributed to another's.
+        return getattr(self._destination_local, "path", None)
+
+    @_last_destination.setter
+    def _last_destination(self, value: Path | None) -> None:
+        self._destination_local.path = value
 
     @property
     def config(self) -> YtdlpConfig:
@@ -670,9 +679,8 @@ class YtdlpAdapter:
         reader.join(timeout=2)
         if reader.is_alive():
             logger.warning("Output reader thread still alive for %s", video.url)
-        with _DESTINATION_LOCK:
-            if destinations:
-                self._last_destination = Path(destinations[-1])
+        if destinations:
+            self._last_destination = Path(destinations[-1])
 
         if timeout_reached:
             return -2, error_lines, destinations, already_downloaded
@@ -724,8 +732,7 @@ class YtdlpAdapter:
         # snapshot the directory before the first attempt and drop any
         # destination captured by an earlier run on this adapter.
         pre_existing = self._existing_files(output_path)
-        with _DESTINATION_LOCK:
-            self._last_destination = None
+        self._last_destination = None
 
         try:
             # max_retries is the maximum number of *attempts*: always attempt at
@@ -761,8 +768,7 @@ class YtdlpAdapter:
                 already_downloaded: list[str] = result[3] if len(result) > 3 else []
                 if destinations:
                     last_destination = Path(destinations[-1])
-                    with _DESTINATION_LOCK:
-                        self._last_destination = last_destination
+                    self._last_destination = last_destination
 
                 if cancel_event and cancel_event.is_set():
                     cancelled = True
@@ -852,8 +858,7 @@ class YtdlpAdapter:
             candidate = Path(raw)
             if candidate.is_file():
                 return candidate
-        with _DESTINATION_LOCK:
-            captured = self._last_destination
+        captured = self._last_destination
         if captured is not None and captured.is_file() and captured not in preexisting:
             return captured
         return self._resolve_output_file(output_path, safe_title, preexisting)

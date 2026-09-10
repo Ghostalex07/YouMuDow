@@ -719,6 +719,34 @@ class TestDownloadServiceLifecycle:
         service.stop()
         assert service.active_count == 0
 
+    def test_terminal_event_delivered_before_worker_idle(self, tmp_path):
+        """A worker must deliver its terminal event before it is reported idle.
+
+        If it became idle first, the dispatcher could dispatch a new video to
+        the same worker and overwrite its active_downloads entry before the
+        terminal event is applied, silently dropping the COMPLETED and leaving
+        a phantom active download in the UI.
+        """
+        adapter = Mock()
+        adapter.download.side_effect = lambda video, *a, **kw: (
+            setattr(video, "status", DownloadStatus.DONE) or video
+        )
+        service = DownloadService(adapter=adapter, default_output_path=tmp_path, max_concurrent=1)
+        busy_at_terminal = []
+        service.on_event(
+            lambda e: (
+                busy_at_terminal.append(service._workers[0].is_busy)
+                if e.type == DownloadEventType.COMPLETED
+                else None
+            )
+        )
+        service.add_to_queue(Video(title="v", url="u"))
+        service.start()
+        assert self._wait_for(lambda: len(busy_at_terminal) == 1)
+        assert busy_at_terminal == [True]
+        assert service.active_count == 0
+        service.stop()
+
     def test_callback_calling_stop_does_not_deadlock(self, tmp_path):
         adapter = Mock()
         adapter.download.side_effect = lambda video, *a, **kw: (
