@@ -7,7 +7,9 @@ without affecting the rest of the application.
 
 import json
 import logging
+import os
 import re
+import signal
 import subprocess
 import threading
 import time
@@ -104,6 +106,10 @@ class YtdlpConfig:
     cookies_file: str | None = None
     user_agent: str | None = None
     verify_certificates: bool = True
+    # Inactivity timeout in seconds, not a total wall-clock limit: the deadline
+    # is pushed back every time yt-dlp writes a line, so a download that keeps
+    # reporting progress is never killed. A run started without a cancel_event
+    # still uses it as a hard cap via process.wait().
     download_timeout: int = 300
     max_retries: int = 2
 
@@ -160,6 +166,13 @@ class YtdlpAdapter:
 
     def _build_base_args(self, video: Video | None = None, skip_cookies: bool = False) -> list[str]:
         args = ["yt-dlp"]
+        # YouTube needs an external JS runtime to sign download URLs. yt-dlp
+        # only enables deno by default; node/quickjs must be requested with an
+        # explicit flag or the download fails with HTTP Error 403 Forbidden.
+        # Imported lazily to avoid a circular import with the services package.
+        from youmudow.services.environment_service import js_runtimes_flag
+
+        args.extend(js_runtimes_flag())
         if not self._config.verify_certificates:
             args.append("--no-check-certificate")
 
@@ -559,6 +572,35 @@ class YtdlpAdapter:
         if self._config.embed_thumbnail and fmt in THUMBNAIL_EMBED_FORMATS:
             self._log(f"[METADATA] {video.title} artwork embedded")
 
+    @staticmethod
+    def _signal_process_group(process: subprocess.Popen, sig: int) -> None:
+        """Send ``sig`` to yt-dlp's whole process group.
+
+        The child is spawned with ``start_new_session=True``, so its group also
+        holds the ffmpeg helpers yt-dlp spawns; signalling yt-dlp alone leaves
+        ffmpeg muxing into the output directory after a cancel. Falls back to
+        signalling yt-dlp itself when the group cannot be targeted (the group
+        may already be gone, or the platform has no process groups).
+        """
+        try:
+            os.killpg(os.getpgid(process.pid), sig)
+            return
+        except (AttributeError, ProcessLookupError, PermissionError):
+            logger.debug("Process group unavailable, signalling yt-dlp directly")
+        if sig == signal.SIGKILL:
+            process.kill()
+        else:
+            process.terminate()
+
+    @classmethod
+    def _terminate_process_group(cls, process: subprocess.Popen) -> None:
+        """Terminate the process group, escalating to SIGKILL after a grace period."""
+        cls._signal_process_group(process, signal.SIGTERM)
+        try:
+            process.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            cls._signal_process_group(process, signal.SIGKILL)
+
     def _run_process(
         self,
         args: list[str],
@@ -580,6 +622,9 @@ class YtdlpAdapter:
         destinations: list[str] = []
         already_downloaded: list[str] = []
         output_lock = threading.Lock()
+        # Set by the reader thread for every line yt-dlp writes, so the main
+        # loop can tell an active download from a silent/hung one.
+        activity = threading.Event()
 
         try:
             process = subprocess.Popen(
@@ -590,6 +635,7 @@ class YtdlpAdapter:
                 encoding="utf-8",
                 errors="replace",
                 cwd=str(output_path),
+                start_new_session=True,
             )
         except FileNotFoundError as e:
             raise YtDlpNotFoundError(
@@ -603,9 +649,10 @@ class YtdlpAdapter:
             try:
                 for line in stdout:
                     if cancel_event and cancel_event.is_set():
-                        process.terminate()
+                        self._signal_process_group(process, signal.SIGTERM)
                         break
                     if line:
+                        activity.set()
                         stripped = line.strip()
                         with output_lock:
                             if "error" in stripped.lower() or "warning" in stripped.lower():
@@ -639,33 +686,26 @@ class YtdlpAdapter:
                 while process.poll() is None:
                     if cancel_event.is_set():
                         self._log("[CANCEL] Cancelled, terminating process")
-                        process.terminate()
-                        try:
-                            process.wait(timeout=2)
-                        except subprocess.TimeoutExpired:
-                            process.kill()
+                        self._terminate_process_group(process)
                         break
-                    if time.monotonic() >= deadline:
+                    # download_timeout is an inactivity budget: every line
+                    # yt-dlp writes pushes the deadline back, so a download that
+                    # is still reporting progress is never killed.
+                    activity.clear()
+                    if activity.wait(timeout=0.1):
+                        deadline = time.monotonic() + self._config.download_timeout
+                    elif time.monotonic() >= deadline:
                         self._log("[ERROR] Download timed out")
-                        process.kill()
-                        try:
-                            process.wait(timeout=2)
-                        except subprocess.TimeoutExpired:
-                            pass
+                        self._terminate_process_group(process)
                         timeout_reached = True
                         break
-                    time.sleep(0.1)
         except subprocess.TimeoutExpired:
             self._log("[ERROR] Download timed out")
-            process.kill()
+            self._signal_process_group(process, signal.SIGKILL)
             timeout_reached = True
         finally:
             if process.poll() is None:
-                process.terminate()
-                try:
-                    process.wait(timeout=2)
-                except subprocess.TimeoutExpired:
-                    process.kill()
+                self._terminate_process_group(process)
             # Close the read end from the main thread: this forces the reader to
             # hit EOF even if the process died without closing stdout, so the
             # reader thread cannot stay alive blocked on readline().

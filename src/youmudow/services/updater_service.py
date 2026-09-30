@@ -31,6 +31,7 @@ def update_ytdlp(
     on_error: Callable[[str], None],
 ) -> None:
     def _do_update() -> None:
+        binary_missing = False
         try:
             result = subprocess.run(
                 ["yt-dlp", "-U"],
@@ -43,12 +44,14 @@ def update_ytdlp(
                 new_version = get_ytdlp_version()
                 on_success(new_version)
                 return
+            binary_error = result.stderr or "yt-dlp self-update failed"
         except FileNotFoundError as e:
-            logger.warning("yt-dlp binary not found: %s", e)
-            on_error(str(YtDlpNotFoundError("yt-dlp binary not found")))
-            return
+            logger.warning("yt-dlp binary not found, falling back to pip: %s", e)
+            binary_error = str(e) or "yt-dlp binary not found"
+            binary_missing = True
         except (OSError, subprocess.SubprocessError) as e:
             logger.warning("yt-dlp self-update failed: %s", e)
+            binary_error = str(e)
 
         try:
             result = subprocess.run(
@@ -59,12 +62,21 @@ def update_ytdlp(
                 check=False,
             )
             if result.returncode == 0:
+                logger.info("yt-dlp updated via pip after self-update failed: %s", binary_error)
                 new_version = get_ytdlp_version()
                 on_success(new_version)
-            else:
-                on_error(result.stderr or "Update failed")
+                return
+            pip_error = result.stderr or "Update failed"
         except (OSError, subprocess.SubprocessError) as e:
             logger.warning("pip install yt-dlp failed: %s", e)
-            on_error(str(e))
+            pip_error = str(e)
+
+        message = (
+            f"yt-dlp self-update failed ({binary_error}); pip update also failed ({pip_error})"
+        )
+        if binary_missing:
+            on_error(str(YtDlpNotFoundError(message)))
+        else:
+            on_error(message)
 
     threading.Thread(target=_do_update, daemon=True).start()

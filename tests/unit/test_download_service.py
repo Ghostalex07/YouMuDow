@@ -608,6 +608,23 @@ class TestDownloadServiceLifecycle:
         assert not any(e.type == DownloadEventType.COMPLETED for e in events)
         assert v.status == DownloadStatus.ERROR
 
+    def test_worker_unexpected_status_message_keeps_the_real_status(self, tmp_path):
+        adapter = Mock()
+        adapter.download.side_effect = lambda video, *a, **kw: (
+            setattr(video, "status", DownloadStatus.DOWNLOADING) or video
+        )
+        events = []
+        worker = DownloadWorker(0, adapter, lambda: tmp_path, events.append)
+        v = Video(title="v", url="u")
+        worker.start()
+        worker.submit(v)
+        assert self._wait_for(lambda: any(e.type == DownloadEventType.ERROR for e in events))
+        worker.stop()
+        worker.join(timeout=2)
+        assert v.status == DownloadStatus.ERROR
+        assert "downloading" in v.error_message.lower()
+        assert "DownloadStatus.ERROR" not in v.error_message
+
     def test_completed_requires_done_status(self, tmp_path):
         # A download that returns the video without DONE must never COMPLETE.
         adapter = Mock()

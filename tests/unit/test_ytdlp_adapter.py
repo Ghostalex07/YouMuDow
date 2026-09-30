@@ -2,6 +2,7 @@
 
 import io
 import os
+import signal
 import subprocess
 import tempfile
 import threading
@@ -30,6 +31,11 @@ def make_video(**options) -> Video:
         duration=60,
         options=DownloadOptions(**options),
     )
+
+
+# Never a real pid, so os.getpgid() fails for the fake processes below and the
+# adapter's process-group signalling falls back to the fake's own methods.
+FAKE_PID = 2**31 - 1
 
 
 @pytest.fixture
@@ -162,6 +168,22 @@ class TestBuildArgs:
             make_video(use_cookies=True, cookies_from_browser="firefox"), skip_cookies=True
         )
         assert "--cookies-from-browser" not in args
+
+    def test_js_runtime_flag_added_when_node_detected(self, adapter):
+        with patch(
+            "youmudow.services.environment_service.js_runtimes_flag",
+            return_value=["--js-runtimes", "node"],
+        ):
+            args = adapter._build_base_args(make_video(file_format="mp3"))
+        assert "--js-runtimes" in args
+        assert args[args.index("--js-runtimes") + 1] == "node"
+
+    def test_js_runtime_flag_omitted_when_no_runtime(self, adapter):
+        with patch(
+            "youmudow.services.environment_service.js_runtimes_flag", return_value=[]
+        ):
+            args = adapter._build_base_args(make_video(file_format="mp3"))
+        assert "--js-runtimes" not in args
 
 
 class TestBuildDownloadArgs:
@@ -744,6 +766,7 @@ class BlockingFakeProcess:
     """Fake subprocess that stays running until terminated/killed."""
 
     def __init__(self):
+        self.pid = FAKE_PID
         self.stdout = io.StringIO("")
         self._terminated = False
         self.returncode = None
@@ -947,6 +970,7 @@ class FakeProcess:
     """Minimal fake subprocess for testing _run_process."""
 
     def __init__(self, lines, returncode):
+        self.pid = FAKE_PID
         self._lines = lines
         self.returncode = returncode
         self.timeout_wait = False
@@ -1292,3 +1316,202 @@ class TestNoOutputPolicy:
             result = self._download(sample_video, tmp_path, adapter=adapter)
         assert result.status == DownloadStatus.ERROR
         assert result.error_message
+
+
+class StreamingStdout:
+    """Fake stdout that yields lines over real time, like a live download."""
+
+    def __init__(self, process, lines, interval, completes):
+        self._process = process
+        self._lines = list(lines)
+        self._interval = interval
+        self._completes = completes
+        self._index = 0
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self._index >= len(self._lines):
+            if self._completes:
+                raise StopIteration
+            # A hung process keeps the stream open but says nothing.
+            time.sleep(self._interval)
+            return ""
+        time.sleep(self._interval)
+        self._index += 1
+        self._process.pending -= 1
+        return self._lines[self._index - 1]
+
+    def close(self):
+        pass
+
+
+class StreamingFakeProcess:
+    """Fake yt-dlp that streams its output line by line over real time."""
+
+    def __init__(self, lines, interval=0.05, completes=True):
+        self.pid = FAKE_PID
+        self.returncode = 0
+        self.terminated = False
+        self.killed = False
+        self.pending = len(lines)
+        self.completes = completes
+        self.stdout = StreamingStdout(self, lines, interval, completes)
+
+    def poll(self):
+        return self.returncode if self.completes and self.pending <= 0 else None
+
+    def wait(self, timeout=None):
+        return self.returncode
+
+    def terminate(self):
+        self.terminated = True
+        self.returncode = -15
+
+    def kill(self):
+        self.killed = True
+        self.returncode = -9
+
+
+class StubbornFakeProcess:
+    """Fake subprocess that only stops when the whole group is SIGKILLed."""
+
+    def __init__(self):
+        self.pid = FAKE_PID
+        self.stdout = io.StringIO("")
+        self.returncode = None
+        self.signals = []
+
+    def poll(self):
+        return None
+
+    def wait(self, timeout=None):
+        if not self.signals or self.signals[-1] != signal.SIGKILL:
+            raise subprocess.TimeoutExpired("yt-dlp", timeout)
+        return -9
+
+    def terminate(self):
+        self.signals.append(signal.SIGTERM)
+
+    def kill(self):
+        self.signals.append(signal.SIGKILL)
+
+
+class TestInactivityTimeout:
+    """download_timeout is an inactivity budget, not a total wall-clock limit."""
+
+    def test_progress_longer_than_timeout_does_not_time_out(self, tmp_path, sample_video):
+        adapter = YtdlpAdapter(YtdlpConfig(download_timeout=0.5))
+        progress = []
+        lines = [f"[download] {i}.0% of ~10.0MiB at 1.0MiB/s ETA 00:30" for i in range(20)]
+        fake = StreamingFakeProcess(lines, interval=0.05)
+        start = time.monotonic()
+        with patch("subprocess.Popen", return_value=fake):
+            code, _, _, _ = adapter._run_process(
+                ["yt-dlp"],
+                tmp_path,
+                sample_video,
+                threading.Event(),
+                lambda p, s: progress.append(p),
+            )
+        assert time.monotonic() - start > 0.5, "the run must outlast the timeout"
+        assert code == 0
+        assert not fake.killed
+        assert progress[-1] == 19.0
+
+    def test_silent_process_times_out(self, tmp_path, sample_video):
+        adapter = YtdlpAdapter(YtdlpConfig(download_timeout=0.3))
+        fake = StreamingFakeProcess([], interval=0.05, completes=False)
+        with patch("subprocess.Popen", return_value=fake):
+            code, _, _, _ = adapter._run_process(
+                ["yt-dlp"], tmp_path, sample_video, threading.Event(), None
+            )
+        assert code == -2
+        assert fake.terminated
+
+    def test_silence_after_progress_times_out(self, tmp_path, sample_video):
+        """The budget is spent once output stops, however long the run took to get there."""
+        adapter = YtdlpAdapter(YtdlpConfig(download_timeout=0.3))
+        lines = ["[download] 1.0% of ~10.0MiB at 1.0MiB/s ETA 00:30"] * 2
+        fake = StreamingFakeProcess(lines, interval=0.05, completes=False)
+        with patch("subprocess.Popen", return_value=fake):
+            code, _, _, _ = adapter._run_process(
+                ["yt-dlp"], tmp_path, sample_video, threading.Event(), None
+            )
+        assert code == -2
+        assert fake.terminated
+
+
+class TestProcessGroupSignalling:
+    """Cancel and timeout must reach the ffmpeg helpers, not just the yt-dlp child."""
+
+    def test_popen_starts_new_session(self, tmp_path, sample_video):
+        adapter = YtdlpAdapter()
+        fake = FakeProcess(["[info] done"], 0)
+        with patch("subprocess.Popen", return_value=fake) as popen:
+            adapter._run_process(["yt-dlp"], tmp_path, sample_video, None, None)
+        assert popen.call_args.kwargs["start_new_session"] is True
+
+    def test_cancel_signals_process_group(self, tmp_path, sample_video):
+        adapter = YtdlpAdapter()
+        cancel = threading.Event()
+        cancel.set()
+        fake = BlockingFakeProcess()
+        with (
+            patch("subprocess.Popen", return_value=fake),
+            patch("youmudow.adapters.ytdlp_adapter.os.getpgid", return_value=4242),
+            patch(
+                "youmudow.adapters.ytdlp_adapter.os.killpg",
+                side_effect=lambda pgid, sig: fake.terminate(),
+            ) as killpg,
+        ):
+            code, _, _, _ = adapter._run_process(["yt-dlp"], tmp_path, sample_video, cancel, None)
+        assert killpg.call_count == 1
+        assert killpg.call_args.args == (4242, signal.SIGTERM)
+        assert fake._terminated, "only signalling the group should stop the child"
+        assert code == 5
+
+    def test_timeout_escalates_to_group_sigkill(self, tmp_path, sample_video):
+        """A child ignoring SIGTERM is killed through the group, not left running."""
+        adapter = YtdlpAdapter(YtdlpConfig(download_timeout=0.2))
+        fake = StubbornFakeProcess()
+        with (
+            patch("subprocess.Popen", return_value=fake),
+            patch("youmudow.adapters.ytdlp_adapter.os.getpgid", return_value=4242),
+            patch(
+                "youmudow.adapters.ytdlp_adapter.os.killpg",
+                side_effect=lambda pgid, sig: fake.signals.append(sig),
+            ) as killpg,
+        ):
+            code, _, _, _ = adapter._run_process(
+                ["yt-dlp"], tmp_path, sample_video, threading.Event(), None
+            )
+        assert code == -2
+        assert killpg.call_count >= 2
+        assert fake.signals[:2] == [signal.SIGTERM, signal.SIGKILL]
+
+    @pytest.mark.parametrize("vanished", ["getpgid", "killpg"])
+    def test_vanished_process_group_is_not_fatal(self, tmp_path, sample_video, vanished):
+        """The group can be gone already; that must not raise and must still stop the child."""
+        adapter = YtdlpAdapter()
+        cancel = threading.Event()
+        cancel.set()
+        fake = BlockingFakeProcess()
+        gone = ProcessLookupError()
+        with (
+            patch("subprocess.Popen", return_value=fake),
+            patch(
+                "youmudow.adapters.ytdlp_adapter.os.getpgid",
+                return_value=4242,
+                side_effect=gone if vanished == "getpgid" else None,
+            ) as getpgid,
+            patch(
+                "youmudow.adapters.ytdlp_adapter.os.killpg",
+                side_effect=gone if vanished == "killpg" else None,
+            ),
+        ):
+            code, _, _, _ = adapter._run_process(["yt-dlp"], tmp_path, sample_video, cancel, None)
+        assert getpgid.called
+        assert fake._terminated
+        assert code == 5

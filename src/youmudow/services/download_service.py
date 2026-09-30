@@ -179,10 +179,11 @@ class DownloadWorker(threading.Thread):
                         video.url,
                         video.status,
                     )
+                    unexpected_status = video.status
                     video.status = DownloadStatus.ERROR
                     if not video.error_message:
                         video.error_message = (
-                            f"Download ended with unexpected status: {video.status}"
+                            f"Download ended with unexpected status: {unexpected_status}"
                         )
                 event_type = DownloadEventType.ERROR
 
