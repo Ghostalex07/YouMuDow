@@ -75,3 +75,34 @@ class TestHistoryService:
         temp_history_file.write_text("corrupted json", encoding="utf-8")
         hs = HistoryService()
         assert len(hs.get_all()) == 0
+
+    def test_corrupted_history_is_preserved_as_backup(self, temp_history_file):
+        raw = b'[{"title": "Truncated'
+        temp_history_file.write_bytes(raw)
+        hs = HistoryService()
+        assert len(hs.get_all()) == 0
+        backup = temp_history_file.with_suffix(".json.corrupt")
+        assert backup.exists()
+        assert backup.read_bytes() == raw
+        assert not temp_history_file.exists()
+
+    def test_non_list_history_root_is_preserved_as_backup(self, temp_history_file):
+        temp_history_file.write_text('{"title": "not a list"}', encoding="utf-8")
+        hs = HistoryService()
+        assert len(hs.get_all()) == 0
+        assert temp_history_file.with_suffix(".json.corrupt").exists()
+
+    def test_save_is_atomic_and_leaves_no_tmp_file(self, temp_history_file):
+        hs = HistoryService()
+        hs.add(make_video(), "/tmp/test.mp3", "mp3")
+        assert list(temp_history_file.parent.glob("*.tmp")) == []
+        assert list(temp_history_file.parent.iterdir()) == [temp_history_file]
+
+    def test_failed_save_keeps_previous_history_and_no_tmp_file(self, temp_history_file):
+        hs = HistoryService()
+        hs.add(make_video(url="https://example.com/keep"), "/tmp/keep.mp3", "mp3")
+        before = temp_history_file.read_text(encoding="utf-8")
+        with patch("youmudow.services.history_service.os.replace", side_effect=OSError("boom")):
+            hs.add(make_video(url="https://example.com/new"), "/tmp/new.mp3", "mp3")
+        assert list(temp_history_file.parent.glob("*.tmp")) == []
+        assert temp_history_file.read_text(encoding="utf-8") == before

@@ -1,11 +1,27 @@
 """Tests for AppConfig."""
 
+import json
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from youmudow.app.config import AppConfig
 from youmudow.domain.models import DownloadOptions
+
+
+@pytest.fixture(autouse=True)
+def _isolated_config_file(tmp_path):
+    """Keep every AppConfig() in this module off the real user config file.
+
+    Without this, tests that only assert defaults silently read
+    ~/.config/youmudow/config.json and fail depending on its contents.
+    """
+    with patch("youmudow.app.config.CONFIG_DIR", tmp_path), patch(
+        "youmudow.app.config.CONFIG_FILE", tmp_path / "config.json"
+    ):
+        yield
 
 
 class TestAppConfig:
@@ -61,6 +77,69 @@ class TestAppConfig:
             with patch("youmudow.app.config.CONFIG_FILE", config_file):
                 cfg = AppConfig()
                 assert cfg.get("format") == "mp3"
+
+    def test_corrupted_config_is_preserved_as_backup(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config_file = Path(tmp) / "config.json"
+            config_file.write_text("invalid json{{{", encoding="utf-8")
+            with patch("youmudow.app.config.CONFIG_FILE", config_file):
+                cfg = AppConfig()
+            assert cfg.get("format") == "mp3"
+            backup = config_file.with_suffix(".json.corrupt")
+            assert backup.exists()
+            assert backup.read_text(encoding="utf-8") == "invalid json{{{"
+            assert not config_file.exists()
+
+    def test_non_dict_json_root_falls_back_to_defaults(self):
+        for payload in ("[]", '"x"', "5"):
+            with tempfile.TemporaryDirectory() as tmp:
+                config_file = Path(tmp) / "config.json"
+                config_file.write_text(payload, encoding="utf-8")
+                with patch("youmudow.app.config.CONFIG_FILE", config_file):
+                    cfg = AppConfig()
+                assert cfg.get("format") == "mp3"
+                assert cfg.get("quality") == "best"
+                assert config_file.with_suffix(".json.corrupt").exists()
+
+    def test_non_utf8_config_falls_back_to_defaults(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config_file = Path(tmp) / "config.json"
+            config_file.write_bytes(b'{"format": "mp4", "output_path": "\xff\xfe"}')
+            with patch("youmudow.app.config.CONFIG_FILE", config_file):
+                cfg = AppConfig()
+                assert cfg.get("format") == "mp3"
+            backup = config_file.with_suffix(".json.corrupt")
+            assert backup.exists()
+            assert backup.read_bytes() == b'{"format": "mp4", "output_path": "\xff\xfe"}'
+
+    def test_save_is_atomic_and_leaves_no_tmp_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config_file = Path(tmp) / "config.json"
+            with (
+                patch("youmudow.app.config.CONFIG_DIR", Path(tmp)),
+                patch("youmudow.app.config.CONFIG_FILE", config_file),
+            ):
+                cfg = AppConfig()
+                cfg.set("format", "flac")
+                cfg.save()
+            assert list(Path(tmp).glob("*.tmp")) == []
+            assert list(Path(tmp).iterdir()) == [config_file]
+
+    def test_failed_save_leaves_no_tmp_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config_file = Path(tmp) / "config.json"
+            original = json.dumps({"format": "mp3"}, indent=2)
+            config_file.write_text(original, encoding="utf-8")
+            with (
+                patch("youmudow.app.config.CONFIG_DIR", Path(tmp)),
+                patch("youmudow.app.config.CONFIG_FILE", config_file),
+                patch("youmudow.app.config.os.replace", side_effect=OSError("no space")),
+            ):
+                cfg = AppConfig()
+                cfg.set("format", "flac")
+                cfg.save()
+            assert list(Path(tmp).glob("*.tmp")) == []
+            assert config_file.read_text(encoding="utf-8") == original
 
     def test_load_oserror_falls_back_to_defaults(self):
         with (

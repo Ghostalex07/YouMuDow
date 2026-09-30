@@ -1,6 +1,8 @@
 import json
 import logging
+import os
 import platform
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -41,6 +43,38 @@ DEFAULT_CONFIG: dict[str, Any] = {
 }
 
 
+def _write_atomic(path: Path, text: str) -> None:
+    tmp: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=path.name + ".",
+            suffix=".tmp",
+            delete=False,
+        ) as f:
+            tmp = Path(f.name)
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        if tmp is not None:
+            tmp.unlink(missing_ok=True)
+        raise
+
+
+def _backup_corrupt(path: Path) -> Path | None:
+    backup = path.with_suffix(path.suffix + ".corrupt")
+    try:
+        os.replace(path, backup)
+    except OSError as e:
+        logger.warning("Could not preserve corrupt file %s: %s", path, e)
+        return None
+    return backup
+
+
 class AppConfig:
     def __init__(self) -> None:
         self._data: dict[str, Any] = dict(DEFAULT_CONFIG)
@@ -51,17 +85,23 @@ class AppConfig:
             if CONFIG_FILE.exists():
                 with open(CONFIG_FILE, encoding="utf-8") as f:
                     stored = json.load(f)
+                if not isinstance(stored, dict):
+                    raise ValueError(f"expected a JSON object, got {type(stored).__name__}")
                 self._data = {**DEFAULT_CONFIG, **stored}
-        except json.JSONDecodeError:
-            logger.warning("Corrupted config file, using defaults: %s", CONFIG_FILE)
+        except ValueError as e:
+            backup = _backup_corrupt(CONFIG_FILE)
+            logger.warning(
+                "Corrupted config file (%s), using defaults. Original kept at %s",
+                e,
+                backup,
+            )
         except OSError as e:
             logger.warning("Failed to load config: %s", e)
 
     def save(self) -> None:
         try:
             CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-            with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-                json.dump(self._data, f, indent=2)
+            _write_atomic(CONFIG_FILE, json.dumps(self._data, indent=2))
         except OSError as e:
             logger.warning("Failed to save config: %s", e)
 
