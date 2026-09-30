@@ -37,25 +37,19 @@ class TestJsRuntimesFlag:
     def test_empty_when_no_runtime(self):
         from youmudow.services.environment_service import js_runtimes_flag
 
-        with patch(
-            "youmudow.services.environment_service.detect_js_runtime", return_value=None
-        ):
+        with patch("youmudow.services.environment_service.detect_js_runtime", return_value=None):
             assert js_runtimes_flag() == []
 
     def test_empty_when_deno(self):
         from youmudow.services.environment_service import js_runtimes_flag
 
-        with patch(
-            "youmudow.services.environment_service.detect_js_runtime", return_value="deno"
-        ):
+        with patch("youmudow.services.environment_service.detect_js_runtime", return_value="deno"):
             assert js_runtimes_flag() == []
 
     def test_node_requires_flag(self):
         from youmudow.services.environment_service import js_runtimes_flag
 
-        with patch(
-            "youmudow.services.environment_service.detect_js_runtime", return_value="node"
-        ):
+        with patch("youmudow.services.environment_service.detect_js_runtime", return_value="node"):
             assert js_runtimes_flag() == ["--js-runtimes", "node"]
 
     def test_quickjs_requires_flag(self):
@@ -172,9 +166,7 @@ class TestRepairYoutubeEnvironment:
         on_error = Mock()
         with (
             patch("subprocess.run", return_value=result),
-            patch(
-                "youmudow.services.environment_service.clear_ytdlp_cache", return_value=True
-            ),
+            patch("youmudow.services.environment_service.clear_ytdlp_cache", return_value=True),
         ):
             repair_youtube_environment(on_success, on_error)
             deadline = time.time() + 3

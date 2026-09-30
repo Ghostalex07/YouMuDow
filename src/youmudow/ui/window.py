@@ -463,9 +463,7 @@ class MainWindow:
         ejs = is_ejs_installed()
 
         if runtime and ejs:
-            self._schedule(
-                lambda: self._set_status(f"YouTube ready (JS runtime: {runtime})")
-            )
+            self._schedule(lambda: self._set_status(f"YouTube ready (JS runtime: {runtime})"))
             return
 
         if runtime and not ejs:
@@ -475,7 +473,9 @@ class MainWindow:
                 )
             )
             repair_youtube_environment(
-                on_success=lambda msg: self._schedule(lambda: self._set_status(f"Fix applied: {msg}")),
+                on_success=lambda msg: self._schedule(
+                    lambda: self._set_status(f"Fix applied: {msg}")
+                ),
                 on_error=lambda err: self._schedule(lambda: self._set_status(f"Fix failed: {err}")),
             )
             return

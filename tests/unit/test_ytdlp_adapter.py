@@ -179,9 +179,7 @@ class TestBuildArgs:
         assert args[args.index("--js-runtimes") + 1] == "node"
 
     def test_js_runtime_flag_omitted_when_no_runtime(self, adapter):
-        with patch(
-            "youmudow.services.environment_service.js_runtimes_flag", return_value=[]
-        ):
+        with patch("youmudow.services.environment_service.js_runtimes_flag", return_value=[]):
             args = adapter._build_base_args(make_video(file_format="mp3"))
         assert "--js-runtimes" not in args
 

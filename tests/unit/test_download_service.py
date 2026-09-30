@@ -172,6 +172,52 @@ class TestDownloadQueueEdgeCases:
         assert queue.has_url(sample_video.url)
         assert not queue.has_url("https://example.com/other")
 
+    def test_is_known_queued(self, sample_video):
+        queue = DownloadQueue()
+        queue.add(sample_video)
+        assert queue.is_known([], Video(title="Copy", url=sample_video.url))
+
+    def test_is_known_active(self, sample_video):
+        queue = DownloadQueue()
+        active = [Video(title="Active", url=sample_video.url)]
+        assert queue.is_known(active, Video(title="Copy", url=sample_video.url))
+
+    def test_is_known_unknown(self, sample_video):
+        queue = DownloadQueue()
+        queue.add(sample_video)
+        assert not queue.is_known([], Video(title="Other", url="https://example.com/other"))
+
+    def test_is_known_after_removal(self, sample_video):
+        queue = DownloadQueue()
+        queue.add(sample_video)
+        queue.remove(sample_video)
+        assert not queue.is_known([], Video(title="Copy", url=sample_video.url))
+
+    def test_remove_entry_without_id_falls_back_to_url(self, sample_video):
+        queue = DownloadQueue()
+        queue.add(sample_video)
+        assert queue.remove_entry(Video(title="Copy", url=sample_video.url)) is True
+        assert queue.is_empty()
+
+    def test_remove_entry_targets_the_right_duplicate(self):
+        """A re-queued copy of the same URL carries a different queue id."""
+        queue = DownloadQueue()
+        finished = Video(title="Done", url="same")
+        finished.queue_id = 1
+        requeued = Video(title="Again", url="same")
+        requeued.queue_id = 2
+        queue.add(finished)
+        queue.add(requeued)
+        assert queue.remove_entry(finished) is True
+        assert [v.queue_id for v in queue.peek()] == [2]
+        assert queue.remove_entry(Video(title="Nothing", url="same", queue_id=3)) is False
+        assert queue.size() == 1
+
+    def test_remove_entry_missing_returns_false(self):
+        queue = DownloadQueue()
+        assert queue.remove_entry(Video(title="x", url="u")) is False
+        assert queue.size() == 0
+
 
 class TestDownloadServiceExtra:
     """Additional DownloadService behaviors."""

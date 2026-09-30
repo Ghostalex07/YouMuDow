@@ -18,8 +18,9 @@ def _isolated_config_file(tmp_path):
     Without this, tests that only assert defaults silently read
     ~/.config/youmudow/config.json and fail depending on its contents.
     """
-    with patch("youmudow.app.config.CONFIG_DIR", tmp_path), patch(
-        "youmudow.app.config.CONFIG_FILE", tmp_path / "config.json"
+    with (
+        patch("youmudow.app.config.CONFIG_DIR", tmp_path),
+        patch("youmudow.app.config.CONFIG_FILE", tmp_path / "config.json"),
     ):
         yield
 

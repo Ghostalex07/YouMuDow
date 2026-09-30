@@ -4,13 +4,22 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- `DownloadQueue` is now the single owner of queued videos. `StateManager`
+  holds a `DownloadQueue` instead of its own list, and the identity-or-URL
+  matcher exists once instead of four times, so the state and the download
+  service can no longer disagree about which duplicate a removal targets
+- `app/state.py` no longer keeps a parallel duplicate-URL guard that had to
+  be kept in sync with `DownloadService._is_known`
+
 ### Added
 
 - `services/environment_service.py` detects the available JS runtime (deno,
   node, QuickJS) and the presence of the `yt-dlp-ejs` challenge-solver scripts,
   and can clear yt-dlp's player cache and refresh `yt-dlp[default]`
-- The yt-dlp adapter now automatically passes `--js-runtimes node|qjs` when a
-  non-default runtime is detected — fixes YouTube `HTTP Error 403: Forbidden`
+- The yt-dlp adapter now automatically passes `--js-runtimes node|quickjs` when
+  a non-default runtime is detected — fixes YouTube `HTTP Error 403: Forbidden`
   caused by unsigned/stale download URLs (EJS is required since Oct 2025)
 - On startup YouMuDow checks the YouTube environment and, if a JS runtime is
   present but the EJS scripts are missing, installs them automatically in the

@@ -13,6 +13,7 @@ from enum import Enum, auto
 
 from youmudow.domain.enums import DownloadStatus
 from youmudow.domain.models import Video
+from youmudow.services.download_service import DownloadQueue, find_entry_index, find_video_index
 
 
 class AppMode(Enum):
@@ -53,7 +54,7 @@ class StateManager:
     def __init__(self) -> None:
         self._lock = threading.RLock()
         self._search_results: list[Video] = []
-        self._queue: list[Video] = []
+        self._queue: DownloadQueue = DownloadQueue()
         self._active_downloads: list[Video] = []
         self._completed_downloads: list[Video] = []
         self._failed_downloads: list[Video] = []
@@ -81,7 +82,7 @@ class StateManager:
 
     def get_queue(self) -> list[Video]:
         with self._lock:
-            return list(self._queue)
+            return self._queue.peek()
 
     def get_completed_downloads(self) -> list[Video]:
         with self._lock:
@@ -127,21 +128,15 @@ class StateManager:
     def add_to_queue(self, video: Video) -> None:
         """Add a video to the queue, rejecting duplicate URLs.
 
-        Mirrors ``DownloadService._is_known``: a URL already queued or actively
-        downloading is not re-added, so the observable state stays consistent
-        with the service (which would otherwise ignore the duplicate silently,
-        leaving a phantom entry).
+        A URL already queued or actively downloading is not re-added, so the
+        observable state stays consistent with the service (which would
+        otherwise ignore the duplicate silently, leaving a phantom entry).
         """
         with self._lock:
-            for item in self._queue:
-                if item.url == video.url:
-                    return
-            for item in self._active_downloads:
-                if item.url == video.url:
-                    return
-            video.status = DownloadStatus.QUEUED
+            if self._queue.is_known(self._active_downloads, video):
+                return
             self._assign_queue_id(video)
-            self._queue.append(video)
+            self._queue.add(video)
         self._notify_change()
 
     def remove_from_queue(self, video: Video) -> None:
@@ -153,11 +148,12 @@ class StateManager:
         appear in two lists at once (a re-queue of a finished video).
         """
         with self._lock:
-            for items in (self._queue, self._completed_downloads, self._failed_downloads):
-                index = self._find_entry_index(items, video)
-                if index >= 0:
-                    items.pop(index)
-                    break
+            if not self._queue.remove_entry(video):
+                for items in (self._completed_downloads, self._failed_downloads):
+                    index = find_entry_index(items, video)
+                    if index >= 0:
+                        items.pop(index)
+                        break
         self._notify_change()
 
     def clear_queue(self) -> None:
@@ -171,10 +167,8 @@ class StateManager:
         Safe to call with an already-active video (no duplicate entries).
         """
         with self._lock:
-            queue_index = self._find_index(self._queue, video)
-            active_index = self._find_index(self._active_downloads, video)
-            if queue_index >= 0:
-                self._queue.pop(queue_index)
+            self._queue.remove(video)
+            active_index = find_video_index(self._active_downloads, video)
             if active_index < 0:
                 self._active_downloads.append(video)
             self._assign_queue_id(video)
@@ -203,7 +197,7 @@ class StateManager:
         apart so the UI can label it correctly instead of showing 100%.
         """
         with self._lock:
-            index = self._find_index(self._active_downloads, video)
+            index = find_video_index(self._active_downloads, video)
             actual = self._active_downloads.pop(index) if index >= 0 else video
             self._assign_queue_id(actual)
             if actual.status is DownloadStatus.DONE:
@@ -222,7 +216,7 @@ class StateManager:
         can show the cancellation instead of silently dropping it.
         """
         with self._lock:
-            index = self._find_index(self._active_downloads, video)
+            index = find_video_index(self._active_downloads, video)
             if index >= 0:
                 active_video = self._active_downloads.pop(index)
                 active_video.status = DownloadStatus.CANCELLED
@@ -259,30 +253,6 @@ class StateManager:
             self._state = AppState.IDLE
             self._error_message = ""
         self._notify_change()
-
-    @staticmethod
-    def _find_index(items: list[Video], video: Video) -> int:
-        """Locate a video by identity or URL inside a list."""
-        for i, item in enumerate(items):
-            if item is video or item.url == video.url:
-                return i
-        return -1
-
-    @staticmethod
-    def _find_entry_index(items: list[Video], video: Video) -> int:
-        """Locate a queue entry by its stable id.
-
-        An entry that carries an id is matched by that id only: a URL fallback
-        would find the *re-queued* copy of a finished video and remove the
-        wrong row. Videos that never entered the queue have no id and fall back
-        to the identity/URL match.
-        """
-        if not video.queue_id:
-            return StateManager._find_index(items, video)
-        for i, item in enumerate(items):
-            if item.queue_id == video.queue_id:
-                return i
-        return -1
 
     def _assign_queue_id(self, video: Video) -> int:
         """Give a video a stable, unique id on first sight, and return it.
@@ -327,7 +297,7 @@ class StateManager:
         """Build an immutable snapshot: lists and contained videos are copies."""
         return AppStateData(
             search_results=[self._copy_video(v) for v in self._search_results],
-            queue=[self._copy_video(v) for v in self._queue],
+            queue=[self._copy_video(v) for v in self._queue.peek()],
             active_downloads=[self._copy_video(v) for v in self._active_downloads],
             completed_downloads=[self._copy_video(v) for v in self._completed_downloads],
             failed_downloads=[self._copy_video(v) for v in self._failed_downloads],

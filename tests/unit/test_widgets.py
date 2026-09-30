@@ -289,9 +289,7 @@ class TestQueuePanel:
             for y in range(detail_panel._queue_tree.winfo_height())
             if detail_panel._queue_tree.identify_row(y) == iid
         )
-        detail_panel._on_queue_right_click(
-            SimpleNamespace(y=row_y, x_root=0, y_root=0)
-        )
+        detail_panel._on_queue_right_click(SimpleNamespace(y=row_y, x_root=0, y_root=0))
 
         assert created, "no context menu shown for a completed row"
         remove = created[0].commands["Remove from queue"]
