@@ -4,11 +4,14 @@ Displays real-time log output in a terminal-like format.
 """
 
 import datetime
+import logging
 import platform
 import threading
 import tkinter as tk
 from pathlib import Path
 from tkinter import ttk
+
+logger = logging.getLogger(__name__)
 
 _MAX_LINES = 1000
 MAX_LINES = _MAX_LINES
@@ -220,7 +223,12 @@ class LogTerminal(ttk.Frame):
                 return
             self._processing = True
 
-        self.after_idle(self._process_pending)
+        try:
+            self.after_idle(self._process_pending)
+        except (tk.TclError, RuntimeError):
+            with self._lock:
+                self._processing = False
+            logger.debug("Could not schedule log terminal flush", exc_info=True)
 
     def _process_pending(self) -> None:
         """Process pending log messages from the queue."""

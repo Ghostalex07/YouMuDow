@@ -135,10 +135,86 @@ class TestStateManager:
         v = Video(title="Test", url="url")
         sm.add_to_queue(v)
         sm.start_download(v)
+        v.status = DownloadStatus.DONE
         sm.finish_download(v)
         assert v not in sm.get_snapshot().active_downloads
         assert v in sm.get_completed_downloads()
         assert sm.state == AppState.IDLE
+
+    def test_finish_download_error_not_completed(self):
+        """A failed download must not be recorded as a completed one."""
+        sm = StateManager()
+        v = Video(title="Test", url="url")
+        sm.add_to_queue(v)
+        sm.start_download(v)
+        v.status = DownloadStatus.ERROR
+        v.error_message = "Authentication required"
+        sm.finish_download(v)
+        assert v not in sm.get_completed_downloads()
+        assert v in sm.get_failed_downloads()
+        assert v in sm.get_snapshot().failed_downloads
+
+    def test_finish_download_bounded(self):
+        sm = StateManager()
+        for i in range(StateManager._MAX_FINISHED + 20):
+            v = Video(title=f"T{i}", url=f"url{i}")
+            sm.add_to_queue(v)
+            sm.start_download(v)
+            v.status = DownloadStatus.DONE
+            sm.finish_download(v)
+        completed = sm.get_completed_downloads()
+        assert len(completed) == StateManager._MAX_FINISHED
+        assert completed[-1].url == f"url{StateManager._MAX_FINISHED + 19}"
+
+    def test_cancel_download_kept_as_failed_entry(self):
+        sm = StateManager()
+        v = Video(title="Test", url="url")
+        sm.add_to_queue(v)
+        sm.start_download(v)
+        sm.cancel_download(v)
+        assert v in sm.get_failed_downloads()
+        assert v.status == DownloadStatus.CANCELLED
+
+    def test_queue_ids_are_unique_and_survive_requeue(self):
+        sm = StateManager()
+        first = Video(title="Test", url="url")
+        sm.add_to_queue(first)
+        sm.start_download(first)
+        first.status = DownloadStatus.DONE
+        sm.finish_download(first)
+        again = Video(title="Test", url="url")
+        sm.add_to_queue(again)
+        snap = sm.get_snapshot()
+        ids = [
+            v.queue_id
+            for v in list(snap.queue) + list(snap.active_downloads) + list(snap.completed_downloads)
+        ]
+        assert all(ids)
+        assert len(set(ids)) == len(ids)
+
+    def test_remove_from_queue_removes_completed_entry(self):
+        sm = StateManager()
+        v = Video(title="Test", url="url")
+        sm.add_to_queue(v)
+        sm.start_download(v)
+        v.status = DownloadStatus.DONE
+        sm.finish_download(v)
+        sm.remove_from_queue(v)
+        assert sm.get_completed_downloads() == []
+
+    def test_remove_from_queue_targets_the_right_duplicate(self):
+        """Removing the finished row must not drop the re-queued row."""
+        sm = StateManager()
+        first = Video(title="Test", url="url")
+        sm.add_to_queue(first)
+        sm.start_download(first)
+        first.status = DownloadStatus.DONE
+        sm.finish_download(first)
+        again = Video(title="Test", url="url")
+        sm.add_to_queue(again)
+        sm.remove_from_queue(first)
+        assert sm.get_completed_downloads() == []
+        assert [v.url for v in sm.get_queue()] == ["url"]
 
     def test_update_progress(self):
         sm = StateManager()
@@ -320,6 +396,7 @@ class TestAppStateData:
             queue=[],
             active_downloads=[],
             completed_downloads=[],
+            failed_downloads=[],
             state=AppState.IDLE,
             mode=AppMode.NORMAL,
             error_message="",

@@ -4,13 +4,13 @@ Tkinter-based GUI layer with modern dark theme.
 All business logic is delegated to the controller.
 """
 
+import copy
 import logging
 import platform
 import subprocess
 import threading
 import tkinter as tk
 from collections.abc import Callable
-from copy import copy
 from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -25,6 +25,11 @@ from youmudow.domain.validators import (
     is_playlist_url,
     is_supported_url,
     is_valid_rate_limit,
+)
+from youmudow.services.environment_service import (
+    detect_js_runtime,
+    is_ejs_installed,
+    repair_youtube_environment,
 )
 from youmudow.services.updater_service import get_ytdlp_version, update_ytdlp
 from youmudow.ui.styles.constants import _COLOR_MAP, FONT, SPACING, _c
@@ -108,10 +113,8 @@ class MainWindow:
         self._history_tab = tk.Frame(self._notebook, bg=_c("bg"))
         self._notebook.add(self._history_tab, text="  History  ")
 
-        self._main_tab.columnconfigure(0, weight=3)
-        self._main_tab.columnconfigure(1, weight=2)
-        self._main_tab.rowconfigure(1, weight=1)
-        self._main_tab.rowconfigure(2, weight=0)
+        self._main_tab.columnconfigure(0, weight=1)
+        self._main_tab.rowconfigure(0, weight=1)
 
         self._paned_window = ttk.PanedWindow(self._main_tab, orient=tk.VERTICAL)
         self._paned_window.grid(row=0, column=0, columnspan=2, sticky="nsew")
@@ -172,7 +175,7 @@ class MainWindow:
         file_menu.add_command(label="Open Output Folder    Ctrl+O", command=self._on_open_folder)
         file_menu.add_command(label="Export Logs...", command=self._on_export_logs)
         file_menu.add_separator()
-        file_menu.add_command(label="Exit", command=self._root.quit)
+        file_menu.add_command(label="Exit", command=self._on_close)
 
         queue_menu = tk.Menu(self._menubar, tearoff=0, bg=_c("surface"), fg=_c("text"), bd=1)
         self._menubar.add_cascade(label="Queue", menu=queue_menu)
@@ -193,6 +196,7 @@ class MainWindow:
         help_menu = tk.Menu(self._menubar, tearoff=0, bg=_c("surface"), fg=_c("text"), bd=1)
         self._menubar.add_cascade(label="Help", menu=help_menu)
         help_menu.add_command(label="Update yt-dlp", command=self._on_update_ytdlp)
+        help_menu.add_command(label="Repair YouTube Downloads", command=self._on_repair_youtube)
         help_menu.add_command(label="yt-dlp version", command=self._on_show_ytdlp_version)
         help_menu.add_separator()
         help_menu.add_command(label="About", command=self._on_about)
@@ -213,13 +217,16 @@ class MainWindow:
 
         def on_log(event) -> None:
             if self._log_terminal:
-                self._log_terminal.append(
-                    event.message, level=event.level, timestamp=event.timestamp
+                self._schedule(
+                    self._log_terminal.append,
+                    event.message,
+                    event.level,
+                    event.timestamp,
                 )
 
         def on_clear(event) -> None:
             if self._log_terminal:
-                self._log_terminal.clear()
+                self._schedule(self._log_terminal.clear)
 
         self._log_unsubscribe = self._event_bus.subscribe(EventType.LOG_OUTPUT, on_log)
         self._clear_unsubscribe = self._event_bus.subscribe(EventType.LOG_CLEAR, on_clear)
@@ -262,7 +269,6 @@ class MainWindow:
             self._set_status(f"Error: {e}")
 
     def _on_download_complete(self, video: Video) -> None:
-        self._is_downloading = False
         self._set_status(f"Downloaded: {video.title}")
         self._update_button_states()
 
@@ -273,6 +279,12 @@ class MainWindow:
         self._controller.state.on_change(on_state_change)
 
     def _update_from_snapshot(self, snapshot: AppStateData) -> None:
+        try:
+            self._apply_snapshot(snapshot)
+        except Exception:
+            logger.exception("Failed to apply state snapshot")
+
+    def _apply_snapshot(self, snapshot: AppStateData) -> None:
         self._is_downloading = snapshot.state is AppState.DOWNLOADING
 
         if snapshot.state is AppState.SEARCHING:
@@ -427,9 +439,60 @@ class MainWindow:
             logger.debug("Clipboard check failed: %s", e)
 
     def _check_ytdlp_on_start(self) -> None:
-        version = get_ytdlp_version()
-        if not version:
-            self._set_status("⚠ yt-dlp not found. Install it with: pip install yt-dlp")
+        def resolve() -> None:
+            version = get_ytdlp_version()
+            if not version:
+                self._schedule(
+                    self._set_status,
+                    "⚠ yt-dlp not found. Install it with: pip install yt-dlp",
+                )
+                return
+            threading.Thread(target=self._run_startup_environment_check, daemon=True).start()
+
+        threading.Thread(target=resolve, daemon=True).start()
+
+    def _run_startup_environment_check(self) -> None:
+        """Auto-detect the YouTube environment and repair it if needed.
+
+        YouTube requires an external JS runtime (deno/node) plus the EJS
+        challenge scripts. When a runtime is present but the EJS package is
+        missing (a common cause of "HTTP Error 403: Forbidden" on pip-installed
+        yt-dlp), install it automatically in the background.
+        """
+        runtime = detect_js_runtime()
+        ejs = is_ejs_installed()
+
+        if runtime and ejs:
+            self._schedule(
+                lambda: self._set_status(f"YouTube ready (JS runtime: {runtime})")
+            )
+            return
+
+        if runtime and not ejs:
+            self._schedule(
+                lambda: self._set_status(
+                    "YouTube fix: installing JS challenge scripts (yt-dlp[default])..."
+                )
+            )
+            repair_youtube_environment(
+                on_success=lambda msg: self._schedule(lambda: self._set_status(f"Fix applied: {msg}")),
+                on_error=lambda err: self._schedule(lambda: self._set_status(f"Fix failed: {err}")),
+            )
+            return
+
+        self._schedule(
+            lambda: self._set_status(
+                "⚠ YouTube 403 risk: no JS runtime found. "
+                "Install deno: curl -fsSL https://deno.land/install.sh | sh"
+            )
+        )
+
+    def _on_repair_youtube(self) -> None:
+        self._set_status("Repairing YouTube environment (update + cache)...")
+        repair_youtube_environment(
+            on_success=lambda msg: self._schedule(lambda: self._set_status(f"Repair OK: {msg}")),
+            on_error=lambda err: self._schedule(lambda: self._set_status(f"Repair failed: {err}")),
+        )
 
     def _on_update_ytdlp(self) -> None:
         self._set_status("Updating yt-dlp...")
@@ -443,18 +506,32 @@ class MainWindow:
         update_ytdlp(on_success, on_error)
 
     def _on_show_ytdlp_version(self) -> None:
-        version = get_ytdlp_version()
-        messagebox.showinfo("yt-dlp version", f"Installed version: {version or 'not found'}")
+        self._set_status("Checking yt-dlp version...")
+
+        def resolve() -> None:
+            version = get_ytdlp_version()
+            self._schedule(
+                messagebox.showinfo,
+                "yt-dlp version",
+                f"Installed version: {version or 'not found'}",
+            )
+
+        threading.Thread(target=resolve, daemon=True).start()
 
     def _on_about(self) -> None:
         messagebox.showinfo(
             "About YouMuDow",
             f"YouMuDow v{__version__}\n"
-            f"yt-dlp: {get_ytdlp_version() or 'not found'}\n\n"
             "Music & Video Downloader\n"
             "Supports YouTube, SoundCloud, Vimeo, Twitter and 1000+ sites via yt-dlp\n"
             "github.com/Ghostalex07/YouMuDow",
         )
+
+        def resolve() -> None:
+            version = get_ytdlp_version()
+            self._schedule(self._set_status, f"yt-dlp: {version or 'not found'}")
+
+        threading.Thread(target=resolve, daemon=True).start()
 
     def _on_export_logs(self) -> None:
         if not self._log_terminal:
@@ -633,27 +710,53 @@ class MainWindow:
 
     def _on_close(self) -> None:
         if self._config:
+            dp = self._detail_panel
+
+            def read_concurrent() -> int:
+                try:
+                    return int(dp._concurrent_var.get())
+                except (tk.TclError, KeyError, TypeError, ValueError) as e:
+                    logger.debug("Invalid concurrent downloads value, keeping saved one: %s", e)
+                    return int(self._config.get("concurrent_downloads", 1))
+
+            rate = ""
             try:
-                self._config.window_geometry = self._root.geometry()
-                dp = self._detail_panel
                 rate = dp._rate_limit_var.get().strip()
                 if rate and not is_valid_rate_limit(rate):
                     rate = ""
-                self._config.set("format", dp._format_var.get())
-                self._config.set("quality", dp._quality_var.get())
-                self._config.set("subtitles", dp._subtitles_var.get())
-                self._config.set("subtitle_lang", dp._subtitle_lang_var.get())
-                self._config.set("embed_subtitles", dp._embed_subs_var.get())
-                self._config.set("use_cookies", dp._use_cookies_var.get())
-                self._config.set("cookies_source", dp._cookies_source_var.get())
-                self._config.set("cookies_file", dp._cookies_file_var.get())
-                self._config.set("browser", dp._browser_var.get())
-                self._config.set("profile", dp._profile_var.get())
-                self._config.set("rate_limit", rate)
-                self._config.set("split_chapters", dp._split_chapters_var.get())
-                self._config.set("options_panel_open", dp._options_frame.winfo_ismapped())
-                self._config.set("concurrent_downloads", dp._concurrent_var.get())
+            except (tk.TclError, KeyError, TypeError, ValueError) as e:
+                logger.debug("Could not read rate limit: %s", e)
+
+            fields = (
+                ("format", dp._format_var.get),
+                ("quality", dp._quality_var.get),
+                ("subtitles", dp._subtitles_var.get),
+                ("subtitle_lang", dp._subtitle_lang_var.get),
+                ("embed_subtitles", dp._embed_subs_var.get),
+                ("use_cookies", dp._use_cookies_var.get),
+                ("cookies_source", dp._cookies_source_var.get),
+                ("cookies_file", dp._cookies_file_var.get),
+                ("browser", dp._browser_var.get),
+                ("profile", dp._profile_var.get),
+                ("rate_limit", lambda: rate),
+                ("split_chapters", dp._split_chapters_var.get),
+                ("options_panel_open", dp._options_frame.winfo_ismapped),
+                ("concurrent_downloads", read_concurrent),
+            )
+            try:
+                self._config.window_geometry = self._root.geometry()
+            except (tk.TclError, KeyError, TypeError, ValueError) as e:
+                logger.debug("Could not store window geometry: %s", e)
+            for key, read in fields:
+                try:
+                    self._config.set(key, read())
+                except (tk.TclError, KeyError, TypeError, ValueError) as e:
+                    logger.debug("Could not store config field %s: %s", key, e)
+            try:
                 self._config.output_path = self._controller.get_output_path()
+            except (tk.TclError, KeyError, TypeError, ValueError) as e:
+                logger.debug("Could not store output path: %s", e)
+            try:
                 self._config.save()
             except (tk.TclError, KeyError, TypeError, ValueError) as e:
                 logger.debug("Could not save config on close: %s", e)

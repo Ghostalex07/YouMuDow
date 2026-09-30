@@ -2,6 +2,108 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- `services/environment_service.py` detects the available JS runtime (deno,
+  node, QuickJS) and the presence of the `yt-dlp-ejs` challenge-solver scripts,
+  and can clear yt-dlp's player cache and refresh `yt-dlp[default]`
+- The yt-dlp adapter now automatically passes `--js-runtimes node|qjs` when a
+  non-default runtime is detected — fixes YouTube `HTTP Error 403: Forbidden`
+  caused by unsigned/stale download URLs (EJS is required since Oct 2025)
+- On startup YouMuDow checks the YouTube environment and, if a JS runtime is
+  present but the EJS scripts are missing, installs them automatically in the
+  background; a stale player cache is also cleared
+- New Help menu command "Repair YouTube Downloads" clears the yt-dlp cache and
+  installs the latest `yt-dlp[default]` (EJS scripts included)
+
+### Fixed
+
+- `window.py` imported `copy` as a function (`from copy import copy`); calls
+  to `copy.copy()` failed with `AttributeError: 'function' object has no
+  attribute 'copy'` when starting a download
+- The queue panel is keyed on a stable per-entry id instead of the video URL,
+  so re-downloading a finished video no longer raises
+  `TclError: item ... already exists` and freezes the panel for the rest of
+  the session
+- Failed and cancelled downloads no longer render as `Completed | 100%`:
+  `StateManager.finish_download()` only records `DONE` as completed and keeps
+  every other outcome in a separate list, and the panel derives its label and
+  progress from `Video.status`
+- Right-click > "Remove from queue" now works on finished rows too, and
+  targets the exact entry when a URL appears both as finished and re-queued
+- The finished download lists keep only the most recent 50 entries, so they
+  stop growing the cost of every state snapshot for the whole session
+- `MainWindow._update_from_snapshot()` logs exceptions instead of letting
+  Tkinter silently discard them
+- Finishing one download no longer re-enables the Search button while other
+  downloads are still running; the busy flags are derived only from the state
+  snapshot
+- `File > Exit` ran `root.quit()` instead of the close handler, so it skipped
+  saving the configuration, stopping in-flight downloads and flushing the
+  history; every setting was silently lost on exit
+- `EventBus` log handlers now go through `MainWindow._schedule()` like every
+  other cross-thread callback; previously `LogTerminal.after_idle()` was called
+  from yt-dlp's output reader thread, and a single failure left the log panel
+  permanently blank
+- `LogTerminal.append()` restores its flush flag when scheduling the render
+  fails, so the terminal recovers instead of swallowing every later line
+- The detected QuickJS runtime is passed to yt-dlp as `quickjs`; the `qjs`
+  binary name was being used as the runtime key, which yt-dlp does not
+  recognise, so the flag silently disabled the JS runtime on every yt-dlp call
+- `config.json` and `history.json` are now written atomically (temp file in the
+  same directory + `fsync` + `os.replace`), so a crash or a full disk during a
+  save can no longer leave truncated JSON behind
+- A corrupt `config.json` or `history.json` is renamed to `<file>.corrupt`
+  before the defaults/empty history are used, instead of being silently
+  discarded; the old behaviour wiped every setting and all 500 history entries
+- `AppConfig` no longer crashes at startup when the config file holds a JSON
+  root that is not an object (`[]`, `"x"`, `5`) or contains non-UTF-8 bytes —
+  both raised `TypeError`/`UnicodeDecodeError` past the loader and the window
+  never opened
+- "Update yt-dlp" now also tries `pip install --upgrade yt-dlp` when the
+  `yt-dlp` binary is missing from `PATH` (the case the fallback actually
+  repairs); an error is only reported when both attempts fail, and the message
+  names both
+- The startup yt-dlp version check, `Help > yt-dlp version` and `Help > About`
+  no longer run `yt-dlp --version` on the Tk main thread; a slow or hanging
+  `yt-dlp` froze the whole window (including the progress `after` loop) for up
+  to 10 s, 3 s after launch and on every About click. The version is now
+  resolved on a daemon thread and every UI update goes through
+  `MainWindow._schedule()`
+- A bad value in the Concurrent field no longer aborts the whole configuration
+  save on exit: each field is now written under its own guard and `save()` is
+  always attempted, instead of one bad `IntVar` silently discarding format,
+  quality, subtitles, cookies, rate limit, theme and geometry
+- yt-dlp's player cache is no longer wiped on every launch. It is cleared only
+  when a real problem is detected (a JS runtime present without the EJS
+  scripts) or by the explicit `Help > Repair YouTube Downloads`; a healthy
+  environment no longer pays for a full yt-dlp process at every start, and the
+  status bar no longer claims the cache was cleared
+- The error message for a download that ends in an unexpected status now
+  reports that actual status instead of the `ERROR` value that overwrote it a
+  line earlier, which made the message useless for diagnosis
+- Downloads are no longer killed after 5 minutes. `download_timeout` was used as
+  an absolute wall-clock deadline, so any transfer longer than it — and the
+  `--extract-audio`/`--embed-thumbnail` transcodes that run after it — was
+  SIGKILLed and reported as "Download timed out". It is now an inactivity
+  timeout: the deadline is pushed back every time yt-dlp writes a line, so a
+  download that keeps reporting progress is never killed, while a silent or hung
+  process still times out
+- Cancelling or timing out a download no longer leaves an orphaned `ffmpeg`
+  behind. yt-dlp is now spawned in its own process group and every signal
+  (Stop, timeout, shutdown) targets the whole group, so the `ffmpeg` helpers
+  yt-dlp spawned stop instead of keeping their inherited output pipe open and
+  muxing into the download directory
+- The concurrent-downloads Spinbox is now `readonly`, so it can only be changed
+  with the arrow keys (1-4); typing `3x` left an `IntVar` holding a
+  non-numeric value and raised an uncaught `TclError`
+- `_on_concurrent_change()` ignores a non-numeric value instead of raising
+- `tests/unit/test_config.py` no longer reads the real
+  `~/.config/youmudow/config.json`; default-value assertions previously failed
+  depending on the developer's own settings
+
 ## [1.2.0] - 2026-09-10
 
 ### Added

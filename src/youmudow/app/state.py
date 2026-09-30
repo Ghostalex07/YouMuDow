@@ -39,6 +39,7 @@ class AppStateData:
     queue: list[Video]
     active_downloads: list[Video]
     completed_downloads: list[Video]
+    failed_downloads: list[Video]
     state: AppState
     mode: AppMode
     error_message: str
@@ -47,12 +48,16 @@ class AppStateData:
 class StateManager:
     """Thread-safe state manager for the application."""
 
+    _MAX_FINISHED = 50
+
     def __init__(self) -> None:
         self._lock = threading.RLock()
         self._search_results: list[Video] = []
         self._queue: list[Video] = []
         self._active_downloads: list[Video] = []
         self._completed_downloads: list[Video] = []
+        self._failed_downloads: list[Video] = []
+        self._next_queue_id = 0
         self._state = AppState.IDLE
         self._mode = AppMode.NORMAL
         self._error_message = ""
@@ -81,6 +86,10 @@ class StateManager:
     def get_completed_downloads(self) -> list[Video]:
         with self._lock:
             return list(self._completed_downloads)
+
+    def get_failed_downloads(self) -> list[Video]:
+        with self._lock:
+            return list(self._failed_downloads)
 
     def set_state(self, state: AppState) -> None:
         with self._lock:
@@ -131,14 +140,24 @@ class StateManager:
                 if item.url == video.url:
                     return
             video.status = DownloadStatus.QUEUED
+            self._assign_queue_id(video)
             self._queue.append(video)
         self._notify_change()
 
     def remove_from_queue(self, video: Video) -> None:
+        """Remove a video from the queue, or from the finished lists.
+
+        The queue panel shows pending, active and finished entries alike, so
+        removal has to cover every list that can hold a visible row. Entries
+        are matched by their stable queue id first: a URL may legitimately
+        appear in two lists at once (a re-queue of a finished video).
+        """
         with self._lock:
-            index = self._find_index(self._queue, video)
-            if index >= 0:
-                self._queue.pop(index)
+            for items in (self._queue, self._completed_downloads, self._failed_downloads):
+                index = self._find_entry_index(items, video)
+                if index >= 0:
+                    items.pop(index)
+                    break
         self._notify_change()
 
     def clear_queue(self) -> None:
@@ -158,6 +177,7 @@ class StateManager:
                 self._queue.pop(queue_index)
             if active_index < 0:
                 self._active_downloads.append(video)
+            self._assign_queue_id(video)
             video.status = DownloadStatus.DOWNLOADING
             if self._state != AppState.DOWNLOADING:
                 self._state = AppState.DOWNLOADING
@@ -176,10 +196,20 @@ class StateManager:
             self._notify_change()
 
     def finish_download(self, video: Video) -> None:
+        """Record the terminal outcome of a download.
+
+        Only a download the adapter reported as ``DONE`` counts as completed;
+        every other outcome (error, cancellation, unexpected status) is kept
+        apart so the UI can label it correctly instead of showing 100%.
+        """
         with self._lock:
             index = self._find_index(self._active_downloads, video)
             actual = self._active_downloads.pop(index) if index >= 0 else video
-            self._completed_downloads.append(actual)
+            self._assign_queue_id(actual)
+            if actual.status is DownloadStatus.DONE:
+                self._append_finished(self._completed_downloads, actual)
+            else:
+                self._append_finished(self._failed_downloads, actual)
             if not self._active_downloads:
                 self._state = AppState.IDLE
         self._notify_change()
@@ -188,12 +218,16 @@ class StateManager:
         """Mark a download as cancelled and remove it from active downloads.
 
         Does not requeue the video; a cancelled download is a terminal state.
+        The entry is kept as a finished (non-completed) row so the queue panel
+        can show the cancellation instead of silently dropping it.
         """
         with self._lock:
             index = self._find_index(self._active_downloads, video)
             if index >= 0:
                 active_video = self._active_downloads.pop(index)
                 active_video.status = DownloadStatus.CANCELLED
+                self._assign_queue_id(active_video)
+                self._append_finished(self._failed_downloads, active_video)
             if not self._active_downloads:
                 self._state = AppState.IDLE
         self._notify_change()
@@ -221,6 +255,7 @@ class StateManager:
             self._queue.clear()
             self._active_downloads.clear()
             self._completed_downloads.clear()
+            self._failed_downloads.clear()
             self._state = AppState.IDLE
             self._error_message = ""
         self._notify_change()
@@ -232,6 +267,45 @@ class StateManager:
             if item is video or item.url == video.url:
                 return i
         return -1
+
+    @staticmethod
+    def _find_entry_index(items: list[Video], video: Video) -> int:
+        """Locate a queue entry by its stable id.
+
+        An entry that carries an id is matched by that id only: a URL fallback
+        would find the *re-queued* copy of a finished video and remove the
+        wrong row. Videos that never entered the queue have no id and fall back
+        to the identity/URL match.
+        """
+        if not video.queue_id:
+            return StateManager._find_index(items, video)
+        for i, item in enumerate(items):
+            if item.queue_id == video.queue_id:
+                return i
+        return -1
+
+    def _assign_queue_id(self, video: Video) -> int:
+        """Give a video a stable, unique id on first sight, and return it.
+
+        The id follows the entry across ``queue`` -> ``active_downloads`` ->
+        the finished lists, so the UI can key its rows on something that stays
+        unique even when the same URL is queued twice.
+        """
+        if not video.queue_id:
+            self._next_queue_id += 1
+            video.queue_id = self._next_queue_id
+        return video.queue_id
+
+    def _append_finished(self, items: list[Video], video: Video) -> None:
+        """Append to a finished list, keeping only the most recent entries.
+
+        Both lists are deep-copied into every snapshot, so an unbounded list
+        would grow the cost of every state change for the whole session.
+        """
+        items.append(video)
+        excess = len(items) - self._MAX_FINISHED
+        if excess > 0:
+            del items[:excess]
 
     @staticmethod
     def _copy_video(video: Video) -> Video:
@@ -256,6 +330,7 @@ class StateManager:
             queue=[self._copy_video(v) for v in self._queue],
             active_downloads=[self._copy_video(v) for v in self._active_downloads],
             completed_downloads=[self._copy_video(v) for v in self._completed_downloads],
+            failed_downloads=[self._copy_video(v) for v in self._failed_downloads],
             state=self._state,
             mode=self._mode,
             error_message=self._error_message,

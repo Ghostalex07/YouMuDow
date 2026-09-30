@@ -40,6 +40,7 @@ class Video:
     speed: str = ""
     eta: str = ""
     options: DownloadOptions = field(default_factory=DownloadOptions)
+    queue_id: int = 0
 
     def format_duration(self) -> str:
         if self.duration == 0:

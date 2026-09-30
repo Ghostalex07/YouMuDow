@@ -20,6 +20,28 @@ from youmudow.ui.styles.constants import FONT, SPACING, _c, add_hover_effect
 
 logger = logging.getLogger(__name__)
 
+_STATUS_DISPLAY: dict[DownloadStatus, tuple[str, str]] = {
+    DownloadStatus.READY: ("Queued", "-"),
+    DownloadStatus.QUEUED: ("Queued", "-"),
+    DownloadStatus.DOWNLOADING: ("Downloading", ""),
+    DownloadStatus.DONE: ("Completed", "100%"),
+    DownloadStatus.ERROR: ("Failed", "Failed"),
+    DownloadStatus.CANCELLED: ("Cancelled", "Cancelled"),
+}
+
+
+def _queue_row(video: Video) -> tuple[str, str, str]:
+    """Status label, title and progress for one queue panel row."""
+    label, progress = _STATUS_DISPLAY.get(video.status, ("Queued", "-"))
+    if not progress:
+        progress = f"{video.progress:.0f}%"
+    return (label, video.title[:60], progress)
+
+
+def _queue_iid(video: Video) -> str:
+    """Tree item id for a queue entry, unique per entry rather than per URL."""
+    return f"q{video.queue_id}"
+
 
 class DetailPanel(tk.Frame):
     def __init__(self, parent: tk.Widget, main_window: object) -> None:
@@ -290,6 +312,7 @@ class DetailPanel(tk.Frame):
             from_=1,
             to=4,
             textvariable=self._concurrent_var,
+            state="readonly",
             bg=_c("input_bg"),
             fg=_c("text"),
             relief="flat",
@@ -610,7 +633,10 @@ class DetailPanel(tk.Frame):
             self._detail_toggle_btn.configure(text="OPTIONS")
 
     def _on_concurrent_change(self) -> None:
-        val = self._concurrent_var.get()
+        try:
+            val = self._concurrent_var.get()
+        except (tk.TclError, TypeError, ValueError):
+            return
         if hasattr(self._mw, "_controller") and self._mw._controller:
             ds = self._mw._controller._download_service
             ds.set_max_concurrent(val)
@@ -717,16 +743,24 @@ class DetailPanel(tk.Frame):
         if snapshot is None:
             snapshot = self._mw._controller.state.get_snapshot()
 
+        buckets = (
+            snapshot.queue,
+            snapshot.active_downloads,
+            snapshot.completed_downloads,
+            snapshot.failed_downloads,
+        )
         desired: list[tuple[str, tuple]] = []
-        for v in snapshot.queue:
-            desired.append((v.url, ("Queued", v.title[:60], "-")))
-        for v in snapshot.active_downloads:
-            desired.append((v.url, ("Downloading", v.title[:60], f"{v.progress:.0f}%")))
-        for v in snapshot.completed_downloads:
-            desired.append((v.url, ("Completed", v.title[:60], "100%")))
+        used_iids: set[str] = set()
+        for bucket in buckets:
+            for v in bucket:
+                iid = _queue_iid(v)
+                if iid in used_iids:
+                    iid = f"{iid}-{len(used_iids)}"
+                used_iids.add(iid)
+                desired.append((iid, _queue_row(v)))
 
-        desired_iids = {iid for iid, _ in desired}
-        existing_iids = set(self._queue_tree.get_children())
+        desired_iids = set(used_iids)
+        existing_iids = set(self._queue_tree.get_children(""))
 
         for iid in existing_iids - desired_iids:
             self._queue_tree.delete(iid)
@@ -738,13 +772,12 @@ class DetailPanel(tk.Frame):
                     self._queue_tree.item(iid, values=values)
             else:
                 self._queue_tree.insert("", "end", iid=iid, values=values)
+                existing_iids.add(iid)
 
         for i, (iid, _) in enumerate(desired):
             self._queue_tree.move(iid, "", i)
 
-        total = (
-            len(snapshot.queue) + len(snapshot.active_downloads) + len(snapshot.completed_downloads)
-        )
+        total = sum(len(bucket) for bucket in buckets)
         self._queue_count_label.configure(text=f"{total} items")
 
     def _on_queue_right_click(self, event: tk.Event) -> None:
@@ -757,8 +790,10 @@ class DetailPanel(tk.Frame):
             list(snapshot.queue)
             + list(snapshot.active_downloads)
             + list(snapshot.completed_downloads)
+            + list(snapshot.failed_downloads)
         )
-        video = next((v for v in all_videos if v.url == item), None)
+        entry_id = item[1:].split("-", 1)[0]
+        video = next((v for v in all_videos if str(v.queue_id) == entry_id), None)
         if not video:
             return
         menu = tk.Menu(self._mw._root, tearoff=0, bg=_c("surface"), fg=_c("text"))
