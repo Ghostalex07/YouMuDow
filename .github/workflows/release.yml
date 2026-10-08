@@ -63,7 +63,7 @@ jobs:
         run: python scripts/package.py --version ${{ github.ref_name }}
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: YouMuDow-${{ github.ref_name }}-linux
           path: dist/YouMuDow-${{ github.ref_name }}-linux.zip
@@ -90,7 +90,7 @@ jobs:
         run: python scripts/package.py --version ${{ github.ref_name }}
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: YouMuDow-${{ github.ref_name }}-windows
           path: dist/YouMuDow-${{ github.ref_name }}-windows.zip
@@ -117,7 +117,7 @@ jobs:
         run: python scripts/package.py --version ${{ github.ref_name }}
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: YouMuDow-${{ github.ref_name }}-darwin
           path: dist/YouMuDow-${{ github.ref_name }}-darwin.zip
