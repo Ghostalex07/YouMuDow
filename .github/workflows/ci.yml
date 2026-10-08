@@ -111,7 +111,7 @@ jobs:
         run: python scripts/build.py
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: YouMuDow-linux
           path: dist/YouMuDow
