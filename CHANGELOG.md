@@ -42,6 +42,8 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- `python -m youmudow` launches the application, the same as the `youmudow`
+  entry point
 - `py.typed` (PEP 561) is declared as package data, so type checkers read the
   inline annotations of `youmudow` instead of treating it as untyped
 - `services/environment_service.py` detects the available JS runtime (deno,

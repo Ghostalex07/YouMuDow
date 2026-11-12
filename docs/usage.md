@@ -2,7 +2,7 @@
 
 ## Basic Usage
 
-1. Launch the application (`python -m youmudow.main` or the `youmudow` entry point).
+1. Launch the application (`python -m youmudow`, `python -m youmudow.main` or the `youmudow` entry point).
 2. Paste a URL or search for content in the search bar.
 3. Select a result and choose format/quality.
 4. Optionally enable cookies, rate limiting, chapter splitting or subtitles.
