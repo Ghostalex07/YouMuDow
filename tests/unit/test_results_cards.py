@@ -55,6 +55,16 @@ def test_get_selected_returns_indices(root, state, loader):
     w.destroy()
 
 
+def test_select_notify_false_sets_selection_without_callback(root, state, loader):
+    on_select = Mock()
+    w = ResultsCards(root, state, loader, on_select=on_select)
+    w.update_results(_videos(3))
+    w.select(0, notify=False)
+    assert w.get_selected() == [0]
+    on_select.assert_not_called()
+    w.destroy()
+
+
 def test_enter_with_no_selection_is_noop(root, state, loader):
     on_double = Mock()
     w = ResultsCards(root, state, loader, on_double_click=on_double)

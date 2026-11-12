@@ -18,3 +18,5 @@ class Card(tk.Frame):
             pady=padding,
             **kwargs,
         )
+        self._bg_key = "surface"
+        self._border_key = "border"

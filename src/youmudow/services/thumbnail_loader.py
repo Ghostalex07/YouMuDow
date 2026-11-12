@@ -100,6 +100,11 @@ class ThumbnailLoader:
                 video_url, data, on_ready = self._results.get_nowait()
             except queue.Empty:
                 break
-            on_ready(video_url, data)
+            try:
+                on_ready(video_url, data)
+            except Exception:
+                # One bad thumbnail or renderer must not stop future delivery.
+                logger.exception("thumbnail on_ready callback raised")
+                continue
         if not self._stop.is_set():
             self._poll_id = self._root.after(_POLL_INTERVAL_MS, self._poll_results)

@@ -3,6 +3,7 @@
 import threading
 import time
 import tkinter as tk
+from unittest.mock import Mock
 
 import pytest
 
@@ -117,3 +118,19 @@ def test_urlopen_imported_at_module_level():
     import youmudow.services.thumbnail_loader as tl
 
     assert "urlopen" in tl.__dict__
+
+
+def test_poller_reschedules_after_callback_error(root):
+    loader = ThumbnailLoader(root, Mock(), Mock())
+    try:
+        loader._poll_id = None
+
+        def boom(url, data):
+            raise RuntimeError("boom")
+
+        loader._results.put(("http://x", b"data", boom))
+        loader._poll_results()
+
+        assert loader._poll_id is not None
+    finally:
+        loader.shutdown()

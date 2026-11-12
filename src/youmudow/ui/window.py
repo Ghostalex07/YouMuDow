@@ -270,6 +270,8 @@ class MainWindow:
             if results:
                 self._selected_video = results[0]
                 self._detail_panel.update_detail_panel(results[0])
+                self._results_cards.select(0, notify=False)
+                self._results_cards.focus_set()
                 self._set_status(f"Found: {results[0].title}")
             else:
                 self._set_status("No results found")

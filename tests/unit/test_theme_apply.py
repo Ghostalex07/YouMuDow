@@ -203,6 +203,38 @@ class TestApplyThemeColors:
 
         apply_theme_colors(frame, DARK_COLORS)
 
+    def test_card_keeps_surface_and_border_after_retheme(self, root):
+        from youmudow.ui.widgets.components.card import Card
+
+        card = Card(root, padding=8)
+        card.pack()
+
+        apply_theme_colors(card, LIGHT_COLORS)
+
+        assert card.cget("background") == LIGHT_COLORS.SURFACE
+        assert card.cget("highlightbackground") == LIGHT_COLORS.BORDER
+
+    def test_search_entry_keeps_surface_on_retheme(self, root):
+        from youmudow.ui.widgets.components.search_entry import SearchEntry
+
+        entry = SearchEntry(root, placeholder="Search")
+        entry.pack()
+
+        apply_theme_colors(entry, LIGHT_COLORS)
+
+        assert entry.cget("background") == LIGHT_COLORS.SURFACE
+
+    def test_canvas_window_items_are_retinted(self, root):
+        canvas = tk.Canvas(root, bg="#ffffff")
+        canvas.pack()
+        inner = tk.Frame(canvas, bg="#111111")
+        inner._bg_key = "surface"
+        canvas.create_window((0, 0), window=inner, anchor="nw")
+
+        apply_theme_colors(canvas, DARK_COLORS)
+
+        assert inner.cget("bg") == DARK_COLORS.SURFACE
+
 
 class TestApplyTheme:
     def test_apply_theme_paints_ttk_and_tk(self, root):

@@ -117,7 +117,7 @@ class ResultsCards(tk.Frame):
             pady=SPACING["xl"],
         ).pack(fill="x", expand=True)
 
-    def select(self, index: int) -> None:
+    def select(self, index: int, notify: bool = True) -> None:
         if not self._videos:
             self._selected = set()
             self._anchor = None
@@ -126,7 +126,7 @@ class ResultsCards(tk.Frame):
             self._selected = {index}
             self._anchor = index
         self._apply_selection_visuals()
-        if self._on_select:
+        if notify and self._on_select:
             self._on_select()
 
     def get_selected(self) -> list[int]:
@@ -194,6 +194,7 @@ class ResultsCards(tk.Frame):
         thumb.pack(side="left", padx=(0, SPACING["sm"]), fill="y")
 
         info = tk.Frame(card, bg=_c("surface"))
+        info._bg_key = "surface"
         info.pack(side="left", fill="both", expand=True)
 
         title = tk.Label(
@@ -271,8 +272,10 @@ class ResultsCards(tk.Frame):
         for i, card in enumerate(self._cards):
             if i in self._selected:
                 card.configure(highlightbackground=_c("primary"), highlightthickness=2)
+                card._border_key = "primary"
             else:
                 card.configure(highlightbackground=_c("border"), highlightthickness=1)
+                card._border_key = "border"
 
     def _on_up(self) -> None:
         self._move_selection(-1)

@@ -266,9 +266,9 @@ class DetailPanel(tk.Frame):
     def _load_thumbnail(self, video: Video) -> None:
         self._thumbnail_label.configure(text="[No thumbnail]")
         thumbnail_url = video.thumbnail
+        self._last_thumb_url = thumbnail_url
         if not thumbnail_url:
             return
-        self._last_thumb_url = thumbnail_url
         self._thumbnail_loader.request(thumbnail_url, self._on_thumbnail_ready)
 
     def _on_thumbnail_ready(self, url: str, data: bytes | None) -> None:

@@ -338,3 +338,10 @@ class TestDetailPanelActions:
         assert detail_panel.queue_panel_visible is False
         detail_panel._toggle_queue_panel()
         assert detail_panel.queue_panel_visible is True
+
+    def test_empty_thumbnail_resets_last_thumb_url(self, detail_panel):
+        detail_panel._last_thumb_url = "http://old/thumb.jpg"
+
+        detail_panel._load_thumbnail(self._video())
+
+        assert detail_panel._last_thumb_url == ""

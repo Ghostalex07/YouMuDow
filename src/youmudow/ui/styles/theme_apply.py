@@ -33,6 +33,9 @@ def _parent_background(widget: tk.Widget, colors: Any) -> str:
 
 def _style_frame(widget: tk.Widget, colors: Any) -> None:
     widget.configure(bg=resolve_color(colors, getattr(widget, "_bg_key", "bg")))
+    border_key = getattr(widget, "_border_key", None)
+    if border_key is not None:
+        widget.configure(highlightbackground=resolve_color(colors, border_key))
 
 
 def _style_label(widget: tk.Widget, colors: Any) -> None:
@@ -60,7 +63,13 @@ def _style_button(widget: tk.Widget, colors: Any) -> None:
 
 
 def _style_entry(widget: tk.Widget, colors: Any) -> None:
-    widget.configure(bg=colors.SURFACE, fg=colors.TEXT, insertbackground=colors.TEXT)
+    widget.configure(
+        bg=colors.SURFACE,
+        fg=colors.TEXT,
+        insertbackground=colors.TEXT,
+        highlightbackground=colors.BORDER,
+        highlightcolor=colors.PRIMARY,
+    )
 
 
 def _style_toggle(widget: tk.Widget, colors: Any) -> None:
@@ -122,6 +131,16 @@ def apply_theme_colors(widget: tk.Widget, colors: Any) -> None:
     try:
         children = widget.winfo_children()
     except tk.TclError:
-        return
+        children = []
     for child in children:
         apply_theme_colors(child, colors)
+    # Canvas ``window`` items are not ``winfo_children``, so recurse into
+    # them explicitly (scrollable card lists embed their content this way).
+    try:
+        if widget.winfo_class() == "Canvas":
+            for item in widget.find_all():
+                if widget.type(item) == "window":
+                    child = widget.nametowidget(widget.itemcget(item, "window"))
+                    apply_theme_colors(child, colors)
+    except tk.TclError:
+        pass

@@ -10,6 +10,7 @@ class SearchEntry(tk.Frame):
 
     def __init__(self, master, *, placeholder="", textvariable=None, command=None):
         super().__init__(master, background=_c("surface"))
+        self._bg_key = "surface"
         self._command = command
         self._placeholder = placeholder
         self._showing_placeholder = False
