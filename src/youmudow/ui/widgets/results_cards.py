@@ -9,6 +9,7 @@ from youmudow.domain.models import Video
 from youmudow.services.thumbnail_loader import ThumbnailLoader
 from youmudow.ui.styles.constants import FONT, SPACING, _c
 from youmudow.ui.widgets.components.card import Card
+from youmudow.ui.widgets.components.empty_state import EmptyState
 from youmudow.ui.widgets.components.thumbnail import photoimage_from_bytes
 
 logger = logging.getLogger(__name__)
@@ -59,6 +60,7 @@ class ResultsCards(tk.Frame):
         self._thumb_urls: dict[int, str] = {}
         self._thumb_batch = 0
         self._photo_refs: dict[int, object] = {}
+        self._empty_state: EmptyState | None = None
 
         self.grid(
             row=1,
@@ -92,12 +94,16 @@ class ResultsCards(tk.Frame):
     def update_results(self, videos: list[Video]) -> None:
         self._videos = list(videos)
         self._clear_children()
+        if not videos:
+            self._show_empty_state()
+            return
         self._build_cards()
         self._request_thumbnails()
 
     def clear_results(self) -> None:
         self._videos = []
         self._clear_children()
+        self._show_empty_state()
 
     def show_loading(self, message: str = "Searching...") -> None:
         self._videos = []
@@ -162,6 +168,11 @@ class ResultsCards(tk.Frame):
         self._thumb_urls = {}
         self._thumb_batch = 0
         self._photo_refs = {}
+        self._empty_state = None
+
+    def _show_empty_state(self) -> None:
+        self._empty_state = EmptyState(self._inner, message="No results yet")
+        self._empty_state.pack(fill="x", expand=True, pady=SPACING["xl"])
 
     def _build_cards(self) -> None:
         for i, video in enumerate(self._videos):

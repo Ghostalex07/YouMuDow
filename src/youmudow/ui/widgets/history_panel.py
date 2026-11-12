@@ -7,6 +7,7 @@ from tkinter import messagebox, ttk
 
 from youmudow.domain.models import HistoryEntry
 from youmudow.ui.styles.constants import FONT, SPACING, _c
+from youmudow.ui.widgets.components.empty_state import EmptyState
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +18,7 @@ class HistoryPanel(tk.Frame):
         self._mw = main_window
         self._all_entries: list[HistoryEntry] = []
         self._filtered: list[HistoryEntry] = []
+        self._empty_state: EmptyState | None = None
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -51,14 +53,14 @@ class HistoryPanel(tk.Frame):
         )
         clear_btn.pack(side="right", padx=(SPACING["sm"], 0))
 
-        tree_frame = tk.Frame(self, bg=_c("bg"))
-        tree_frame.pack(fill="both", expand=True, padx=SPACING["md"], pady=(0, SPACING["md"]))
-        tree_frame.columnconfigure(0, weight=1)
-        tree_frame.rowconfigure(0, weight=1)
+        self._tree_frame = tk.Frame(self, bg=_c("bg"))
+        self._tree_frame.pack(fill="both", expand=True, padx=SPACING["md"], pady=(0, SPACING["md"]))
+        self._tree_frame.columnconfigure(0, weight=1)
+        self._tree_frame.rowconfigure(0, weight=1)
 
         columns = ("title", "format", "date", "size")
         self._tree = ttk.Treeview(
-            tree_frame,
+            self._tree_frame,
             columns=columns,
             show="headings",
             selectmode="browse",
@@ -73,10 +75,12 @@ class HistoryPanel(tk.Frame):
         self._tree.column("date", width=140, minwidth=100)
         self._tree.column("size", width=80, minwidth=60)
 
-        scrollbar = ttk.Scrollbar(tree_frame, orient="vertical", command=self._tree.yview)
-        self._tree.configure(yscrollcommand=scrollbar.set)
+        self._scrollbar = ttk.Scrollbar(
+            self._tree_frame, orient="vertical", command=self._tree.yview
+        )
+        self._tree.configure(yscrollcommand=self._scrollbar.set)
         self._tree.grid(row=0, column=0, sticky="nsew")
-        scrollbar.grid(row=0, column=1, sticky="ns")
+        self._scrollbar.grid(row=0, column=1, sticky="ns")
 
         self._tree.bind("<Button-3>", self._on_right_click)
         self._tree.bind("<Double-Button-1>", self._on_redownload)
@@ -100,19 +104,28 @@ class HistoryPanel(tk.Frame):
     def _populate(self, entries: list[HistoryEntry]) -> None:
         for item in self._tree.get_children():
             self._tree.delete(item)
-        for entry in entries:
-            self._tree.insert(
-                "",
-                "end",
-                values=(
-                    entry.title,
-                    entry.file_format.upper(),
-                    entry.format_date(),
-                    entry.format_size() or "-",
-                ),
-            )
-        if not entries:
-            self._tree.insert("", "end", values=("No history yet", "", "", ""))
+        if entries:
+            for entry in entries:
+                self._tree.insert(
+                    "",
+                    "end",
+                    values=(
+                        entry.title,
+                        entry.file_format.upper(),
+                        entry.format_date(),
+                        entry.format_size() or "-",
+                    ),
+                )
+            self._tree.grid()
+            self._scrollbar.grid()
+            if self._empty_state is not None:
+                self._empty_state.grid_remove()
+        else:
+            self._tree.grid_remove()
+            self._scrollbar.grid_remove()
+            if self._empty_state is None:
+                self._empty_state = EmptyState(self._tree_frame, message="No history yet")
+            self._empty_state.grid(row=0, column=0, columnspan=2, sticky="nsew")
 
     def _on_filter_change(self, *_) -> None:
         self._apply_filter(self._search_var.get())

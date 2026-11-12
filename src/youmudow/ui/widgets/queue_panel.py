@@ -8,6 +8,7 @@ from youmudow.app.state import AppStateData
 from youmudow.domain.enums import DownloadStatus
 from youmudow.domain.models import Video
 from youmudow.ui.styles.constants import FONT, SPACING, _c
+from youmudow.ui.widgets.components.empty_state import EmptyState
 
 _STATUS_DISPLAY: dict[DownloadStatus, tuple[str, str]] = {
     DownloadStatus.READY: ("Queued", "-"),
@@ -40,6 +41,8 @@ class QueuePanel(tk.Frame):
         self._bg_key = "surface"
         self._mw = main_window
         self._visible = False
+        self._empty_state: EmptyState | None = None
+        self._empty_shown = False
         self.grid(
             row=2, column=0, columnspan=2, sticky="ew", padx=SPACING["xl"], pady=(0, SPACING["lg"])
         )
@@ -76,6 +79,7 @@ class QueuePanel(tk.Frame):
             side="left", fill="both", expand=True, padx=(SPACING["sm"], 0), pady=(0, SPACING["sm"])
         )
         qscroll.pack(side="right", fill="y", pady=(0, SPACING["sm"]), padx=(0, SPACING["sm"]))
+        self._qscroll = qscroll
         self._queue_tree.bind("<Button-3>", self._on_right_click)
 
     @property
@@ -145,6 +149,29 @@ class QueuePanel(tk.Frame):
 
         total = sum(len(bucket) for bucket in buckets)
         self._queue_count_label.configure(text=f"{total} items")
+
+        empty = total == 0
+        if empty != self._empty_shown:
+            if empty:
+                self._queue_tree.pack_forget()
+                self._qscroll.pack_forget()
+                if self._empty_state is None:
+                    self._empty_state = EmptyState(self, message="Queue is empty")
+                self._empty_state.pack(fill="x", pady=(SPACING["sm"], SPACING["sm"]))
+            else:
+                if self._empty_state is not None:
+                    self._empty_state.pack_forget()
+                self._queue_tree.pack(
+                    side="left",
+                    fill="both",
+                    expand=True,
+                    padx=(SPACING["sm"], 0),
+                    pady=(0, SPACING["sm"]),
+                )
+                self._qscroll.pack(
+                    side="right", fill="y", pady=(0, SPACING["sm"]), padx=(0, SPACING["sm"])
+                )
+            self._empty_shown = empty
 
     def _on_right_click(self, event: tk.Event) -> None:
         item = self._queue_tree.identify_row(event.y)
