@@ -2,17 +2,21 @@
 
 import io
 import logging
-
-from PIL import Image, ImageTk
+from typing import TYPE_CHECKING
 
 logger = logging.getLogger(__name__)
 
+if TYPE_CHECKING:
+    from PIL import ImageTk
 
-def photoimage_from_bytes(data: bytes, width: int, height: int) -> ImageTk.PhotoImage | None:
+
+def photoimage_from_bytes(data: bytes, width: int, height: int) -> "ImageTk.PhotoImage | None":
     """Decode image bytes and fit them within ``width`` x ``height``.
 
     Returns a ``PhotoImage``, or ``None`` when the bytes cannot be decoded.
     """
+    from PIL import Image, ImageTk
+
     try:
         img = Image.open(io.BytesIO(data))
         img.thumbnail((width, height), Image.LANCZOS)

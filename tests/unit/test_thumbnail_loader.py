@@ -55,7 +55,7 @@ def test_loader_uses_cache_when_present(root, tmp_path):
 
 
 def test_multiple_requests_all_deliver(root, tmp_path, monkeypatch):
-    import youmudow.services.thumbnail_loader as loader_mod
+    import urllib.request
 
     cache = ThumbnailCache(tmp_path)
     results = {}
@@ -69,7 +69,7 @@ def test_multiple_requests_all_deliver(root, tmp_path, monkeypatch):
             return _FakeResponse(b"slow")
         return _FakeResponse(b"fast")
 
-    monkeypatch.setattr(loader_mod, "urlopen", fake_urlopen)
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
     loader = ThumbnailLoader(root, cache, ThumbnailService())
     try:
         loader.request(

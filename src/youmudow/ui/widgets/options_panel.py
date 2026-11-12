@@ -33,10 +33,26 @@ class OptionsPanel:
 
     def __init__(self, parent: tk.Widget, main_window: object) -> None:
         self._mw = main_window
+        self._available_browsers: list[str] | None = None
+        self._browser_profiles_cache: dict | None = None
         self._build_header(parent)
         self._build_retry_button(parent)
         self._build_options(parent)
         self._on_subtitles_toggle()
+
+    # ------------------------------------------------------------------
+    # Browser detection (memoized per instance)
+    # ------------------------------------------------------------------
+
+    def _browser_options(self) -> list[str]:
+        if self._available_browsers is None:
+            self._available_browsers = get_available_browsers()
+        return self._available_browsers
+
+    def _browser_profiles(self) -> dict:
+        if self._browser_profiles_cache is None:
+            self._browser_profiles_cache = get_all_browser_profiles()
+        return self._browser_profiles_cache
 
     # ------------------------------------------------------------------
     # Widget construction
@@ -257,7 +273,7 @@ class OptionsPanel:
             command=self._on_cookies_toggle,
         )
         cookies_check.pack(side="left")
-        installed_browsers = get_available_browsers()
+        installed_browsers = self._browser_options()
         default_browser = installed_browsers[0] if installed_browsers else "chrome"
         self._browser_var = tk.StringVar(value=default_browser)
         browser_combo = ttk.Combobox(
@@ -391,7 +407,7 @@ class OptionsPanel:
             self._cookies_file_var.set(video.options.cookies_file)
         else:
             self._cookies_source_var.set("browser")
-            blist = get_available_browsers()
+            blist = self._browser_options()
             saved_browser = video.options.cookies_from_browser or "chrome"
             self._browser_var.set(
                 saved_browser if saved_browser in blist else (blist[0] if blist else "chrome")
@@ -418,6 +434,10 @@ class OptionsPanel:
 
     def load_settings(self, config: Any) -> None:
         """Apply persisted option values to the controls."""
+        # Re-detect browsers/profiles: loading settings is an explicit reload, so
+        # a stale memo would defeat the fallback-to-default logic.
+        self._available_browsers = None
+        self._browser_profiles_cache = None
         self._format_var.set(config.get("format", "mp3"))
         self._quality_var.set(config.get("quality", "best"))
         self._subtitles_var.set(config.get("subtitles", False))
@@ -428,7 +448,7 @@ class OptionsPanel:
         self._cookies_file_var.set(config.get("cookies_file", ""))
 
         saved_browser = config.get("browser", "chrome")
-        available = get_available_browsers()
+        available = self._browser_options()
         if available:
             self._browser_var.set(saved_browser if saved_browser in available else available[0])
         else:
@@ -544,7 +564,8 @@ class OptionsPanel:
         self._embed_subs_check.configure(state=state)
 
     def _on_cookies_toggle(self) -> None:
-        self._browser_var.set(get_available_browsers()[0] if get_available_browsers() else "chrome")
+        browsers = self._browser_options()
+        self._browser_var.set(browsers[0] if browsers else "chrome")
         self._on_browser_changed()
 
     def _on_select_cookies_file(self) -> None:
@@ -559,7 +580,7 @@ class OptionsPanel:
 
     def _on_browser_changed(self, event=None) -> None:
         browser = self._browser_var.get()
-        profiles = get_all_browser_profiles()
+        profiles = self._browser_profiles()
         browser_profiles = profiles.get(browser, [])
         profile_names = [p.name for p in browser_profiles] if browser_profiles else ["Default"]
         self._profile_combo["values"] = profile_names
