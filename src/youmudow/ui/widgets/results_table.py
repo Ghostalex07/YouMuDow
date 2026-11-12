@@ -6,7 +6,7 @@ import webbrowser
 from tkinter import ttk
 
 from youmudow.domain.models import Video
-from youmudow.ui.styles.constants import FONT, SPACING, _c
+from youmudow.ui.styles.constants import SPACING, _c
 
 logger = logging.getLogger(__name__)
 
@@ -52,8 +52,6 @@ class ResultsTable(tk.Frame):
         self._results_tree.bind("<Double-Button-1>", lambda _: self._mw._on_download_now())
         self._results_tree.bind("<Button-3>", self._on_open_in_browser)
 
-        self._style_treeview()
-
     @property
     def results_tree(self) -> ttk.Treeview:
         return self._results_tree
@@ -73,31 +71,6 @@ class ResultsTable(tk.Frame):
     @is_playlist.setter
     def is_playlist(self, val: bool) -> None:
         self._is_playlist = val
-
-    def _style_treeview(self) -> None:
-        style = ttk.Style()
-        style.configure(
-            "Modern.Treeview",
-            background=_c("surface"),
-            foreground=_c("text"),
-            fieldbackground=_c("surface"),
-            borderwidth=0,
-            rowheight=40,
-            font=FONT["body"],
-        )
-        style.configure(
-            "Modern.Treeview.Heading",
-            background=_c("bg"),
-            foreground=_c("text_secondary"),
-            borderwidth=0,
-            padding=(8, 6),
-            font=FONT["label"],
-        )
-        style.map(
-            "Modern.Treeview",
-            background=[("selected", _c("primary"))],
-            foreground=[("selected", "#FFFFFF")],
-        )
 
     def update_results(self, results: list[Video]) -> None:
         for item in self._results_tree.get_children():

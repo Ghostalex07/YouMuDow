@@ -31,7 +31,7 @@ from youmudow.ui.startup_checks import (
     show_ytdlp_version,
 )
 from youmudow.ui.styles.constants import FONT, SPACING, _c
-from youmudow.ui.styles.styles import configure_styles
+from youmudow.ui.styles.styles import apply_theme
 from youmudow.ui.styles.theme import ThemeName, get_theme_manager
 from youmudow.ui.styles.theme_apply import apply_theme_colors
 from youmudow.ui.widgets.detail_panel import DetailPanel
@@ -61,7 +61,7 @@ class MainWindow:
         saved_theme = self._config.get("theme", "dark") if self._config else "dark"
         self._theme_manager = get_theme_manager()
         self._theme_manager.set_theme(saved_theme)
-        configure_styles(self._theme_manager.colors)
+        apply_theme(self._root, self._theme_manager.colors)
         self._root.configure(bg=_c("bg"))
 
         self._selected_video: Video | None = None
@@ -521,8 +521,6 @@ class MainWindow:
         current = self._theme_manager.current.name
         new_theme: ThemeName = "light" if current == "dark" else "dark"
         self._theme_manager.set_theme(new_theme)
-        configure_styles(self._theme_manager.colors)
-        self._results_table._style_treeview()
         self._apply_theme_colors()
         if self._log_terminal:
             self._log_terminal.set_dark_mode(new_theme == "dark")
@@ -532,7 +530,7 @@ class MainWindow:
     def _apply_theme_colors(self) -> None:
         colors = self._theme_manager.colors
         self._root.configure(bg=colors.BACKGROUND)
-        apply_theme_colors(self._root, colors)
+        apply_theme(self._root, colors)
         if self._menubar:
             apply_theme_colors(self._menubar, colors)
         try:

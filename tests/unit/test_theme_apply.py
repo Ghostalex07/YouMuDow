@@ -15,7 +15,8 @@ pytest.importorskip("tkinter")
 if not os.environ.get("DISPLAY"):
     pytest.skip("No display server available, skipping Tk tests", allow_module_level=True)
 
-from youmudow.ui.styles.colors import DARK_COLORS
+from youmudow.ui.styles.colors import DARK_COLORS, LIGHT_COLORS
+from youmudow.ui.styles.styles import StyleManager, apply_theme
 from youmudow.ui.styles.theme_apply import (
     apply_theme_colors,
     apply_widget_colors,
@@ -201,3 +202,17 @@ class TestApplyThemeColors:
         frame.destroy()
 
         apply_theme_colors(frame, DARK_COLORS)
+
+
+class TestApplyTheme:
+    def test_apply_theme_paints_ttk_and_tk(self, root):
+        apply_theme(root, LIGHT_COLORS)
+        btn = tk.Button(root)
+        btn.pack()
+        apply_theme(root, DARK_COLORS)
+        assert btn.cget("bg").lower() == DARK_COLORS.SURFACE.lower()
+
+    def test_treeview_styled_by_manager(self):
+        mgr = StyleManager()
+        mgr.configure(DARK_COLORS)
+        assert mgr.style.lookup("Modern.Treeview", "background")
