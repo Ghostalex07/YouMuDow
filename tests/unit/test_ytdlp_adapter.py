@@ -17,6 +17,19 @@ from youmudow.adapters.ytdlp_adapter import (
     parse_cookie_error,
     parse_yt_dlp_error,
 )
+from youmudow.adapters.ytdlp_args import (
+    build_base_args,
+    build_download_args,
+    get_audio_quality,
+    get_format_selector,
+)
+from youmudow.adapters.ytdlp_files import resolve_output_file
+from youmudow.adapters.ytdlp_parsing import (
+    is_cookie_error,
+    normalize_playlist_url,
+    parse_duration,
+    parse_progress,
+)
 from youmudow.domain.enums import DownloadStatus
 from youmudow.domain.exceptions import YtDlpError, YtDlpNotFoundError
 from youmudow.domain.models import DownloadOptions, Video
@@ -92,14 +105,14 @@ class TestBuildArgs:
     """Tests for base argument building."""
 
     def test_base_args_basic(self, adapter):
-        args = adapter._build_base_args(make_video(file_format="mp3"))
+        args = build_base_args(adapter.config, make_video(file_format="mp3"))
         assert "yt-dlp" in args
         assert "--no-check-certificate" not in args
         assert "https://youtube.com/watch?v=test" not in args
 
     def test_certificate_verification_disabled_when_configured(self, adapter):
-        adapter._config.verify_certificates = False
-        args = adapter._build_base_args(make_video(file_format="mp3"))
+        adapter.config.verify_certificates = False
+        args = build_base_args(adapter.config, make_video(file_format="mp3"))
         assert "--no-check-certificate" in args
 
     @pytest.mark.parametrize(
@@ -117,21 +130,22 @@ class TestBuildArgs:
         ],
     )
     def test_cookies_from_browser(self, adapter, options, expected):
-        args = adapter._build_base_args(make_video(**options))
+        args = build_base_args(adapter.config, make_video(**options))
         assert "--cookies-from-browser" in args
         assert expected in args
 
     def test_default_profile_has_no_suffix(self, adapter):
         with patch(
-            "youmudow.adapters.ytdlp_adapter.check_browser_profile",
+            "youmudow.adapters.ytdlp_args.check_browser_profile",
             return_value=(True, ""),
         ):
-            args = adapter._build_base_args(
+            args = build_base_args(
+                adapter.config,
                 make_video(
                     use_cookies=True,
                     cookies_from_browser="firefox",
                     cookies_profile="main",
-                )
+                ),
             )
         assert "--cookies-from-browser" in args
         assert "firefox:main" not in args
@@ -142,8 +156,9 @@ class TestBuildArgs:
             temp_file = f.name
 
         try:
-            args = adapter._build_base_args(
-                make_video(use_cookies=True, cookies_file=temp_file, cookies_from_browser=None)
+            args = build_base_args(
+                adapter.config,
+                make_video(use_cookies=True, cookies_file=temp_file, cookies_from_browser=None),
             )
             assert "--cookies" in args
             assert temp_file in args
@@ -151,21 +166,24 @@ class TestBuildArgs:
             os.unlink(temp_file)
 
     def test_cookies_from_nonexistent_file(self, adapter):
-        args = adapter._build_base_args(
+        args = build_base_args(
+            adapter.config,
             make_video(
                 use_cookies=True, cookies_file="/nonexistent/cookies.txt", cookies_from_browser=None
-            )
+            ),
         )
         assert "--cookies" not in args
 
     def test_no_cookies_when_disabled(self, adapter):
-        args = adapter._build_base_args(make_video(use_cookies=False))
+        args = build_base_args(adapter.config, make_video(use_cookies=False))
         assert "--cookies-from-browser" not in args
         assert "--cookies" not in args
 
     def test_skip_cookies_flag(self, adapter):
-        args = adapter._build_base_args(
-            make_video(use_cookies=True, cookies_from_browser="firefox"), skip_cookies=True
+        args = build_base_args(
+            adapter.config,
+            make_video(use_cookies=True, cookies_from_browser="firefox"),
+            skip_cookies=True,
         )
         assert "--cookies-from-browser" not in args
 
@@ -174,13 +192,13 @@ class TestBuildArgs:
             "youmudow.services.environment_service.js_runtimes_flag",
             return_value=["--js-runtimes", "node"],
         ):
-            args = adapter._build_base_args(make_video(file_format="mp3"))
+            args = build_base_args(adapter.config, make_video(file_format="mp3"))
         assert "--js-runtimes" in args
         assert args[args.index("--js-runtimes") + 1] == "node"
 
     def test_js_runtime_flag_omitted_when_no_runtime(self, adapter):
         with patch("youmudow.services.environment_service.js_runtimes_flag", return_value=[]):
-            args = adapter._build_base_args(make_video(file_format="mp3"))
+            args = build_base_args(adapter.config, make_video(file_format="mp3"))
         assert "--js-runtimes" not in args
 
 
@@ -188,32 +206,35 @@ class TestBuildDownloadArgs:
     """Tests for download argument building."""
 
     def test_format_mp3(self, adapter):
-        args = adapter._build_download_args(make_video(file_format="mp3", quality="320kbps"))
+        args = build_download_args(adapter.config, make_video(file_format="mp3", quality="320kbps"))
         assert "--extract-audio" in args
         assert "--audio-format" in args
         assert "mp3" in args
 
     def test_format_mp4(self, adapter):
-        args = adapter._build_download_args(make_video(file_format="mp4", quality="1080p"))
+        args = build_download_args(adapter.config, make_video(file_format="mp4", quality="1080p"))
         assert "-f" in args
 
     def test_rate_limit_option(self, adapter):
-        args = adapter._build_download_args(make_video(file_format="mp3", rate_limit="1M"))
+        args = build_download_args(adapter.config, make_video(file_format="mp3", rate_limit="1M"))
         assert "--limit-rate" in args
         assert "1M" in args
 
     def test_split_chapters_option(self, adapter):
-        args = adapter._build_download_args(make_video(file_format="mp4", split_chapters=True))
+        args = build_download_args(
+            adapter.config, make_video(file_format="mp4", split_chapters=True)
+        )
         assert "--split-chapters" in args
 
     def test_subtitles_option(self, adapter):
-        args = adapter._build_download_args(
+        args = build_download_args(
+            adapter.config,
             make_video(
                 file_format="mp3",
                 subtitles=True,
                 subtitle_lang="en,es",
                 embed_subtitles=True,
-            )
+            ),
         )
         assert "--write-subs" in args
         assert "--sub-langs" in args
@@ -249,7 +270,7 @@ class TestBuildDownloadArgsOptions:
     )
     def test_flags(self, options, config_overrides, expected_flags):
         adapter = YtdlpAdapter(YtdlpConfig(**config_overrides))
-        args = adapter._build_download_args(make_video(**options))
+        args = build_download_args(adapter.config, make_video(**options))
         for flag in expected_flags:
             assert flag in args
         if "--embed-subs" in args:
@@ -261,7 +282,7 @@ class TestBuildDownloadArgsOptions:
             assert lang == options.get("subtitle_lang", "en")
 
     def test_no_embed_thumbnail_for_mp4(self, adapter):
-        args = adapter._build_download_args(make_video(file_format="mp4"))
+        args = build_download_args(adapter.config, make_video(file_format="mp4"))
         assert "--embed-thumbnail" not in args
 
 
@@ -277,8 +298,8 @@ class TestFormatSelectors:
             ("mp4", "8k", "bestvideo+bestaudio/best"),
         ],
     )
-    def test_selector(self, adapter, fmt, quality, expected):
-        assert adapter._get_format_selector(fmt, quality) == expected
+    def test_selector(self, fmt, quality, expected):
+        assert get_format_selector(fmt, quality) == expected
 
     @pytest.mark.parametrize(
         ("quality", "expected"),
@@ -293,8 +314,8 @@ class TestFormatSelectors:
             ("", "0"),
         ],
     )
-    def test_audio_quality(self, adapter, quality, expected):
-        assert adapter._get_audio_quality(quality) == expected
+    def test_audio_quality(self, quality, expected):
+        assert get_audio_quality(quality) == expected
 
 
 class TestProgressParsing:
@@ -316,7 +337,7 @@ class TestProgressParsing:
         ],
     )
     def test_parse_progress(self, line, progress, speed, eta, size):
-        info = YtdlpAdapter()._parse_progress(line)
+        info = parse_progress(line)
         assert info is not None
         assert info.progress == progress
         assert info.speed == speed
@@ -324,7 +345,7 @@ class TestProgressParsing:
         assert info.size == size
 
     def test_parse_non_progress(self):
-        assert YtdlpAdapter()._parse_progress("[info] Downloading video") is None
+        assert parse_progress("[info] Downloading video") is None
 
 
 class TestDurationParsing:
@@ -342,7 +363,7 @@ class TestDurationParsing:
         ],
     )
     def test_parse_duration(self, value, expected):
-        assert YtdlpAdapter()._parse_duration(value) == expected
+        assert parse_duration(value) == expected
 
 
 class TestParseYtDlpError:
@@ -408,7 +429,7 @@ class TestResolveOutputFile:
         preexisting = {tmp_path / "Song.mp3"}
         (tmp_path / "Song.mp3").write_text("old")
         (tmp_path / "Song.mp4").write_text("new")
-        result = YtdlpAdapter()._resolve_output_file(tmp_path, "Song", preexisting)
+        result = resolve_output_file(tmp_path, "Song", preexisting)
         assert result == tmp_path / "Song.mp4"
 
     def test_never_returns_pre_existing_file(self, tmp_path):
@@ -416,20 +437,20 @@ class TestResolveOutputFile:
         preexisting = {tmp_path / "Song.mp3"}
         (tmp_path / "Song.mp3").write_text("x")
         os.utime(tmp_path / "Song.mp3", (9_000_000_000, 9_000_000_000))
-        assert YtdlpAdapter()._resolve_output_file(tmp_path, "Song", preexisting) is None
+        assert resolve_output_file(tmp_path, "Song", preexisting) is None
 
     def test_returns_new_file_with_any_stem(self, tmp_path):
         (tmp_path / "other.mp3").write_text("x")
-        result = YtdlpAdapter()._resolve_output_file(tmp_path, "Song", set())
+        result = resolve_output_file(tmp_path, "Song", set())
         assert result == tmp_path / "other.mp3"
 
     def test_returns_none_when_no_new_match(self, tmp_path):
         (tmp_path / "Nothing.mp3").write_text("x")
         preexisting = {tmp_path / "Nothing.mp3"}
-        assert YtdlpAdapter()._resolve_output_file(tmp_path, "Nothing", preexisting) is None
+        assert resolve_output_file(tmp_path, "Nothing", preexisting) is None
 
     def test_returns_none_when_empty_dir(self, tmp_path):
-        assert YtdlpAdapter()._resolve_output_file(tmp_path, "Nothing", set()) is None
+        assert resolve_output_file(tmp_path, "Nothing", set()) is None
 
 
 class TestDownloadCancel:
@@ -637,21 +658,19 @@ class TestPlaylistUrlNormalization:
 
     def test_non_youtube_passthrough(self):
         url = "https://soundcloud.com/user/sets/album-x"
-        assert YtdlpAdapter()._normalize_playlist_url(url) == url
+        assert normalize_playlist_url(url) == url
 
     def test_youtube_watch_with_list_normalized(self):
         url = "https://youtube.com/watch?v=abc&list=PL123"
-        assert YtdlpAdapter()._normalize_playlist_url(url) == (
-            "https://www.youtube.com/playlist?list=PL123"
-        )
+        assert normalize_playlist_url(url) == "https://www.youtube.com/playlist?list=PL123"
 
     def test_youtube_playlist_kept(self):
         url = "https://youtube.com/playlist?list=PL123"
-        assert YtdlpAdapter()._normalize_playlist_url(url) == url
+        assert normalize_playlist_url(url) == url
 
     def test_youtube_watch_without_list_kept(self):
         url = "https://youtube.com/watch?v=abc"
-        assert YtdlpAdapter()._normalize_playlist_url(url) == url
+        assert normalize_playlist_url(url) == url
 
     def test_non_youtube_playlist_passed_to_subprocess(self, adapter):
         mock_result = Mock()
@@ -742,18 +761,17 @@ class TestCookieFallbackNoMutation:
         )
         adapter = YtdlpAdapter()
         logs = []
-        adapter.set_log_callback(logs.append)
         with (
             patch(
-                "youmudow.adapters.ytdlp_adapter.check_browser_profile",
+                "youmudow.adapters.ytdlp_args.check_browser_profile",
                 return_value=(False, "chrome not installed"),
             ),
             patch(
-                "youmudow.adapters.ytdlp_adapter.get_fallback_browser",
+                "youmudow.adapters.ytdlp_args.get_fallback_browser",
                 return_value="firefox",
             ),
         ):
-            args = adapter._build_base_args(video)
+            args = build_base_args(adapter.config, video, log=logs.append)
         assert "firefox" in args
         assert video.options.cookies_from_browser == "chrome"
         assert video.options.cookies_profile == "Prof"
@@ -896,11 +914,11 @@ class TestIsCookieError:
             "brave profile not found",
         ],
     )
-    def test_matches(self, adapter, output):
-        assert adapter._is_cookie_error(output)
+    def test_matches(self, output):
+        assert is_cookie_error(output)
 
-    def test_does_not_match(self, adapter):
-        assert not adapter._is_cookie_error("ERROR: network timeout")
+    def test_does_not_match(self):
+        assert not is_cookie_error("ERROR: network timeout")
 
 
 class TestBuildBaseArgsFallbacks:
@@ -911,7 +929,7 @@ class TestBuildBaseArgsFallbacks:
 
     def test_ffmpeg_and_user_agent(self):
         adapter = self._adapter_with_config(ffmpeg_location="/usr/bin", user_agent="UA/1.0")
-        args = adapter._build_base_args()
+        args = build_base_args(adapter.config)
         assert "--ffmpeg-location" in args
         assert "/usr/bin" in args
         assert "--user-agent" in args
@@ -919,30 +937,29 @@ class TestBuildBaseArgsFallbacks:
 
     def test_config_cookies_file_without_video(self):
         adapter = self._adapter_with_config(cookies_file="/tmp/cookies.txt")
-        args = adapter._build_base_args()
+        args = build_base_args(adapter.config)
         assert "--cookies" in args
 
     def test_config_cookies_file_skipped(self):
         adapter = self._adapter_with_config(cookies_file="/tmp/cookies.txt")
-        args = adapter._build_base_args(skip_cookies=True)
+        args = build_base_args(adapter.config, skip_cookies=True)
         assert "--cookies" not in args
 
     def test_browser_fallback(self):
         video = make_video(use_cookies=True, cookies_from_browser="chrome")
         adapter = YtdlpAdapter()
         logs = []
-        adapter.set_log_callback(logs.append)
         with (
             patch(
-                "youmudow.adapters.ytdlp_adapter.check_browser_profile",
+                "youmudow.adapters.ytdlp_args.check_browser_profile",
                 return_value=(False, "chrome not installed"),
             ),
             patch(
-                "youmudow.adapters.ytdlp_adapter.get_fallback_browser",
+                "youmudow.adapters.ytdlp_args.get_fallback_browser",
                 return_value="firefox",
             ),
         ):
-            args = adapter._build_base_args(video)
+            args = build_base_args(adapter.config, video, log=logs.append)
         assert "--cookies-from-browser" in args
         assert "firefox" in args
         assert any("Falling back to Firefox" in log for log in logs)
@@ -952,15 +969,15 @@ class TestBuildBaseArgsFallbacks:
         adapter = YtdlpAdapter()
         with (
             patch(
-                "youmudow.adapters.ytdlp_adapter.check_browser_profile",
+                "youmudow.adapters.ytdlp_args.check_browser_profile",
                 return_value=(False, "not installed"),
             ),
             patch(
-                "youmudow.adapters.ytdlp_adapter.get_fallback_browser",
+                "youmudow.adapters.ytdlp_args.get_fallback_browser",
                 return_value="firefox",
             ),
         ):
-            args = adapter._build_base_args(video)
+            args = build_base_args(adapter.config, video)
         assert "firefox" in args
 
 
@@ -1458,9 +1475,9 @@ class TestProcessGroupSignalling:
         fake = BlockingFakeProcess()
         with (
             patch("subprocess.Popen", return_value=fake),
-            patch("youmudow.adapters.ytdlp_adapter.os.getpgid", return_value=4242),
+            patch("youmudow.adapters.ytdlp_process.os.getpgid", return_value=4242),
             patch(
-                "youmudow.adapters.ytdlp_adapter.os.killpg",
+                "youmudow.adapters.ytdlp_process.os.killpg",
                 side_effect=lambda pgid, sig: fake.terminate(),
             ) as killpg,
         ):
@@ -1476,9 +1493,9 @@ class TestProcessGroupSignalling:
         fake = StubbornFakeProcess()
         with (
             patch("subprocess.Popen", return_value=fake),
-            patch("youmudow.adapters.ytdlp_adapter.os.getpgid", return_value=4242),
+            patch("youmudow.adapters.ytdlp_process.os.getpgid", return_value=4242),
             patch(
-                "youmudow.adapters.ytdlp_adapter.os.killpg",
+                "youmudow.adapters.ytdlp_process.os.killpg",
                 side_effect=lambda pgid, sig: fake.signals.append(sig),
             ) as killpg,
         ):
@@ -1500,12 +1517,12 @@ class TestProcessGroupSignalling:
         with (
             patch("subprocess.Popen", return_value=fake),
             patch(
-                "youmudow.adapters.ytdlp_adapter.os.getpgid",
+                "youmudow.adapters.ytdlp_process.os.getpgid",
                 return_value=4242,
                 side_effect=gone if vanished == "getpgid" else None,
             ) as getpgid,
             patch(
-                "youmudow.adapters.ytdlp_adapter.os.killpg",
+                "youmudow.adapters.ytdlp_process.os.killpg",
                 side_effect=gone if vanished == "killpg" else None,
             ),
         ):

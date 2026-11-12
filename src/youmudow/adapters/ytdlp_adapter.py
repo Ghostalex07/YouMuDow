@@ -3,95 +3,59 @@
 This module provides a wrapper around yt-dlp functionality.
 The adapter pattern allows swapping the underlying downloader implementation
 without affecting the rest of the application.
+
+The adapter only orchestrates. Its building blocks live in sibling modules:
+argument building in :mod:`youmudow.adapters.ytdlp_args`, output parsing in
+:mod:`youmudow.adapters.ytdlp_parsing`, the streaming subprocess in
+:mod:`youmudow.adapters.ytdlp_process` and result-file resolution in
+:mod:`youmudow.adapters.ytdlp_files`.
 """
 
 import json
 import logging
-import os
-import re
-import signal
 import subprocess
 import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
 
-from youmudow.adapters.browser_profiles import check_browser_profile, get_fallback_browser
+from youmudow.adapters.ytdlp_args import (
+    THUMBNAIL_EMBED_FORMATS,
+    build_base_args,
+    build_download_args,
+    build_flat_playlist_args,
+)
+from youmudow.adapters.ytdlp_files import existing_files, resolve_destination
+from youmudow.adapters.ytdlp_parsing import (
+    ProgressInfo,
+    is_cookie_error,
+    normalize_playlist_url,
+    parse_cookie_error,
+    parse_flat_results,
+    parse_json_output,
+    parse_yt_dlp_error,
+)
+from youmudow.adapters.ytdlp_process import run_capture, run_process
 from youmudow.domain.enums import DownloadStatus
-from youmudow.domain.exceptions import YtDlpError, YtDlpNotFoundError
+from youmudow.domain.exceptions import YtDlpError
 from youmudow.domain.models import Video
-from youmudow.domain.validators import AUDIO_FORMATS, sanitize_filename
+from youmudow.domain.validators import sanitize_filename
 
 logger = logging.getLogger(__name__)
 
-THUMBNAIL_EMBED_FORMATS: frozenset[str] = frozenset({"mp3", "m4a", "opus"})
-
-_VIDEO_QUALITY_SELECTORS: dict[str, str] = {
-    "1080p": "bestvideo[height<=1080]+bestaudio/best",
-    "720p": "bestvideo[height<=720]+bestaudio/best",
-    "480p": "bestvideo[height<=480]+bestaudio/best",
-    "360p": "bestvideo[height<=360]+bestaudio/best",
-}
-
+__all__ = [
+    "LogCallback",
+    "ProgressCallback",
+    "ProgressInfo",
+    "YtdlpAdapter",
+    "YtdlpConfig",
+    "parse_cookie_error",
+    "parse_yt_dlp_error",
+]
 
 LogCallback = Callable[[str], None]
 ProgressCallback = Callable[[float, str], None]
-
-_ERROR_PATTERNS: list[tuple[tuple[str, ...], str]] = [
-    (("private video", "video is private"), "Video is private"),
-    (("not available", "unavailable"), "Video not available"),
-    (("removed", "deleted"), "Video has been removed"),
-    (("connection", "network", "http error"), "Connection error"),
-    (("permission denied", "permission"), "Permission denied"),
-    (("auth", "login", "sign in"), "Authentication required"),
-    (("captcha", "verification"), "CAPTCHA required"),
-]
-
-_DESTINATION_RE = re.compile(r"\[download\]\s+Destination:\s+(\S+)")
-_ALREADY_DOWNLOADED_RE = re.compile(r"\[download\]\s+(\S+)\s+has already been downloaded")
-
-_COOKIE_BROWSER_NAMES: tuple[str, ...] = ("chrome", "firefox", "edge", "brave", "opera", "vivaldi")
-
-_COOKIE_ERROR_PATTERNS: list[tuple[tuple[str, ...], str]] = [
-    (("locked", "lock"), "Cookies locked - browser may be running"),
-    (("profile",), "Browser profile not accessible"),
-    (("database",), "Cookies database corrupted or inaccessible"),
-    (("no such file", "directory"), "Browser profile directory not found"),
-]
-
-
-def parse_cookie_error(error_output: str) -> str:
-    """Parse cookie-related errors and return a user-friendly message."""
-    error_lower = error_output.lower()
-
-    if "could not find" in error_lower or "not found" in error_lower:
-        for browser in _COOKIE_BROWSER_NAMES:
-            if browser in error_lower:
-                return f"{browser.capitalize()} cookies not found - is {browser.capitalize()} installed?"
-        return "Browser cookies not found"
-
-    for keywords, message in _COOKIE_ERROR_PATTERNS:
-        if any(kw in error_lower for kw in keywords):
-            return message
-
-    return "Cookie authentication failed"
-
-
-def parse_yt_dlp_error(error_output: str) -> str:
-    """Parse yt-dlp error output and return a user-friendly message."""
-    if not error_output:
-        return "Download failed"
-    error_lower = error_output.lower()
-    if "地域" in error_output or "region" in error_lower:
-        return "Video not available in your region"
-    if "cookies" in error_lower or "cookie" in error_lower:
-        return parse_cookie_error(error_output)
-    for keywords, message in _ERROR_PATTERNS:
-        if any(kw in error_lower for kw in keywords):
-            return message
-    return "Download failed"
 
 
 @dataclass
@@ -119,17 +83,6 @@ class YtdlpConfig:
     embed_subs: bool = False
     parse_metadata: str | None = None
     metadata_from_title: str | None = None
-
-
-@dataclass
-class ProgressInfo:
-    """Parsed progress information from yt-dlp output."""
-
-    progress: float
-    speed: str
-    eta: str
-    size: str
-    line: str = ""
 
 
 class YtdlpAdapter:
@@ -164,233 +117,29 @@ class YtdlpAdapter:
         if self._log_callback:
             self._log_callback(message)
 
-    def _build_base_args(self, video: Video | None = None, skip_cookies: bool = False) -> list[str]:
-        args = ["yt-dlp"]
-        # YouTube needs an external JS runtime to sign download URLs. yt-dlp
-        # only enables deno by default; node/quickjs must be requested with an
-        # explicit flag or the download fails with HTTP Error 403 Forbidden.
-        # Imported lazily to avoid a circular import with the services package.
-        from youmudow.services.environment_service import js_runtimes_flag
-
-        args.extend(js_runtimes_flag())
-        if not self._config.verify_certificates:
-            args.append("--no-check-certificate")
-
-        if self._config.ffmpeg_location:
-            args.extend(["--ffmpeg-location", self._config.ffmpeg_location])
-        if self._config.user_agent:
-            args.extend(["--user-agent", self._config.user_agent])
-
-        if video and video.options and not skip_cookies:
-            opts = video.options
-            if opts.use_cookies:
-                if opts.cookies_from_browser:
-                    browser = opts.cookies_from_browser.lower()
-                    profile = opts.cookies_profile
-                    exists, message = check_browser_profile(browser)
-                    if not exists:
-                        self._log(f"[AUTH] {message}")
-                        fallback = get_fallback_browser()
-                        if fallback and fallback != browser:
-                            self._log(f"[AUTH] Falling back to {fallback.capitalize()}")
-                            browser = fallback
-                            profile = None
-                    cookie_arg = browser
-                    if profile and profile.lower() not in ["default", "main"]:
-                        cookie_arg = f"{browser}:{profile}"
-                    args.extend(["--cookies-from-browser", cookie_arg])
-                    profile_msg = (
-                        f" ({profile})"
-                        if profile and profile.lower() not in ["default", "main"]
-                        else ""
-                    )
-                    self._log(f"[AUTH] Using {browser.capitalize()}{profile_msg} cookies")
-                elif opts.cookies_file:
-                    cookie_path = Path(opts.cookies_file)
-                    if cookie_path.exists():
-                        args.extend(["--cookies", str(cookie_path)])
-                        self._log("[AUTH] Using cookies file")
-                    else:
-                        self._log(f"[WARNING] Cookies file not found: {opts.cookies_file}")
-        elif self._config.cookies_file and not skip_cookies:
-            args.extend(["--cookies", self._config.cookies_file])
-
-        return args
-
     def _build_download_args(self, video: Video, skip_cookies: bool = False) -> list[str]:
         """Build arguments for download including metadata options."""
-        args = self._build_base_args(video, skip_cookies)
+        return build_download_args(self._config, video, skip_cookies, self._log)
 
-        opts = video.options
-        format_selector = self._get_format_selector(opts.file_format, opts.quality)
-        args.extend(
-            [
-                "-f",
-                format_selector,
-                "-o",
-                str(self._config.output_template),
-            ]
-        )
-
-        if opts.file_format in AUDIO_FORMATS:
-            audio_quality = self._get_audio_quality(opts.quality)
-            args.extend(
-                [
-                    "--extract-audio",
-                    "--audio-format",
-                    opts.file_format,
-                    "--audio-quality",
-                    audio_quality,
-                ]
-            )
-
-        if self._config.embed_metadata:
-            args.append("--embed-metadata")
-
-        if self._config.embed_thumbnail and opts.file_format in THUMBNAIL_EMBED_FORMATS:
-            args.append("--embed-thumbnail")
-
-        if self._config.add_chapters:
-            args.append("--embed-chapters")
-
-        if opts.subtitles:
-            args.extend(["--write-subs", "--sub-langs", opts.subtitle_lang])
-            if opts.embed_subtitles:
-                args.append("--embed-subs")
-        elif self._config.embed_subs:
-            args.extend(["--write-subs", "--embed-subs"])
-
-        if opts.rate_limit:
-            args.extend(["--limit-rate", opts.rate_limit])
-
-        if opts.split_chapters:
-            args.append("--split-chapters")
-
-        if self._config.parse_metadata:
-            args.extend(["--parse-metadata", self._config.parse_metadata])
-
-        if self._config.metadata_from_title:
-            args.extend(["--metadata-from-title", self._config.metadata_from_title])
-
-        args.append(video.url)
-
-        return args
-
-    def _parse_progress(self, line: str) -> ProgressInfo | None:
-        progress_pattern = r"\[download\]\s+(\d+\.?\d*)%.*?at\s+(\S+).*?ETA\s+(\S+)"
-        size_pattern = r"\[download\]\s+(\d+\.?\d*)%.*?of\s+~?([~\d.]+\w+)"
-
-        progress_match = re.search(progress_pattern, line)
-        if progress_match:
-            return ProgressInfo(
-                progress=float(progress_match.group(1)),
-                speed=progress_match.group(2),
-                eta=progress_match.group(3),
-                size="",
-                line=line,
-            )
-
-        size_match = re.search(size_pattern, line)
-        if size_match:
-            return ProgressInfo(
-                progress=float(size_match.group(1)),
-                speed="",
-                eta="",
-                size=size_match.group(2),
-                line=line,
-            )
-
-        # Fallback: bare percentage (no speed/ETA), e.g. "[download]  45.2%"
-        bare_match = re.search(r"\[download\]\s+(\d+\.?\d*)%", line)
-        if bare_match:
-            return ProgressInfo(
-                progress=float(bare_match.group(1)),
-                speed="",
-                eta="",
-                size="",
-                line=line,
-            )
-
-        return None
-
-    @staticmethod
-    def _parse_json_output(stdout: str) -> dict | None:
-        """Parse yt-dlp JSON output, tolerating surrounding log lines."""
-        decoder = json.JSONDecoder()
-
-        def try_parse(text: str) -> dict | None:
-            text = text.lstrip()
-            if not text:
-                return None
-            try:
-                data, _ = decoder.raw_decode(text)
-                return data if isinstance(data, dict) else None
-            except (json.JSONDecodeError, ValueError):
-                return None
-
-        data = try_parse(stdout)
-        if data:
-            return data
-
-        first_brace = stdout.find("{")
-        if first_brace >= 0:
-            data = try_parse(stdout[first_brace:])
-            if data:
-                return data
-
-        for line in stdout.strip().splitlines():
-            data = try_parse(line)
-            if data:
-                return data
-        return None
-
-    def _parse_flat_results(self, stdout: str) -> list[Video]:
-        """Parse yt-dlp `--flat-playlist --print` output into Video objects."""
-        videos: list[Video] = []
-        if not stdout:
-            return videos
-        for line in stdout.strip().split("\n"):
-            if line and " | " in line:
-                parts = line.split(" | ", 3)
-                if len(parts) >= 4:
-                    videos.append(
-                        Video(
-                            title=parts[1].strip(),
-                            url=parts[0].strip(),
-                            uploader=parts[2].strip(),
-                            duration=self._parse_duration(parts[3]),
-                        )
-                    )
-        return videos
+    def _log_command_error(self, label: str, result: subprocess.CompletedProcess[str]) -> None:
+        """Log the first stderr line of a failed one-shot yt-dlp command."""
+        error_msg = result.stderr.strip() if result.stderr else "Unknown error"
+        first_line = error_msg.split("\n")[0][:120]
+        self._log(f"[{label}] yt-dlp error (code {result.returncode}): {first_line}")
 
     def search(self, query: str, limit: int = 10) -> list[Video]:
-        args = self._build_base_args(None)
-        args.extend(
-            [
-                "--flat-playlist",
-                "--print",
-                "%(url)s | %(title)s | %(uploader)s | %(duration)s",
-                f"ytsearch{limit}:{query}",
-            ]
-        )
+        """Search yt-dlp for up to ``limit`` videos matching ``query``."""
+        args = build_flat_playlist_args(self._config, f"ytsearch{limit}:{query}", log=self._log)
 
         self._log(f"[SEARCH] Searching for: {query}")
 
         try:
-            result = subprocess.run(
-                args,
-                capture_output=True,
-                text=True,
-                timeout=30,
-                check=False,
-            )
+            result = run_capture(args, timeout=30)
 
             if result.returncode != 0:
-                error_msg = result.stderr.strip() if result.stderr else "Unknown error"
-                first_line = error_msg.split("\n")[0][:120]
-                self._log(f"[SEARCH] yt-dlp error (code {result.returncode}): {first_line}")
+                self._log_command_error("SEARCH", result)
 
-            videos = self._parse_flat_results(result.stdout)
+            videos = parse_flat_results(result.stdout)
 
             self._log(f"[SEARCH] Found {len(videos)} results")
             return videos
@@ -406,28 +155,17 @@ class YtdlpAdapter:
             return []
 
     def get_metadata(self, url: str) -> Video | None:
-        args = self._build_base_args(None)
-        args.extend(
-            [
-                "--dump-json",
-                "--no-download",
-                url,
-            ]
-        )
+        """Fetch metadata for a single URL without downloading it."""
+        args = build_base_args(self._config, log=self._log)
+        args.extend(["--dump-json", "--no-download", url])
 
         self._log(f"[METADATA] Fetching: {url}")
 
         try:
-            result = subprocess.run(
-                args,
-                capture_output=True,
-                text=True,
-                timeout=60,
-                check=False,
-            )
+            result = run_capture(args, timeout=60)
 
             if result.returncode == 0 and result.stdout:
-                data = self._parse_json_output(result.stdout)
+                data = parse_json_output(result.stdout)
                 if data:
                     title = str(data.get("title") or "Unknown")
                     uploader = str(data.get("uploader") or data.get("uploader_id") or "")
@@ -452,9 +190,7 @@ class YtdlpAdapter:
                         thumbnail=thumbnail,
                     )
             elif result.returncode != 0:
-                error_msg = result.stderr.strip() if result.stderr else "Unknown error"
-                first_line = error_msg.split("\n")[0][:120]
-                self._log(f"[METADATA] yt-dlp error (code {result.returncode}): {first_line}")
+                self._log_command_error("METADATA", result)
 
         except (
             subprocess.TimeoutExpired,
@@ -482,30 +218,16 @@ class YtdlpAdapter:
             limit = 50
         if limit <= 0:
             return []
-        args = self._build_base_args(None)
-        args.extend(
-            [
-                "--flat-playlist",
-                "--playlist-end",
-                str(limit),
-                "--print",
-                "%(url)s | %(title)s | %(uploader)s | %(duration)s",
-                self._normalize_playlist_url(url),
-            ]
+        args = build_flat_playlist_args(
+            self._config, normalize_playlist_url(url), playlist_end=limit, log=self._log
         )
 
         self._log(f"[PLAYLIST] Fetching: {url}")
 
         try:
-            result = subprocess.run(
-                args,
-                capture_output=True,
-                text=True,
-                timeout=120,
-                check=False,
-            )
+            result = run_capture(args, timeout=120)
 
-            videos = self._parse_flat_results(result.stdout)
+            videos = parse_flat_results(result.stdout)
 
             total = len(videos)
             if total > limit:
@@ -523,21 +245,6 @@ class YtdlpAdapter:
             self._log(f"[PLAYLIST] yt-dlp not found or error: {e}")
             logger.warning("Playlist fetch failed: %s", e)
             return []
-
-    @staticmethod
-    def _normalize_playlist_url(url: str) -> str:
-        """Normalize YouTube watch URLs carrying a list param to playlist URLs.
-
-        Non-YouTube URLs are returned unchanged.
-        """
-        parsed = urlparse(url)
-        if "youtube.com" in parsed.netloc or "youtu.be" in parsed.netloc:
-            query = parse_qs(parsed.query)
-            if "list" in query and not (
-                parsed.path.startswith("/playlist") or parsed.path.startswith("/music/playlist")
-            ):
-                return f"https://www.youtube.com/playlist?list={query['list'][0]}"
-        return url
 
     def _log_download_start(self, video: Video, fmt: str) -> None:
         """Log download start information."""
@@ -572,35 +279,6 @@ class YtdlpAdapter:
         if self._config.embed_thumbnail and fmt in THUMBNAIL_EMBED_FORMATS:
             self._log(f"[METADATA] {video.title} artwork embedded")
 
-    @staticmethod
-    def _signal_process_group(process: subprocess.Popen, sig: int) -> None:
-        """Send ``sig`` to yt-dlp's whole process group.
-
-        The child is spawned with ``start_new_session=True``, so its group also
-        holds the ffmpeg helpers yt-dlp spawns; signalling yt-dlp alone leaves
-        ffmpeg muxing into the output directory after a cancel. Falls back to
-        signalling yt-dlp itself when the group cannot be targeted (the group
-        may already be gone, or the platform has no process groups).
-        """
-        try:
-            os.killpg(os.getpgid(process.pid), sig)
-            return
-        except (AttributeError, ProcessLookupError, PermissionError):
-            logger.debug("Process group unavailable, signalling yt-dlp directly")
-        if sig == signal.SIGKILL:
-            process.kill()
-        else:
-            process.terminate()
-
-    @classmethod
-    def _terminate_process_group(cls, process: subprocess.Popen) -> None:
-        """Terminate the process group, escalating to SIGKILL after a grace period."""
-        cls._signal_process_group(process, signal.SIGTERM)
-        try:
-            process.wait(timeout=2)
-        except subprocess.TimeoutExpired:
-            cls._signal_process_group(process, signal.SIGKILL)
-
     def _run_process(
         self,
         args: list[str],
@@ -609,141 +287,24 @@ class YtdlpAdapter:
         cancel_event: threading.Event | None,
         progress_callback: ProgressCallback | None,
     ) -> tuple[int, list[str], list[str], list[str]]:
+        """Run yt-dlp for ``video`` and remember the last reported destination.
+
+        See :func:`youmudow.adapters.ytdlp_process.run_process` for the return
+        tuple and the inactivity-timeout semantics.
         """
-        Run yt-dlp subprocess and stream output.
-
-        Returns a ``(returncode, error_lines, destinations, already_downloaded)``
-        tuple; the destinations are the output files yt-dlp reported for this
-        run, and ``already_downloaded`` lists the files yt-dlp reported as
-        already present (a pre-existing file explicitly attributed to this run).
-        Returns (-1, [], [], []) if cancelled before process starts.
-        """
-        error_lines: list[str] = []
-        destinations: list[str] = []
-        already_downloaded: list[str] = []
-        output_lock = threading.Lock()
-        # Set by the reader thread for every line yt-dlp writes, so the main
-        # loop can tell an active download from a silent/hung one.
-        activity = threading.Event()
-
-        try:
-            process = subprocess.Popen(
-                args,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                cwd=str(output_path),
-                start_new_session=True,
-            )
-        except FileNotFoundError as e:
-            raise YtDlpNotFoundError(
-                "yt-dlp binary not found. Install it with: pip install yt-dlp"
-            ) from e
-
-        def read_output() -> None:
-            stdout = process.stdout
-            if stdout is None:
-                return
-            try:
-                for line in stdout:
-                    if cancel_event and cancel_event.is_set():
-                        self._signal_process_group(process, signal.SIGTERM)
-                        break
-                    if line:
-                        activity.set()
-                        stripped = line.strip()
-                        with output_lock:
-                            if "error" in stripped.lower() or "warning" in stripped.lower():
-                                error_lines.append(stripped)
-                        dest_match = _DESTINATION_RE.search(stripped)
-                        if dest_match:
-                            destinations.append(dest_match.group(1))
-                        else:
-                            already_match = _ALREADY_DOWNLOADED_RE.search(stripped)
-                            if already_match:
-                                destinations.append(already_match.group(1))
-                                already_downloaded.append(already_match.group(1))
-                        self._log(stripped)
-                        if progress_callback:
-                            info = self._parse_progress(stripped)
-                            if info:
-                                video.progress = info.progress
-                                progress_callback(info.progress, info.speed)
-            except (OSError, ValueError, json.JSONDecodeError) as e:
-                logger.debug("Output reader stopped for %s: %s", video.url, e)
-
-        reader = threading.Thread(target=read_output, daemon=True)
-        reader.start()
-
-        timeout_reached = False
-        try:
-            if cancel_event is None:
-                process.wait(timeout=self._config.download_timeout)
-            else:
-                deadline = time.monotonic() + self._config.download_timeout
-                while process.poll() is None:
-                    if cancel_event.is_set():
-                        self._log("[CANCEL] Cancelled, terminating process")
-                        self._terminate_process_group(process)
-                        break
-                    # download_timeout is an inactivity budget: every line
-                    # yt-dlp writes pushes the deadline back, so a download that
-                    # is still reporting progress is never killed.
-                    activity.clear()
-                    if activity.wait(timeout=0.1):
-                        deadline = time.monotonic() + self._config.download_timeout
-                    elif time.monotonic() >= deadline:
-                        self._log("[ERROR] Download timed out")
-                        self._terminate_process_group(process)
-                        timeout_reached = True
-                        break
-        except subprocess.TimeoutExpired:
-            self._log("[ERROR] Download timed out")
-            self._signal_process_group(process, signal.SIGKILL)
-            timeout_reached = True
-        finally:
-            if process.poll() is None:
-                self._terminate_process_group(process)
-            # Close the read end from the main thread: this forces the reader to
-            # hit EOF even if the process died without closing stdout, so the
-            # reader thread cannot stay alive blocked on readline().
-            stdout = process.stdout
-            if stdout is not None:
-                try:
-                    stdout.close()
-                except OSError:
-                    pass
-
-        reader.join(timeout=2)
-        if reader.is_alive():
-            logger.warning("Output reader thread still alive for %s", video.url)
+        result = run_process(
+            args,
+            output_path,
+            video,
+            cancel_event,
+            progress_callback,
+            self._config,
+            self._log,
+        )
+        destinations = result[2]
         if destinations:
             self._last_destination = Path(destinations[-1])
-
-        if timeout_reached:
-            return -2, error_lines, destinations, already_downloaded
-        return process.returncode, error_lines, destinations, already_downloaded
-
-    def _is_cookie_error(self, error_output: str) -> bool:
-        """Check if error output indicates a cookie/auth problem."""
-        keywords = (
-            "could not find",
-            "cookies",
-            "database",
-            "chrome",
-            "firefox",
-            "edge",
-            "brave",
-            "opera",
-            "vivaldi",
-            "profile",
-            "not found",
-            "locked",
-        )
-        lower = error_output.lower()
-        return any(kw in lower for kw in keywords)
+        return result
 
     def download(
         self,
@@ -752,6 +313,7 @@ class YtdlpAdapter:
         progress_callback: ProgressCallback | None = None,
         cancel_event: threading.Event | None = None,
     ) -> Video:
+        """Download ``video`` into ``output_path``, with retries and cancel support."""
         output_path.mkdir(parents=True, exist_ok=True)
         video.status = DownloadStatus.DOWNLOADING
         video.path = output_path
@@ -767,11 +329,13 @@ class YtdlpAdapter:
         last_error = ""
         cookie_failed = False
         cancelled = False
+        destinations: list[str] = []
+        already_downloaded: list[str] = []
         # yt-dlp's output template keeps whatever already exists in the output
         # directory. To never mistake a pre-existing file for this download,
         # snapshot the directory before the first attempt and drop any
         # destination captured by an earlier run on this adapter.
-        pre_existing = self._existing_files(output_path)
+        pre_existing = existing_files(output_path)
         self._last_destination = None
 
         try:
@@ -804,8 +368,8 @@ class YtdlpAdapter:
                 # _run_process reports per-call destinations and already-
                 # downloaded files as the third and fourth elements. Older
                 # mocks in tests may return a shorter tuple; tolerate that.
-                destinations: list[str] = result[2] if len(result) > 2 else []
-                already_downloaded: list[str] = result[3] if len(result) > 3 else []
+                destinations = result[2] if len(result) > 2 else []
+                already_downloaded = result[3] if len(result) > 3 else []
                 if destinations:
                     last_destination = Path(destinations[-1])
                     self._last_destination = last_destination
@@ -830,7 +394,7 @@ class YtdlpAdapter:
                 self._log(f"[ERROR] {user_message} (code: {returncode})")
 
                 if (
-                    self._is_cookie_error(error_output)
+                    is_cookie_error(error_output)
                     and opts
                     and opts.use_cookies
                     and not cookie_failed
@@ -861,8 +425,13 @@ class YtdlpAdapter:
             video.status = DownloadStatus.ERROR
             video.error_message = video.error_message or last_error or "Download failed"
         else:
-            video.path = self._resolve_destination(
-                destinations, output_path, safe_title, pre_existing, already_downloaded
+            video.path = resolve_destination(
+                destinations,
+                output_path,
+                safe_title,
+                pre_existing,
+                already_downloaded,
+                captured=self._last_destination,
             )
             if video.path is None:
                 # Completion is only valid when a result file can be attributed
@@ -873,104 +442,3 @@ class YtdlpAdapter:
                 self._log(f"[ERROR] {video.error_message}")
 
         return video
-
-    def _resolve_destination(
-        self,
-        destinations: list[str],
-        output_path: Path,
-        safe_title: str,
-        preexisting: set[Path],
-        already_downloaded: list[str] | None = None,
-    ) -> Path | None:
-        """Resolve the file created by this run, never a pre-existing one.
-
-        Per-call ``destinations`` (parsed from yt-dlp output) are authoritative;
-        only a destination that did not exist before the run counts. A file
-        reported via the "has already been downloaded" line is accepted even if
-        pre-existing, because yt-dlp explicitly attributes it to this run.
-        Otherwise fall back to globbing for newly created files.
-        """
-        for raw in destinations:
-            candidate = Path(raw)
-            if candidate.is_file() and candidate not in preexisting:
-                return candidate
-        for raw in already_downloaded or []:
-            candidate = Path(raw)
-            if candidate.is_file():
-                return candidate
-        captured = self._last_destination
-        if captured is not None and captured.is_file() and captured not in preexisting:
-            return captured
-        return self._resolve_output_file(output_path, safe_title, preexisting)
-
-    @staticmethod
-    def _existing_files(output_path: Path) -> set[Path]:
-        """Return the set of regular files currently present in a directory."""
-        try:
-            return {path for path in output_path.glob("*") if path.is_file()}
-        except OSError:
-            return set()
-
-    def _resolve_output_file(
-        self, output_path: Path, safe_title: str, preexisting: set[Path]
-    ) -> Path | None:
-        """Resolve the file created by this download run.
-
-        Only files that did not exist before the download started are
-        considered, so a pre-existing file is never mistaken for the newly
-        downloaded one (regardless of mtime).
-        """
-        try:
-            new_files = [
-                path for path in output_path.glob("*") if path.is_file() and path not in preexisting
-            ]
-        except OSError:
-            return None
-
-        candidates = new_files
-        title_matches = [p for p in new_files if p.stem == safe_title]
-        if title_matches:
-            candidates = title_matches
-        if not candidates:
-            return None
-        candidates.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-        return candidates[0]
-
-    def _get_format_selector(self, fmt: str, quality: str = "best") -> str:
-        """Build yt-dlp format selector based on format and quality."""
-        if fmt in AUDIO_FORMATS:
-            return "bestaudio/best"
-
-        # Formatos de vídeo: usar tabla de calidades
-        quality_selector = _VIDEO_QUALITY_SELECTORS.get(quality.lower())
-        if quality_selector:
-            return quality_selector
-
-        return "bestvideo+bestaudio/best"
-
-    def _get_audio_quality(self, quality: str) -> str:
-        """Get audio quality setting for yt-dlp."""
-        quality = quality.lower()
-
-        quality_map = {
-            "320kbps": "0",
-            "256kbps": "1",
-            "192kbps": "2",
-            "128kbps": "3",
-            "96kbps": "4",
-            "64kbps": "5",
-        }
-
-        return quality_map.get(quality, "0")
-
-    def _parse_duration(self, duration_str: str) -> int:
-        try:
-            if ":" in duration_str:
-                parts = duration_str.split(":")
-                if len(parts) == 2:
-                    return int(parts[0]) * 60 + int(parts[1])
-                elif len(parts) == 3:
-                    return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
-            return int(float(duration_str))
-        except (ValueError, TypeError):
-            return 0
