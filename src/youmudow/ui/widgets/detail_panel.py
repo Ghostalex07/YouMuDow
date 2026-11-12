@@ -2,12 +2,16 @@
 
 import copy
 import logging
-import threading
 import tkinter as tk
 
 from youmudow.app.state import AppStateData
 from youmudow.domain.models import DownloadOptions, Video
+from youmudow.paths import cache_dir
+from youmudow.services.thumbnail_cache import ThumbnailCache
+from youmudow.services.thumbnail_loader import ThumbnailLoader
+from youmudow.services.thumbnail_service import ThumbnailService
 from youmudow.ui.styles.constants import FONT, SPACING, _c, add_hover_effect
+from youmudow.ui.widgets.components.thumbnail import photoimage_from_bytes
 from youmudow.ui.widgets.options_panel import OptionsPanel
 from youmudow.ui.widgets.queue_panel import QueuePanel
 
@@ -21,6 +25,9 @@ class DetailPanel(tk.Frame):
         super().__init__(parent, bg=_c("bg"))
         self._mw = main_window
         self._last_thumb_url: str | None = None
+        self._thumbnail_loader = ThumbnailLoader(
+            self._mw._root, ThumbnailCache(cache_dir()), ThumbnailService()
+        )
 
         self.grid(
             row=1,
@@ -255,36 +262,17 @@ class DetailPanel(tk.Frame):
         if not thumbnail_url:
             return
         self._last_thumb_url = thumbnail_url
+        self._thumbnail_loader.request(thumbnail_url, self._on_thumbnail_ready)
 
-        def _fetch_and_set() -> None:
-            try:
-                from urllib.request import urlopen
-
-                data = urlopen(thumbnail_url, timeout=5).read()
-                self._mw._schedule(_set_thumbnail, data, thumbnail_url)
-            except (OSError, ValueError) as e:
-                logger.debug("Could not fetch thumbnail %s: %s", thumbnail_url, e)
-
-        def _set_thumbnail(data: bytes, url: str) -> None:
-            if getattr(self, "_last_thumb_url", None) != url:
-                return
-            try:
-                import io
-
-                from PIL import Image, ImageTk
-
-                img = Image.open(io.BytesIO(data))
-                max_w = 240
-                max_h = 120
-                img.thumbnail((max_w, max_h), Image.LANCZOS)
-                self._tk_image = ImageTk.PhotoImage(img)
-                self._thumbnail_label.configure(image=self._tk_image, text="")
-            except ImportError:
-                self._thumbnail_label.configure(text=f"[Thumbnail: {url}]")
-            except (OSError, ValueError) as e:
-                logger.debug("Could not render thumbnail %s: %s", url, e)
-
-        threading.Thread(target=_fetch_and_set, daemon=True).start()
+    def _on_thumbnail_ready(self, url: str, data: bytes | None) -> None:
+        if self._last_thumb_url != url or data is None:
+            return
+        photo = photoimage_from_bytes(data, 240, 120)
+        if photo is None:
+            self._thumbnail_label.configure(text=f"[Thumbnail: {url}]")
+            return
+        self._tk_image = photo
+        self._thumbnail_label.configure(image=photo, text="")
 
     def _add_all_to_queue(self) -> None:
         opts = self.get_current_options()

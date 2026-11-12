@@ -27,6 +27,10 @@ class TestExtractVideoId:
     def test_shorts_url(self, service):
         assert service.extract_video_id("https://youtube.com/shorts/dQw4w9WgXcQ") == "dQw4w9WgXcQ"
 
+    def test_img_url(self, service):
+        url = "https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg"
+        assert service.extract_video_id(url) == "dQw4w9WgXcQ"
+
     def test_non_youtube_url(self, service):
         assert service.extract_video_id("https://example.com/video/123") is None
 
