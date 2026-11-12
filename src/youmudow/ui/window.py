@@ -238,6 +238,9 @@ class MainWindow:
         self._log_unsubscribe = self._event_bus.subscribe(EventType.LOG_OUTPUT, on_log)
         self._clear_unsubscribe = self._event_bus.subscribe(EventType.LOG_CLEAR, on_clear)
 
+        self._bind_shortcuts()
+
+    def _bind_shortcuts(self) -> None:
         self._root.bind("<Control-d>", lambda _: self._on_download_now())
         self._root.bind("<Control-q>", lambda _: self._detail_panel.enqueue_selected())
         self._root.bind("<Control-l>", lambda _: self._search_bar.search_entry.focus_set())
