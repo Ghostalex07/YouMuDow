@@ -9,6 +9,7 @@ import pytest
 from youmudow.app.controller import AppController
 from youmudow.app.state import AppMode, AppState
 from youmudow.domain.models import Video
+from youmudow.services.thumbnail_service import ThumbnailService
 
 
 class TestAppController:
@@ -476,3 +477,31 @@ class TestControllerCallbacks:
             cb("plain")
         levels = [call.args[1] for call in emit.call_args_list]
         assert levels == ["error", "warning", "success", "info", "info"]
+
+
+class TestApplyThumbnail:
+    """The shared _apply_thumbnail helper (deduped thumbnail loops)."""
+
+    @pytest.fixture
+    def controller(self):
+        svc = Mock()
+        svc.search.return_value = []
+        svc.get_metadata.return_value = None
+        svc.get_playlist.return_value = []
+        return AppController(
+            search_service=svc,
+            download_service=Mock(),
+            thumbnail_service=ThumbnailService(),
+            state_manager=Mock(),
+            history_service=Mock(),
+        )
+
+    def test_apply_thumbnail_sets_youtube_thumbnail(self, controller):
+        v = Video(title="t", url="https://youtu.be/abc12345678")
+        controller._apply_thumbnail(v)
+        assert v.thumbnail == "https://img.youtube.com/vi/abc12345678/hqdefault.jpg"
+
+    def test_apply_thumbnail_skips_non_youtube(self, controller):
+        v = Video(title="t", url="https://soundcloud.com/x/y")
+        controller._apply_thumbnail(v)
+        assert v.thumbnail == ""
