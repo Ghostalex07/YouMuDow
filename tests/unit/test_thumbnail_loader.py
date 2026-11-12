@@ -54,7 +54,7 @@ def test_loader_uses_cache_when_present(root, tmp_path):
     assert results["https://youtu.be/vid12345678"] == b"jpgdata"
 
 
-def test_stale_request_does_not_overwrite(root, tmp_path, monkeypatch):
+def test_multiple_requests_all_deliver(root, tmp_path, monkeypatch):
     import youmudow.services.thumbnail_loader as loader_mod
 
     cache = ThumbnailCache(tmp_path)
@@ -82,11 +82,11 @@ def test_stale_request_does_not_overwrite(root, tmp_path, monkeypatch):
             lambda url, data: results.setdefault(url, data),
         )
         release.set()
-        assert _wait_for(root, lambda: "https://youtu.be/bbbbbbbbbbb" in results)
+        assert _wait_for(root, lambda: len(results) == 2)
     finally:
         loader.shutdown()
     assert results["https://youtu.be/bbbbbbbbbbb"] == b"fast"
-    assert "https://youtu.be/aaaaaaaaaaa" not in results
+    assert results["https://youtu.be/aaaaaaaaaaa"] == b"slow"
 
 
 def test_photoimage_from_bytes_valid(root):

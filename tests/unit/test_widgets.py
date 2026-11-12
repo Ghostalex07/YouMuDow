@@ -47,8 +47,8 @@ def state_window(tk_root):
     mw._main_content_frame = tk.Frame(tk_root)
     mw._main_content_frame.grid(row=0, column=0)
     mw._selected_video = None
-    mw._results_table.is_playlist = False
-    mw._results_table.playlist_videos = []
+    mw._results_cards.is_playlist = False
+    mw._results_cards.playlist_videos = []
     return mw
 
 
@@ -106,31 +106,6 @@ class TestSearchBar:
         assert sb._search_btn.cget("state") == "disabled"
         sb.update_button_states(False, False)
         assert sb._search_btn.cget("state") == "normal"
-
-
-class TestResultsTable:
-    def test_init(self, tk_root, mock_window):
-        from youmudow.ui.widgets.results_table import ResultsTable
-
-        rt = ResultsTable(tk_root, mock_window)
-        assert rt.results_tree is not None
-
-    def test_clear_results(self, tk_root, mock_window):
-        from youmudow.ui.widgets.results_table import ResultsTable
-
-        rt = ResultsTable(tk_root, mock_window)
-        rt.clear_results()
-
-    def test_update_results(self, tk_root, mock_window):
-        from youmudow.domain.models import Video
-        from youmudow.ui.widgets.results_table import ResultsTable
-
-        rt = ResultsTable(tk_root, mock_window)
-        videos = [
-            Video(title="Test 1", url="https://example.com/1"),
-            Video(title="Test 2", url="https://example.com/2"),
-        ]
-        rt.update_results(videos)
 
 
 class TestStatusBar:
@@ -311,7 +286,7 @@ class TestDetailPanelActions:
             self._video("One", "https://youtu.be/1"),
             self._video("Two", "https://youtu.be/2"),
         ]
-        state_window._results_table.get_selected_videos.return_value = videos
+        state_window._results_cards.get_selected_videos.return_value = videos
 
         detail_panel.enqueue_selected()
 
@@ -321,7 +296,7 @@ class TestDetailPanelActions:
 
     def test_enqueue_selected_falls_back_to_selected_video(self, detail_panel, state_window):
         video = self._video()
-        state_window._results_table.get_selected_videos.return_value = []
+        state_window._results_cards.get_selected_videos.return_value = []
         state_window._selected_video = video
 
         detail_panel.enqueue_selected()
@@ -333,9 +308,9 @@ class TestDetailPanelActions:
     def test_enqueue_selected_ignores_expanded_playlist_without_selection(
         self, detail_panel, state_window
     ):
-        state_window._results_table.get_selected_videos.return_value = []
-        state_window._results_table.is_playlist = True
-        state_window._results_table.playlist_videos = [self._video()]
+        state_window._results_cards.get_selected_videos.return_value = []
+        state_window._results_cards.is_playlist = True
+        state_window._results_cards.playlist_videos = [self._video()]
 
         detail_panel.enqueue_selected()
 
@@ -347,7 +322,7 @@ class TestDetailPanelActions:
             self._video("One", "https://youtu.be/1"),
             self._video("Two", "https://youtu.be/2"),
         ]
-        state_window._results_table.playlist_videos = videos
+        state_window._results_cards.playlist_videos = videos
 
         detail_panel._add_all_to_queue()
 

@@ -21,12 +21,19 @@ logger = logging.getLogger(__name__)
 class DetailPanel(tk.Frame):
     """Video details, download actions and the options/queue sub-panels."""
 
-    def __init__(self, parent: tk.Widget, main_window: object) -> None:
+    def __init__(
+        self,
+        parent: tk.Widget,
+        main_window: object,
+        thumbnail_loader: ThumbnailLoader | None = None,
+    ) -> None:
         super().__init__(parent, bg=_c("bg"))
         self._mw = main_window
         self._last_thumb_url: str | None = None
-        self._thumbnail_loader = ThumbnailLoader(
-            self._mw._root, ThumbnailCache(cache_dir()), ThumbnailService()
+        self._thumbnail_loader = (
+            thumbnail_loader
+            if thumbnail_loader is not None
+            else ThumbnailLoader(self._mw._root, ThumbnailCache(cache_dir()), ThumbnailService())
         )
 
         self.grid(
@@ -200,7 +207,7 @@ class DetailPanel(tk.Frame):
         add_hover_effect(self._queue_toggle_btn, "hover", "surface")
 
     # ------------------------------------------------------------------
-    # Public surface used by MainWindow / ResultsTable
+    # Public surface used by MainWindow / ResultsCards
     # ------------------------------------------------------------------
 
     def update_detail_panel(self, video: Video) -> None:
@@ -223,7 +230,7 @@ class DetailPanel(tk.Frame):
         self.queue.update_display(snapshot)
 
     def enqueue_selected(self) -> None:
-        selected = self._mw._results_table.get_selected_videos()
+        selected = self._mw._results_cards.get_selected_videos()
         if selected:
             opts = self.get_current_options()
             if opts is None:
@@ -233,7 +240,7 @@ class DetailPanel(tk.Frame):
             self._mw._controller.enqueue_multiple(selected)
             self._mw._set_status(f"Added {len(selected)} to queue")
             return
-        if self._mw._results_table.is_playlist and self._mw._results_table.playlist_videos:
+        if self._mw._results_cards.is_playlist and self._mw._results_cards.playlist_videos:
             return
         video = self._mw._selected_video
         if video is None:
@@ -247,8 +254,8 @@ class DetailPanel(tk.Frame):
         has_video = self._mw._selected_video is not None
         self._download_btn.configure(state="disabled" if is_busy or not has_video else "normal")
         self._open_folder_btn.configure(state="normal")
-        is_playlist = self._mw._results_table.is_playlist
-        has_playlist = bool(self._mw._results_table.playlist_videos)
+        is_playlist = self._mw._results_cards.is_playlist
+        has_playlist = bool(self._mw._results_cards.playlist_videos)
         self._add_all_btn.configure(state="normal" if is_playlist and has_playlist else "disabled")
         self.options.update_button_states(is_searching, is_downloading)
 
@@ -278,7 +285,7 @@ class DetailPanel(tk.Frame):
         opts = self.get_current_options()
         if opts is None:
             return
-        videos = self._mw._results_table.playlist_videos
+        videos = self._mw._results_cards.playlist_videos
         for video in videos:
             video.options = copy.copy(opts)
         self._mw._controller.enqueue_multiple(videos)

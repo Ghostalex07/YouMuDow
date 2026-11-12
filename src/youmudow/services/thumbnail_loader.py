@@ -21,10 +21,9 @@ class ThumbnailLoader:
     A single daemon worker drains requests and downloads bytes; it never
     touches Tk. Results are handed back through a thread-safe queue that a
     self-rescheduling ``after`` poller drains on the main thread, so callbacks
-    always fire in the UI thread. A monotonically increasing token marks each
-    request as "latest"; results whose token is no longer current are dropped,
-    so a slow thumbnail for a video the user has already left cannot overwrite
-    the newer selection.
+    always fire in the UI thread. Every request's result is delivered exactly
+    once; callers that render a single slot guard against stale results
+    themselves (the detail panel keys on the last requested URL).
     """
 
     def __init__(
@@ -36,24 +35,19 @@ class ThumbnailLoader:
         self._root = root
         self._cache = cache
         self._service = service
-        self._queue: queue.Queue[tuple[int, str, Callable[[str, bytes | None], None]] | None] = (
+        self._queue: queue.Queue[tuple[str, Callable[[str, bytes | None], None]] | None] = (
             queue.Queue()
         )
         self._results: queue.Queue[
-            tuple[int, str, bytes | None, Callable[[str, bytes | None], None]]
+            tuple[str, bytes | None, Callable[[str, bytes | None], None]]
         ] = queue.Queue()
         self._stop = threading.Event()
-        self._latest = 0
-        self._lock = threading.Lock()
         self._thread = threading.Thread(target=self._run, name="thumbnail-loader", daemon=True)
         self._thread.start()
         self._poll_id = self._root.after(_POLL_INTERVAL_MS, self._poll_results)
 
     def request(self, video_url: str, on_ready: Callable[[str, bytes | None], None]) -> None:
-        with self._lock:
-            self._latest += 1
-            token = self._latest
-        self._queue.put((token, video_url, on_ready))
+        self._queue.put((video_url, on_ready))
 
     def shutdown(self) -> None:
         self._stop.set()
@@ -72,12 +66,11 @@ class ThumbnailLoader:
             item = self._queue.get()
             if item is None:
                 return
-            token, video_url, on_ready = item
-            if self._stop.is_set() or not self._is_current(token):
+            video_url, on_ready = item
+            if self._stop.is_set():
                 continue
             data = self._fetch(video_url)
-            if self._is_current(token):
-                self._results.put((token, video_url, data, on_ready))
+            self._results.put((video_url, data, on_ready))
 
     def _fetch(self, video_url: str) -> bytes | None:
         video_id = self._service.extract_video_id(video_url)
@@ -97,10 +90,6 @@ class ThumbnailLoader:
             self._cache.put(video_id, data)
         return data
 
-    def _is_current(self, token: int) -> bool:
-        with self._lock:
-            return token == self._latest
-
     # ------------------------------------------------------------------
     # Main thread: drain results
     # ------------------------------------------------------------------
@@ -108,10 +97,9 @@ class ThumbnailLoader:
     def _poll_results(self) -> None:
         while True:
             try:
-                token, video_url, data, on_ready = self._results.get_nowait()
+                video_url, data, on_ready = self._results.get_nowait()
             except queue.Empty:
                 break
-            if self._is_current(token):
-                on_ready(video_url, data)
+            on_ready(video_url, data)
         if not self._stop.is_set():
             self._poll_id = self._root.after(_POLL_INTERVAL_MS, self._poll_results)
