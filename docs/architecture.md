@@ -64,10 +64,17 @@ Pure data models and validation, no I/O.
 
 External tooling behind a stable interface.
 
-- `ytdlp_adapter.py` — runs `yt-dlp` as a subprocess; builds download/search
-  argument lists, streams progress via callbacks, resolves the downloaded file,
-  and translates raw yt-dlp output into user-friendly error messages
-  (`parse_yt_dlp_error`).
+- `ytdlp_adapter.py` — `YtdlpAdapter`: orchestration of search, metadata,
+  playlist and download. It composes the helpers below and re-exports
+  `YtdlpConfig`, `ProgressInfo`, `parse_yt_dlp_error` and
+  `parse_cookie_error`, so existing imports keep working.
+- `ytdlp_args.py` — pure builders for the yt-dlp argument lists (format,
+  quality and subtitle selectors).
+- `ytdlp_parsing.py` — pure parsers: progress lines, metadata JSON, flat
+  playlist entries, durations and yt-dlp error messages.
+- `ytdlp_process.py` — subprocess execution, inactivity timeout, process-group
+  signals and cooperative cancellation.
+- `ytdlp_files.py` — resolves the file a finished download produced.
 - `browser_profiles.py` — detects installed browsers and their profile
   directories per platform (`check_browser_profile`, `get_available_browsers`,
   `get_all_browser_profiles`).
@@ -77,8 +84,15 @@ External tooling behind a stable interface.
 Business logic that coordinates adapters and domain objects.
 
 - `search_service.py` — search, single-video metadata and playlist fetching.
-- `download_service.py` — download queue with configurable concurrency, worker
-  threads, cancellation and progress events.
+- `download_service.py` — `DownloadService` owns the worker pool, the
+  concurrency limit and the callback fan-out; it re-exports the symbols moved
+  to the modules below so existing imports keep working.
+- `download_queue.py` — `DownloadQueue`, the single owner of queued videos,
+  plus the identity-or-URL matchers (`is_same_video`, `find_video_index`,
+  `find_entry_index`).
+- `download_worker.py` — `DownloadWorker`: one download from start to finish.
+- `download_events.py` — `DownloadEventType`, `DownloadProgress`,
+  `DownloadEvent`, the progress/event vocabulary shared with `app/state.py`.
 - `history_service.py` — persistent download history stored as JSON.
 - `thumbnail_service.py` — URL generation for video thumbnails.
 - `notification_service.py` — cross-platform desktop notifications
@@ -103,11 +117,18 @@ Coordination between the UI and services.
 Tkinter interface. No business logic lives here; every action is delegated to
 `AppController`.
 
-- `window.py` — `MainWindow`: main window, notebook tabs, menu bar, shortcuts.
-- `widgets/` — `search_bar`, `results_table`, `detail_panel`, `history_panel`,
+- `window.py` — `MainWindow`: composition and wiring of the notebook tabs and
+  shortcuts; menus, startup checks and side-effecting commands live in the
+  modules below.
+- `menubar.py` — builds the menu bar from the callbacks `MainWindow` provides.
+- `startup_checks.py` — startup checks (clipboard, yt-dlp, YouTube environment).
+- `actions.py` — log export, open download folder, about, yt-dlp update and
+  repair.
+- `widgets/` — `search_bar`, `results_table`, `detail_panel` (video details and
+  thumbnail, composed of `options_panel` and `queue_panel`), `history_panel`,
   `log_terminal`, `status_bar`.
-- `styles/` — theme definitions and ttk styling (`styles.py`, `theme.py`,
-  `constants.py`).
+- `styles/` — theme definitions, ttk styling and the repaint rule table
+  (`styles.py`, `theme.py`, `theme_apply.py`, `constants.py`).
 
 ## Entry Point
 

@@ -53,7 +53,8 @@ PYTHONPATH=src python3 -m pytest --cov=youmudow   # coverage report
 - Keep the dependency direction `ui → app → services → domain`; `adapters`
   provides external integrations.
 - Browser detection lives in `adapters/browser_profiles.py`, not `domain`.
-- yt-dlp error parsing lives in `adapters/ytdlp_adapter.py`.
+- yt-dlp error parsing lives in `adapters/ytdlp_parsing.py`; the adapter module
+  only orchestrates the calls.
 - Never swallow exceptions silently — use `logging.debug/exception`.
 
 ## Submitting Changes

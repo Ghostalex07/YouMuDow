@@ -122,12 +122,8 @@ The release workflow builds for Linux, Windows, and macOS automatically when you
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and how to submit changes.
+See [docs/contributing.md](docs/contributing.md) for development setup and how to submit changes.
 
 ## License
 
 [MIT](LICENSE)
-
-## AI/ML Use Restriction
-
-This project publishes [`robots.txt`](robots.txt) and [`ai.txt`](ai.txt) to explicitly prohibit the use of its contents for AI/ML training, dataset creation, evaluation, or model development. See [`ai.txt`](ai.txt) for full details.

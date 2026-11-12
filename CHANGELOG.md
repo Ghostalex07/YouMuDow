@@ -6,6 +6,26 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- Repository cleanup: `ai.txt`, `robots.txt` and the local packaging leftovers
+  are gone from the working tree, so a checkout contains only what the
+  application and its docs use
+- The yt-dlp adapter is split into `ytdlp_args.py` (CLI arguments),
+  `ytdlp_parsing.py` (progress, JSON, playlist, duration and error parsing),
+  `ytdlp_process.py` (subprocess execution, timeouts, process-group signals)
+  and `ytdlp_files.py` (output resolution); `ytdlp_adapter.py` keeps the
+  orchestration
+- The download service is split into `download_events.py`, `download_queue.py`
+  and `download_worker.py`; `download_service.py` keeps the pool and callback
+  orchestration
+- `DetailPanel` composes `options_panel.py` and `queue_panel.py`, and
+  `MainWindow` delegates menus, startup checks and actions to `menubar.py`,
+  `startup_checks.py` and `actions.py`
+- Every moved symbol keeps its original import path: the public API of
+  `YtdlpAdapter`, `DownloadService`, `DetailPanel` and `MainWindow` is
+  unchanged and existing imports keep working
+- Theme repainting no longer recurses through the widget tree; it is driven by
+  the rule table in `ui/styles/theme_apply.py`, which is unit-tested with a bare
+  Tk root instead of a full window
 - `DownloadQueue` is now the single owner of queued videos. `StateManager`
   holds a `DownloadQueue` instead of its own list, and the identity-or-URL
   matcher exists once instead of four times, so the state and the download
@@ -13,8 +33,17 @@ All notable changes to this project will be documented in this file.
 - `app/state.py` no longer keeps a parallel duplicate-URL guard that had to
   be kept in sync with `DownloadService._is_known`
 
+### Removed
+
+- `ai.txt` and `robots.txt`: a desktop application publishes no HTTP content,
+  so neither file ever had any effect
+- `build/`, `dist/`, `src/youmudow.egg-info/` and `UNKNOWN.egg-info/` — local
+  packaging artifacts, already covered by `.gitignore`
+
 ### Added
 
+- `py.typed` (PEP 561) is declared as package data, so type checkers read the
+  inline annotations of `youmudow` instead of treating it as untyped
 - `services/environment_service.py` detects the available JS runtime (deno,
   node, QuickJS) and the presence of the `yt-dlp-ejs` challenge-solver scripts,
   and can clear yt-dlp's player cache and refresh `yt-dlp[default]`

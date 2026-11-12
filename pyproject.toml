@@ -42,6 +42,9 @@ youmudow-cli = "youmudow.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+youmudow = ["py.typed"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py310"
