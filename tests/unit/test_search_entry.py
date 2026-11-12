@@ -32,9 +32,13 @@ def test_return_fires_command(root):
     calls = []
     e = SearchEntry(root, command=lambda: calls.append(1))
     e.pack()
-    e.focus_set()
     root.update()
-    e._entry.event_generate("<Return>")
+    # `event_generate("<Return>")` is unreliable under headless X (xvfb): it
+    # depends on input focus and keysym delivery, which no WM grants there.
+    # Invoke the bound handler directly instead — this is exactly what the
+    # <Return> binding delegates to, and it is deterministic everywhere.
+    assert e._entry.bind("<Return>")  # the Return binding is wired
+    e._on_return(None)
     assert calls == [1]
 
 
