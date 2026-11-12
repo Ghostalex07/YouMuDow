@@ -4,51 +4,23 @@ import copy
 import logging
 import threading
 import tkinter as tk
-import webbrowser
-from tkinter import filedialog, ttk
 
-from youmudow.adapters.browser_profiles import get_all_browser_profiles, get_available_browsers
 from youmudow.app.state import AppStateData
-from youmudow.domain.enums import DownloadStatus
 from youmudow.domain.models import DownloadOptions, Video
-from youmudow.domain.validators import (
-    SUPPORTED_FORMATS,
-    SUPPORTED_QUALITIES,
-    is_valid_rate_limit,
-)
 from youmudow.ui.styles.constants import FONT, SPACING, _c, add_hover_effect
+from youmudow.ui.widgets.options_panel import OptionsPanel
+from youmudow.ui.widgets.queue_panel import QueuePanel
 
 logger = logging.getLogger(__name__)
 
-_STATUS_DISPLAY: dict[DownloadStatus, tuple[str, str]] = {
-    DownloadStatus.READY: ("Queued", "-"),
-    DownloadStatus.QUEUED: ("Queued", "-"),
-    DownloadStatus.DOWNLOADING: ("Downloading", ""),
-    DownloadStatus.DONE: ("Completed", "100%"),
-    DownloadStatus.ERROR: ("Failed", "Failed"),
-    DownloadStatus.CANCELLED: ("Cancelled", "Cancelled"),
-}
-
-
-def _queue_row(video: Video) -> tuple[str, str, str]:
-    """Status label, title and progress for one queue panel row."""
-    label, progress = _STATUS_DISPLAY.get(video.status, ("Queued", "-"))
-    if not progress:
-        progress = f"{video.progress:.0f}%"
-    return (label, video.title[:60], progress)
-
-
-def _queue_iid(video: Video) -> str:
-    """Tree item id for a queue entry, unique per entry rather than per URL."""
-    return f"q{video.queue_id}"
-
 
 class DetailPanel(tk.Frame):
+    """Video details, download actions and the options/queue sub-panels."""
+
     def __init__(self, parent: tk.Widget, main_window: object) -> None:
         super().__init__(parent, bg=_c("bg"))
         self._mw = main_window
         self._last_thumb_url: str | None = None
-        self._queue_panel_visible = False
 
         self.grid(
             row=1,
@@ -58,23 +30,20 @@ class DetailPanel(tk.Frame):
             pady=(0, SPACING["lg"]),
         )
 
-        header_frame = tk.Frame(self, bg=_c("bg"))
-        header_frame.pack(fill="x", pady=(0, SPACING["xs"]))
+        # Builds and packs the "OPTIONS" header first so the layout order of
+        # this frame stays identical.
+        self.options = OptionsPanel(self, main_window)
 
-        self._detail_toggle_btn = tk.Button(
-            header_frame,
-            text="OPTIONS",
-            bg=_c("bg"),
-            fg=_c("text_secondary"),
-            font=FONT["label"],
-            relief="flat",
-            bd=0,
-            command=self._toggle_options,
-        )
-        self._detail_toggle_btn._theme = {"bg": "bg", "fg": "text_secondary"}
-        self._detail_toggle_btn.pack(side="left")
-        add_hover_effect(self._detail_toggle_btn, "hover", "bg", _c("text"), _c("text_secondary"))
+        self._build_thumbnail()
+        self._build_info_rows()
+        self._build_action_buttons()
+        self.queue = QueuePanel(main_window._main_content_frame, main_window)
 
+    # ------------------------------------------------------------------
+    # Widget construction
+    # ------------------------------------------------------------------
+
+    def _build_thumbnail(self) -> None:
         self._thumbnail_label = tk.Label(
             self,
             text="[No thumbnail]",
@@ -86,6 +55,7 @@ class DetailPanel(tk.Frame):
         )
         self._thumbnail_label.pack(fill="x", pady=(0, SPACING["sm"]))
 
+    def _build_info_rows(self) -> None:
         row_title = tk.Frame(self, bg=_c("surface"))
         row_title._bg_key = "surface"
         row_title.pack(fill="x", pady=(0, SPACING["xs"]))
@@ -130,6 +100,7 @@ class DetailPanel(tk.Frame):
             fill="x", pady=(SPACING["sm"], SPACING["md"])
         )
 
+    def _build_action_buttons(self) -> None:
         self._download_btn = tk.Button(
             self,
             text="Download",
@@ -151,26 +122,6 @@ class DetailPanel(tk.Frame):
         }
         self._download_btn.pack(fill="x", pady=(0, SPACING["sm"]))
         add_hover_effect(self._download_btn, "secondary", "primary")
-
-        self._retry_btn = tk.Button(
-            self,
-            text="Retry",
-            bg=_c("warning"),
-            fg="#000000",
-            activebackground=_c("warning"),
-            activeforeground="#000000",
-            relief="flat",
-            bd=0,
-            font=FONT["body"],
-            pady=6,
-            command=self._on_retry_download,
-        )
-        self._retry_btn._theme = {
-            "bg": "warning",
-            "fg": "#000000",
-            "activebg": "warning",
-            "activefg": "#000000",
-        }
 
         btn_row = tk.Frame(self, bg=_c("bg"))
         btn_row.pack(fill="x", pady=(0, SPACING["md"]))
@@ -241,337 +192,62 @@ class DetailPanel(tk.Frame):
         self._queue_toggle_btn.pack(side="left", fill="x", expand=True, padx=(SPACING["xs"], 0))
         add_hover_effect(self._queue_toggle_btn, "hover", "surface")
 
-        self._options_frame = tk.Frame(self, bg=_c("surface"))
-        self._options_frame._bg_key = "surface"
-        self._create_options()
-        self._create_queue_panel()
-
-    def _create_options(self) -> None:
-        of = self._options_frame
-        format_row = tk.Frame(of, bg=_c("surface"))
-        format_row._bg_key = "surface"
-        format_row.pack(fill="x", pady=(SPACING["sm"], SPACING["md"]))
-        tk.Label(
-            format_row,
-            text="Format:",
-            bg=_c("surface"),
-            fg=_c("text_secondary"),
-            font=FONT["small"],
-            width=10,
-            anchor="w",
-        ).pack(side="left")
-        self._format_var = tk.StringVar(value="mp3")
-        format_combo = ttk.Combobox(
-            format_row,
-            textvariable=self._format_var,
-            values=sorted(SUPPORTED_FORMATS),
-            state="readonly",
-            width=8,
-            font=FONT["body"],
-        )
-        format_combo.pack(side="left", padx=(0, SPACING["sm"]))
-
-        quality_row = tk.Frame(of, bg=_c("surface"))
-        quality_row._bg_key = "surface"
-        quality_row.pack(fill="x", pady=(0, SPACING["md"]))
-        tk.Label(
-            quality_row,
-            text="Quality:",
-            bg=_c("surface"),
-            fg=_c("text_secondary"),
-            font=FONT["small"],
-            width=10,
-            anchor="w",
-        ).pack(side="left")
-        self._quality_var = tk.StringVar(value="best")
-        quality_combo = ttk.Combobox(
-            quality_row,
-            textvariable=self._quality_var,
-            values=sorted(SUPPORTED_QUALITIES),
-            state="readonly",
-            width=10,
-            font=FONT["body"],
-        )
-        quality_combo.pack(side="left")
-
-        concurrent_row = tk.Frame(of, bg=_c("surface"))
-        concurrent_row._bg_key = "surface"
-        concurrent_row.pack(fill="x", pady=(0, SPACING["md"]))
-        tk.Label(
-            concurrent_row,
-            text="Concurrent:",
-            bg=_c("surface"),
-            fg=_c("text_secondary"),
-            font=FONT["small"],
-            width=10,
-            anchor="w",
-        ).pack(side="left")
-        self._concurrent_var = tk.IntVar(value=1)
-        concurrent_spin = tk.Spinbox(
-            concurrent_row,
-            from_=1,
-            to=4,
-            textvariable=self._concurrent_var,
-            state="readonly",
-            bg=_c("input_bg"),
-            fg=_c("text"),
-            relief="flat",
-            width=3,
-            font=FONT["body"],
-            command=self._on_concurrent_change,
-        )
-        concurrent_spin.pack(side="left", padx=(0, SPACING["sm"]))
-        tk.Label(
-            concurrent_row,
-            text="(1-4)",
-            bg=_c("surface"),
-            fg=_c("text_secondary"),
-            font=FONT["small"],
-        ).pack(side="left")
-
-        subtitles_row = tk.Frame(of, bg=_c("surface"))
-        subtitles_row._bg_key = "surface"
-        subtitles_row.pack(fill="x", pady=(0, SPACING["md"]))
-        self._subtitles_var = tk.BooleanVar(value=False)
-        subtitles_check = tk.Checkbutton(
-            subtitles_row,
-            text="Subtitles",
-            variable=self._subtitles_var,
-            bg=_c("surface"),
-            fg=_c("text"),
-            activebackground=_c("surface"),
-            activeforeground=_c("text"),
-            selectcolor=_c("surface"),
-            relief="flat",
-            font=FONT["body"],
-            command=self._on_subtitles_toggle,
-        )
-        subtitles_check.pack(side="left")
-        self._subtitle_lang_var = tk.StringVar(value="en")
-        self._subtitle_lang_entry = tk.Entry(
-            subtitles_row,
-            textvariable=self._subtitle_lang_var,
-            bg=_c("input_bg"),
-            fg=_c("text"),
-            relief="flat",
-            font=FONT["small"],
-            width=10,
-        )
-        self._subtitle_lang_entry.pack(side="left", padx=(SPACING["sm"], 0))
-        tk.Label(
-            subtitles_row,
-            text="(en,es,fr...)",
-            bg=_c("surface"),
-            fg=_c("text_secondary"),
-            font=FONT["small"],
-        ).pack(side="left", padx=(2, 0))
-        self._embed_subs_var = tk.BooleanVar(value=False)
-        self._embed_subs_check = tk.Checkbutton(
-            subtitles_row,
-            text="Embed",
-            variable=self._embed_subs_var,
-            bg=_c("surface"),
-            fg=_c("text_secondary"),
-            activebackground=_c("surface"),
-            activeforeground=_c("text"),
-            selectcolor=_c("surface"),
-            relief="flat",
-            font=FONT["small"],
-        )
-        self._embed_subs_check.pack(side="left", padx=(SPACING["sm"], 0))
-
-        auth_row = tk.Frame(of, bg=_c("surface"))
-        auth_row._bg_key = "surface"
-        auth_row.pack(fill="x", pady=(0, SPACING["md"]))
-        tk.Label(
-            auth_row,
-            text="Auth:",
-            bg=_c("surface"),
-            fg=_c("text_secondary"),
-            font=FONT["small"],
-            width=10,
-            anchor="w",
-        ).pack(side="left")
-        self._use_cookies_var = tk.BooleanVar(value=False)
-        self._cookies_source_var = tk.StringVar(value="browser")
-        self._cookies_file_var = tk.StringVar(value="")
-        cookies_check = tk.Checkbutton(
-            auth_row,
-            text="Cookies",
-            variable=self._use_cookies_var,
-            bg=_c("surface"),
-            fg=_c("text"),
-            activebackground=_c("surface"),
-            activeforeground=_c("text"),
-            selectcolor=_c("surface"),
-            relief="flat",
-            font=FONT["small"],
-            command=self._on_cookies_toggle,
-        )
-        cookies_check.pack(side="left")
-        installed_browsers = get_available_browsers()
-        default_browser = installed_browsers[0] if installed_browsers else "chrome"
-        self._browser_var = tk.StringVar(value=default_browser)
-        browser_combo = ttk.Combobox(
-            auth_row,
-            textvariable=self._browser_var,
-            values=installed_browsers if installed_browsers else ["chrome"],
-            state="readonly",
-            width=8,
-            font=FONT["small"],
-        )
-        browser_combo.pack(side="left", padx=(SPACING["sm"], 0))
-        browser_combo.bind("<<ComboboxSelected>>", self._on_browser_changed)
-        self._profile_var = tk.StringVar(value="Default")
-        self._profile_combo = ttk.Combobox(
-            auth_row,
-            textvariable=self._profile_var,
-            values=["Default"],
-            state="readonly",
-            width=10,
-            font=FONT["small"],
-        )
-        self._profile_combo.pack(side="left", padx=(SPACING["sm"], 0))
-        self._cookies_file_btn = tk.Button(
-            auth_row,
-            text="...",
-            bg=_c("surface"),
-            fg=_c("text"),
-            relief="flat",
-            font=FONT["body"],
-            width=2,
-            command=self._on_select_cookies_file,
-        )
-        self._cookies_file_btn._theme = {"bg": "surface", "fg": "text"}
-        self._cookies_file_btn.pack(side="left", padx=(SPACING["sm"], 0))
-        add_hover_effect(self._cookies_file_btn, "hover", "surface")
-
-        extra_row = tk.Frame(of, bg=_c("surface"))
-        extra_row._bg_key = "surface"
-        extra_row.pack(fill="x", pady=(0, SPACING["md"]))
-        tk.Label(
-            extra_row,
-            text="Options:",
-            bg=_c("surface"),
-            fg=_c("text_secondary"),
-            font=FONT["small"],
-            width=10,
-            anchor="w",
-        ).pack(side="left")
-        self._rate_limit_var = tk.StringVar(value="")
-        rate_entry = tk.Entry(
-            extra_row,
-            textvariable=self._rate_limit_var,
-            bg=_c("input_bg"),
-            fg=_c("text"),
-            relief="flat",
-            font=FONT["small"],
-            width=8,
-        )
-        rate_entry.pack(side="left", padx=(0, SPACING["sm"]))
-        tk.Label(
-            extra_row,
-            text="Rate (e.g. 1M)",
-            bg=_c("surface"),
-            fg=_c("text_secondary"),
-            font=FONT["small"],
-        ).pack(side="left", padx=(0, SPACING["md"]))
-        self._split_chapters_var = tk.BooleanVar(value=False)
-        split_check = tk.Checkbutton(
-            extra_row,
-            text="Split chapters",
-            variable=self._split_chapters_var,
-            bg=_c("surface"),
-            fg=_c("text"),
-            activebackground=_c("surface"),
-            activeforeground=_c("text"),
-            selectcolor=_c("surface"),
-            relief="flat",
-            font=FONT["small"],
-        )
-        split_check.pack(side="left")
-
-        self._options_frame.pack_forget()
-        self._on_subtitles_toggle()
-
-    def _create_queue_panel(self) -> None:
-        parent = self._mw._main_content_frame
-        self._queue_frame = tk.Frame(parent, bg=_c("surface"))
-        self._queue_frame._bg_key = "surface"
-        self._queue_frame.grid(
-            row=2, column=0, columnspan=2, sticky="ew", padx=SPACING["xl"], pady=(0, SPACING["lg"])
-        )
-
-        qheader = tk.Frame(self._queue_frame, bg=_c("surface"))
-        qheader._bg_key = "surface"
-        qheader.pack(fill="x", pady=(SPACING["sm"], SPACING["xs"]))
-        tk.Label(
-            qheader, text="QUEUE", bg=_c("surface"), fg=_c("text_secondary"), font=FONT["label"]
-        ).pack(side="left", padx=SPACING["sm"])
-        self._queue_count_label = tk.Label(
-            qheader, text="0 queued", bg=_c("surface"), fg=_c("text_secondary"), font=FONT["small"]
-        )
-        self._queue_count_label.pack(side="right", padx=SPACING["sm"])
-
-        qcols = ("status", "title", "progress")
-        self._queue_tree = ttk.Treeview(
-            self._queue_frame, columns=qcols, show="headings", height=5, style="Modern.Treeview"
-        )
-        self._queue_tree.heading("status", text="STATUS")
-        self._queue_tree.heading("title", text="TITLE")
-        self._queue_tree.heading("progress", text="PROGRESS")
-        self._queue_tree.column("status", width=100)
-        self._queue_tree.column("title", width=300)
-        self._queue_tree.column("progress", width=80)
-
-        qscroll = ttk.Scrollbar(
-            self._queue_frame, orient="vertical", command=self._queue_tree.yview
-        )
-        self._queue_tree.configure(yscrollcommand=qscroll.set)
-        self._queue_tree.pack(
-            side="left", fill="both", expand=True, padx=(SPACING["sm"], 0), pady=(0, SPACING["sm"])
-        )
-        qscroll.pack(side="right", fill="y", pady=(0, SPACING["sm"]), padx=(0, SPACING["sm"]))
-        self._queue_tree.bind("<Button-3>", self._on_queue_right_click)
+    # ------------------------------------------------------------------
+    # Public surface used by MainWindow / ResultsTable
+    # ------------------------------------------------------------------
 
     def update_detail_panel(self, video: Video) -> None:
         self._detail_title.configure(text=video.title or "-")
         self._detail_uploader.configure(text=video.uploader or "-")
         self._load_thumbnail(video)
-        self._format_var.set(video.options.file_format)
-        self._quality_var.set(video.options.quality)
-        self._subtitles_var.set(video.options.subtitles)
-        self._subtitle_lang_var.set(video.options.subtitle_lang)
-        self._embed_subs_var.set(video.options.embed_subtitles)
-        self._use_cookies_var.set(video.options.use_cookies)
-        self._rate_limit_var.set(video.options.rate_limit or "")
-        self._split_chapters_var.set(video.options.split_chapters or False)
+        self.options.update_for_video(video)
 
-        if video.options.cookies_file:
-            self._cookies_source_var.set("file")
-            self._cookies_file_var.set(video.options.cookies_file)
-        else:
-            self._cookies_source_var.set("browser")
-            blist = get_available_browsers()
-            saved_browser = video.options.cookies_from_browser or "chrome"
-            self._browser_var.set(
-                saved_browser if saved_browser in blist else (blist[0] if blist else "chrome")
-            )
-            self._on_browser_changed()
-            saved_profile = video.options.cookies_profile or "Default"
-            current_profiles = list(self._profile_combo["values"])
-            if saved_profile in current_profiles:
-                self._profile_var.set(saved_profile)
-            elif current_profiles:
-                self._profile_var.set(current_profiles[0])
-            else:
-                self._profile_var.set("Default")
+    def get_current_options(self) -> DownloadOptions | None:
+        return self.options.get_options()
 
-        if self._retry_btn.winfo_ismapped():
-            self._retry_btn.pack_forget()
-        if video.status == DownloadStatus.ERROR:
-            self._retry_btn.pack(fill="x", pady=(0, SPACING["sm"]))
-            add_hover_effect(self._retry_btn, "warning", "warning")
+    def apply_options_to_video(self, video: Video) -> None:
+        self.options.apply_to_video(video)
+
+    @property
+    def queue_panel_visible(self) -> bool:
+        return self.queue.visible
+
+    def update_queue(self, snapshot: AppStateData | None = None) -> None:
+        self.queue.update_display(snapshot)
+
+    def enqueue_selected(self) -> None:
+        selected = self._mw._results_table.get_selected_videos()
+        if selected:
+            opts = self.get_current_options()
+            if opts is None:
+                return
+            for video in selected:
+                video.options = copy.copy(opts)
+            self._mw._controller.enqueue_multiple(selected)
+            self._mw._set_status(f"Added {len(selected)} to queue")
+            return
+        if self._mw._results_table.is_playlist and self._mw._results_table.playlist_videos:
+            return
+        video = self._mw._selected_video
+        if video is None:
+            return
+        self.apply_options_to_video(video)
+        self._mw._controller.enqueue(video)
+        self._mw._set_status(f"Added to queue: {video.title}")
+
+    def update_button_states(self, is_searching: bool, is_downloading: bool) -> None:
+        is_busy = is_searching or is_downloading
+        has_video = self._mw._selected_video is not None
+        self._download_btn.configure(state="disabled" if is_busy or not has_video else "normal")
+        self._open_folder_btn.configure(state="normal")
+        is_playlist = self._mw._results_table.is_playlist
+        has_playlist = bool(self._mw._results_table.playlist_videos)
+        self._add_all_btn.configure(state="normal" if is_playlist and has_playlist else "disabled")
+        self.options.update_button_states(is_searching, is_downloading)
+
+    # ------------------------------------------------------------------
+    # Internal actions
+    # ------------------------------------------------------------------
 
     def _load_thumbnail(self, video: Video) -> None:
         self._thumbnail_label.configure(text="[No thumbnail]")
@@ -610,114 +286,6 @@ class DetailPanel(tk.Frame):
 
         threading.Thread(target=_fetch_and_set, daemon=True).start()
 
-    def _on_retry_download(self) -> None:
-        video = self._mw._selected_video
-        if video is None:
-            return
-        video.status = DownloadStatus.READY
-        video.error_message = ""
-        video.progress = 0.0
-        self._apply_options_to_video(video)
-        self._mw._controller.enqueue(video)
-        self._mw._controller.start_downloads()
-        self._mw._set_status(f"Retrying: {video.title}")
-
-    def _toggle_options(self) -> None:
-        if self._options_frame.winfo_ismapped():
-            self._options_frame.pack_forget()
-            self._detail_toggle_btn.configure(text="OPTIONS")
-        else:
-            self._options_frame.pack(
-                fill="both", expand=True, padx=SPACING["md"], pady=(0, SPACING["md"])
-            )
-            self._detail_toggle_btn.configure(text="OPTIONS")
-
-    def _on_concurrent_change(self) -> None:
-        try:
-            val = self._concurrent_var.get()
-        except (tk.TclError, TypeError, ValueError):
-            return
-        if hasattr(self._mw, "_controller") and self._mw._controller:
-            ds = self._mw._controller._download_service
-            ds.set_max_concurrent(val)
-
-    def _on_subtitles_toggle(self) -> None:
-        state = "normal" if self._subtitles_var.get() else "disabled"
-        self._subtitle_lang_entry.configure(state=state)
-        self._embed_subs_check.configure(state=state)
-
-    def _on_cookies_toggle(self) -> None:
-        self._browser_var.set(get_available_browsers()[0] if get_available_browsers() else "chrome")
-        self._on_browser_changed()
-
-    def _on_select_cookies_file(self) -> None:
-        file_path = filedialog.askopenfilename(
-            title="Select Cookies File",
-            filetypes=[("Netscape cookies", "*.txt"), ("All files", "*.*")],
-        )
-        if file_path:
-            self._use_cookies_var.set(True)
-            self._cookies_source_var.set("file")
-            self._cookies_file_var.set(file_path)
-
-    def _on_browser_changed(self, event=None) -> None:
-        browser = self._browser_var.get()
-        profiles = get_all_browser_profiles()
-        browser_profiles = profiles.get(browser, [])
-        profile_names = [p.name for p in browser_profiles] if browser_profiles else ["Default"]
-        self._profile_combo["values"] = profile_names
-        self._profile_var.set(profile_names[0] if profile_names else "Default")
-
-    def get_current_options(self) -> DownloadOptions | None:
-        rate = self._rate_limit_var.get().strip()
-        if rate and not is_valid_rate_limit(rate):
-            self._mw._set_status("Invalid rate limit. Use format: 1M, 500K, 2G")
-            return None
-        opts = DownloadOptions(
-            file_format=self._format_var.get(),
-            quality=self._quality_var.get(),
-            subtitles=self._subtitles_var.get(),
-            subtitle_lang=self._subtitle_lang_var.get(),
-            embed_subtitles=self._embed_subs_var.get(),
-            use_cookies=self._use_cookies_var.get(),
-            rate_limit=rate or None,
-            split_chapters=self._split_chapters_var.get(),
-        )
-        if opts.use_cookies:
-            if self._cookies_source_var.get() == "file" and self._cookies_file_var.get():
-                opts.cookies_file = self._cookies_file_var.get()
-            else:
-                opts.cookies_from_browser = self._browser_var.get()
-                opts.cookies_profile = (
-                    self._profile_var.get() if self._profile_var.get() != "Default" else None
-                )
-        return opts
-
-    def apply_options_to_video(self, video: Video) -> None:
-        opts = self.get_current_options()
-        if opts is not None:
-            video.options = opts
-
-    def _on_enqueue(self) -> None:
-        selected = self._mw._results_table.get_selected_videos()
-        if selected:
-            opts = self.get_current_options()
-            if opts is None:
-                return
-            for video in selected:
-                video.options = copy.copy(opts)
-            self._mw._controller.enqueue_multiple(selected)
-            self._mw._set_status(f"Added {len(selected)} to queue")
-            return
-        if self._mw._results_table.is_playlist and self._mw._results_table.playlist_videos:
-            return
-        video = self._mw._selected_video
-        if video is None:
-            return
-        self.apply_options_to_video(video)
-        self._mw._controller.enqueue(video)
-        self._mw._set_status(f"Added to queue: {video.title}")
-
     def _add_all_to_queue(self) -> None:
         opts = self.get_current_options()
         if opts is None:
@@ -729,85 +297,5 @@ class DetailPanel(tk.Frame):
         self._mw._set_status(f"Added {len(videos)} videos to queue")
 
     def _toggle_queue_panel(self) -> None:
-        if self._queue_panel_visible:
-            self._queue_frame.grid_remove()
-            self._queue_panel_visible = False
-            self._queue_toggle_btn.configure(text="Queue")
-        else:
-            self._queue_frame.grid()
-            self._queue_panel_visible = True
-            self._queue_toggle_btn.configure(text="Queue")
-            self._update_queue_display()
-
-    def _update_queue_display(self, snapshot: AppStateData | None = None) -> None:
-        if snapshot is None:
-            snapshot = self._mw._controller.state.get_snapshot()
-
-        buckets = (
-            snapshot.queue,
-            snapshot.active_downloads,
-            snapshot.completed_downloads,
-            snapshot.failed_downloads,
-        )
-        desired: list[tuple[str, tuple]] = []
-        used_iids: set[str] = set()
-        for bucket in buckets:
-            for v in bucket:
-                iid = _queue_iid(v)
-                if iid in used_iids:
-                    iid = f"{iid}-{len(used_iids)}"
-                used_iids.add(iid)
-                desired.append((iid, _queue_row(v)))
-
-        desired_iids = set(used_iids)
-        existing_iids = set(self._queue_tree.get_children(""))
-
-        for iid in existing_iids - desired_iids:
-            self._queue_tree.delete(iid)
-
-        for iid, values in desired:
-            if iid in existing_iids:
-                current = self._queue_tree.item(iid, "values")
-                if current != values:
-                    self._queue_tree.item(iid, values=values)
-            else:
-                self._queue_tree.insert("", "end", iid=iid, values=values)
-                existing_iids.add(iid)
-
-        for i, (iid, _) in enumerate(desired):
-            self._queue_tree.move(iid, "", i)
-
-        total = sum(len(bucket) for bucket in buckets)
-        self._queue_count_label.configure(text=f"{total} items")
-
-    def _on_queue_right_click(self, event: tk.Event) -> None:
-        item = self._queue_tree.identify_row(event.y)
-        if not item:
-            return
-        self._queue_tree.selection_set(item)
-        snapshot = self._mw._controller.state.get_snapshot()
-        all_videos = (
-            list(snapshot.queue)
-            + list(snapshot.active_downloads)
-            + list(snapshot.completed_downloads)
-            + list(snapshot.failed_downloads)
-        )
-        entry_id = item[1:].split("-", 1)[0]
-        video = next((v for v in all_videos if str(v.queue_id) == entry_id), None)
-        if not video:
-            return
-        menu = tk.Menu(self._mw._root, tearoff=0, bg=_c("surface"), fg=_c("text"))
-        menu.add_command(
-            label="Remove from queue", command=lambda: self._mw._controller.remove_from_queue(video)
-        )
-        menu.add_command(label="Open in browser", command=lambda: webbrowser.open(video.url))
-        menu.tk_popup(event.x_root, event.y_root)
-
-    def update_button_states(self, is_searching: bool, is_downloading: bool) -> None:
-        is_busy = is_searching or is_downloading
-        has_video = self._mw._selected_video is not None
-        self._download_btn.configure(state="disabled" if is_busy or not has_video else "normal")
-        self._open_folder_btn.configure(state="normal")
-        is_playlist = self._mw._results_table.is_playlist
-        has_playlist = bool(self._mw._results_table.playlist_videos)
-        self._add_all_btn.configure(state="normal" if is_playlist and has_playlist else "disabled")
+        self.queue.toggle()
+        self._queue_toggle_btn.configure(text="Queue")

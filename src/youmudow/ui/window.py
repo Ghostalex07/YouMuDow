@@ -1,46 +1,46 @@
 """Main window for YouMuDow.
 
 Tkinter-based GUI layer with modern dark theme.
-All business logic is delegated to the controller.
+All business logic is delegated to the controller. Menu construction, startup
+checks, file actions and settings persistence live in sibling modules; this
+class composes them and wires the controller/state callbacks.
 """
 
 import copy
 import logging
-import platform
-import subprocess
 import threading
 import tkinter as tk
 from collections.abc import Callable
-from datetime import datetime
 from pathlib import Path
-from tkinter import filedialog, messagebox, ttk
+from tkinter import ttk
 from typing import TYPE_CHECKING, Any
 
 from youmudow import __version__
-from youmudow.adapters.browser_profiles import get_available_browsers
 from youmudow.app.events import EventBus, EventType, get_event_bus
 from youmudow.app.state import AppMode, AppState, AppStateData
 from youmudow.domain.models import Video
-from youmudow.domain.validators import (
-    is_playlist_url,
-    is_supported_url,
-    is_valid_rate_limit,
+from youmudow.domain.validators import is_playlist_url, is_supported_url
+from youmudow.ui.actions import choose_output_folder, export_logs, open_output_folder
+from youmudow.ui.menubar import MenuCallbacks, create_menubar
+from youmudow.ui.startup_checks import (
+    check_clipboard,
+    check_ytdlp,
+    install_ytdlp_update,
+    repair_environment,
+    show_about,
+    show_ytdlp_version,
 )
-from youmudow.services.environment_service import (
-    detect_js_runtime,
-    is_ejs_installed,
-    repair_youtube_environment,
-)
-from youmudow.services.updater_service import get_ytdlp_version, update_ytdlp
-from youmudow.ui.styles.constants import _COLOR_MAP, FONT, SPACING, _c
+from youmudow.ui.styles.constants import FONT, SPACING, _c
 from youmudow.ui.styles.styles import configure_styles
 from youmudow.ui.styles.theme import ThemeName, get_theme_manager
+from youmudow.ui.styles.theme_apply import apply_theme_colors
 from youmudow.ui.widgets.detail_panel import DetailPanel
 from youmudow.ui.widgets.history_panel import HistoryPanel
 from youmudow.ui.widgets.log_terminal import LogTerminal
 from youmudow.ui.widgets.results_table import ResultsTable
 from youmudow.ui.widgets.search_bar import SearchBar
 from youmudow.ui.widgets.status_bar import StatusBar
+from youmudow.ui.window_settings import apply_settings, save_settings
 
 if TYPE_CHECKING:
     from youmudow.app.controller import AppController
@@ -82,6 +82,7 @@ class MainWindow:
         self._results_table: ResultsTable | None = None
         self._detail_panel: DetailPanel | None = None
         self._status_bar: StatusBar | None = None
+        self._history_panel: HistoryPanel | None = None
 
         self._setup_ui()
         self._apply_config()
@@ -99,6 +100,10 @@ class MainWindow:
         except (ImportError, OSError, tk.TclError, ValueError) as e:
             logger.debug("Could not set window icon: %s", e)
         self._root.deiconify()
+
+    # ------------------------------------------------------------------
+    # Layout
+    # ------------------------------------------------------------------
 
     def _setup_ui(self) -> None:
         self._root.columnconfigure(0, weight=1)
@@ -166,40 +171,22 @@ class MainWindow:
         self._log_terminal.pack(fill="both", expand=True)
 
     def _create_menu(self) -> None:
-        self._menubar = tk.Menu(self._root, bg=_c("bg"), fg=_c("text"), bd=0, relief="flat")
-        self._root.configure(menu=self._menubar)
-
-        file_menu = tk.Menu(self._menubar, tearoff=0, bg=_c("surface"), fg=_c("text"), bd=1)
-        self._menubar.add_cascade(label="File", menu=file_menu)
-        file_menu.add_command(label="Set Output Folder", command=self._on_set_output)
-        file_menu.add_command(label="Open Output Folder    Ctrl+O", command=self._on_open_folder)
-        file_menu.add_command(label="Export Logs...", command=self._on_export_logs)
-        file_menu.add_separator()
-        file_menu.add_command(label="Exit", command=self._on_close)
-
-        queue_menu = tk.Menu(self._menubar, tearoff=0, bg=_c("surface"), fg=_c("text"), bd=1)
-        self._menubar.add_cascade(label="Queue", menu=queue_menu)
-        queue_menu.add_command(label="Start Downloads", command=self._on_start_queue)
-        queue_menu.add_command(label="Clear Queue", command=self._on_clear_queue)
-
-        view_menu = tk.Menu(self._menubar, tearoff=0, bg=_c("surface"), fg=_c("text"), bd=1)
-        self._menubar.add_cascade(label="View", menu=view_menu)
         self._debug_var = tk.BooleanVar(value=self._debug_mode)
-        view_menu.add_checkbutton(
-            label="Debug Mode", variable=self._debug_var, command=self._on_toggle_debug
+        callbacks = MenuCallbacks(
+            set_output=self._on_set_output,
+            open_output_folder=self._on_open_folder,
+            export_logs=self._on_export_logs,
+            close=self._on_close,
+            start_queue=self._on_start_queue,
+            clear_queue=self._on_clear_queue,
+            toggle_debug=self._on_toggle_debug,
+            toggle_theme=self._on_toggle_theme,
+            update_ytdlp=self._on_update_ytdlp,
+            repair_youtube=self._on_repair_youtube,
+            show_ytdlp_version=self._on_show_ytdlp_version,
+            about=self._on_about,
         )
-        view_menu.add_separator()
-        view_menu.add_command(
-            label="Toggle Light/Dark Theme    Ctrl+T", command=self._on_toggle_theme
-        )
-
-        help_menu = tk.Menu(self._menubar, tearoff=0, bg=_c("surface"), fg=_c("text"), bd=1)
-        self._menubar.add_cascade(label="Help", menu=help_menu)
-        help_menu.add_command(label="Update yt-dlp", command=self._on_update_ytdlp)
-        help_menu.add_command(label="Repair YouTube Downloads", command=self._on_repair_youtube)
-        help_menu.add_command(label="yt-dlp version", command=self._on_show_ytdlp_version)
-        help_menu.add_separator()
-        help_menu.add_command(label="About", command=self._on_about)
+        self._menubar = create_menubar(self._root, callbacks, self._debug_var)
 
     def _update_debug_visibility(self) -> None:
         if not self._paned_window or not self._log_frame:
@@ -211,6 +198,10 @@ class MainWindow:
         elif not self._debug_mode and self._debug_panel_visible:
             self._paned_window.forget(self._log_frame)
             self._debug_panel_visible = False
+
+    # ------------------------------------------------------------------
+    # Wiring
+    # ------------------------------------------------------------------
 
     def _setup_event_listeners(self) -> None:
         self._event_bus = get_event_bus()
@@ -232,7 +223,7 @@ class MainWindow:
         self._clear_unsubscribe = self._event_bus.subscribe(EventType.LOG_CLEAR, on_clear)
 
         self._root.bind("<Control-d>", lambda _: self._on_download_now())
-        self._root.bind("<Control-q>", lambda _: self._detail_panel._on_enqueue())
+        self._root.bind("<Control-q>", lambda _: self._detail_panel.enqueue_selected())
         self._root.bind("<Control-l>", lambda _: self._search_bar.search_entry.focus_set())
         self._root.bind("<Control-n>", lambda _: self._search_bar.search_var.set(""))
         self._root.bind("<Escape>", lambda _: self._on_cancel_search())
@@ -324,8 +315,8 @@ class MainWindow:
                 self._status_bar.set_progress_color(_c("border"))
 
         self._update_button_states()
-        if self._detail_panel._queue_panel_visible:
-            self._detail_panel._update_queue_display(snapshot)
+        if self._detail_panel.queue_panel_visible:
+            self._detail_panel.update_queue(snapshot)
         self._root.after(50, self._status_bar.update_progress_bar)
 
         mode_is_debug = snapshot.mode is AppMode.DEBUG
@@ -350,6 +341,10 @@ class MainWindow:
         current = self._notebook.index(self._notebook.select())
         if current == 1 and self._history_panel:
             self._history_panel.refresh()
+
+    # ------------------------------------------------------------------
+    # Search flow
+    # ------------------------------------------------------------------
 
     def _on_search(self) -> None:
         query = self._search_bar.get_query()
@@ -430,139 +425,47 @@ class MainWindow:
         self._is_searching = False
         self._update_button_states()
 
+    # ------------------------------------------------------------------
+    # Startup and maintenance actions
+    # ------------------------------------------------------------------
+
     def _check_clipboard_on_start(self) -> None:
-        try:
-            clipboard = self._root.clipboard_get()
-            if clipboard and is_supported_url(clipboard.strip()):
-                self._search_bar.search_var.set(clipboard.strip())
-        except tk.TclError as e:
-            logger.debug("Clipboard check failed: %s", e)
+        check_clipboard(self._root, self._search_bar.search_var.set)
 
     def _check_ytdlp_on_start(self) -> None:
-        def resolve() -> None:
-            version = get_ytdlp_version()
-            if not version:
-                self._schedule(
-                    self._set_status,
-                    "⚠ yt-dlp not found. Install it with: pip install yt-dlp",
-                )
-                return
-            threading.Thread(target=self._run_startup_environment_check, daemon=True).start()
-
-        threading.Thread(target=resolve, daemon=True).start()
-
-    def _run_startup_environment_check(self) -> None:
-        """Auto-detect the YouTube environment and repair it if needed.
-
-        YouTube requires an external JS runtime (deno/node) plus the EJS
-        challenge scripts. When a runtime is present but the EJS package is
-        missing (a common cause of "HTTP Error 403: Forbidden" on pip-installed
-        yt-dlp), install it automatically in the background.
-        """
-        runtime = detect_js_runtime()
-        ejs = is_ejs_installed()
-
-        if runtime and ejs:
-            self._schedule(lambda: self._set_status(f"YouTube ready (JS runtime: {runtime})"))
-            return
-
-        if runtime and not ejs:
-            self._schedule(
-                lambda: self._set_status(
-                    "YouTube fix: installing JS challenge scripts (yt-dlp[default])..."
-                )
-            )
-            repair_youtube_environment(
-                on_success=lambda msg: self._schedule(
-                    lambda: self._set_status(f"Fix applied: {msg}")
-                ),
-                on_error=lambda err: self._schedule(lambda: self._set_status(f"Fix failed: {err}")),
-            )
-            return
-
-        self._schedule(
-            lambda: self._set_status(
-                "⚠ YouTube 403 risk: no JS runtime found. "
-                "Install deno: curl -fsSL https://deno.land/install.sh | sh"
-            )
-        )
+        check_ytdlp(self._schedule, self._set_status)
 
     def _on_repair_youtube(self) -> None:
-        self._set_status("Repairing YouTube environment (update + cache)...")
-        repair_youtube_environment(
-            on_success=lambda msg: self._schedule(lambda: self._set_status(f"Repair OK: {msg}")),
-            on_error=lambda err: self._schedule(lambda: self._set_status(f"Repair failed: {err}")),
-        )
+        repair_environment(self._schedule, self._set_status)
 
     def _on_update_ytdlp(self) -> None:
-        self._set_status("Updating yt-dlp...")
-
-        def on_success(version: str) -> None:
-            self._schedule(lambda: self._set_status(f"yt-dlp updated to {version}"))
-
-        def on_error(error: str) -> None:
-            self._schedule(lambda: self._set_status(f"Update failed: {error}"))
-
-        update_ytdlp(on_success, on_error)
+        install_ytdlp_update(self._schedule, self._set_status)
 
     def _on_show_ytdlp_version(self) -> None:
-        self._set_status("Checking yt-dlp version...")
-
-        def resolve() -> None:
-            version = get_ytdlp_version()
-            self._schedule(
-                messagebox.showinfo,
-                "yt-dlp version",
-                f"Installed version: {version or 'not found'}",
-            )
-
-        threading.Thread(target=resolve, daemon=True).start()
+        show_ytdlp_version(self._schedule, self._set_status)
 
     def _on_about(self) -> None:
-        messagebox.showinfo(
-            "About YouMuDow",
-            f"YouMuDow v{__version__}\n"
-            "Music & Video Downloader\n"
-            "Supports YouTube, SoundCloud, Vimeo, Twitter and 1000+ sites via yt-dlp\n"
-            "github.com/Ghostalex07/YouMuDow",
-        )
-
-        def resolve() -> None:
-            version = get_ytdlp_version()
-            self._schedule(self._set_status, f"yt-dlp: {version or 'not found'}")
-
-        threading.Thread(target=resolve, daemon=True).start()
+        show_about(self._schedule, self._set_status)
 
     def _on_export_logs(self) -> None:
         if not self._log_terminal:
             return
-        default_name = f"youmudow_logs_{datetime.now().astimezone().strftime('%Y%m%d_%H%M%S')}.txt"
-        path = filedialog.asksaveasfilename(
-            title="Export Logs",
-            defaultextension=".txt",
-            initialfile=default_name,
-            filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
-        )
-        if path:
-            try:
-                self._log_terminal.export_to_file(Path(path))
-                self._set_status(f"Logs exported to {path}")
-            except (OSError, ValueError) as e:
-                self._set_status(f"Export failed: {e}")
+        export_logs(self._log_terminal, self._set_status)
 
     def _on_open_folder(self) -> None:
         path = self._controller.get_output_path()
-        try:
-            system = platform.system()
-            if system == "Windows":
-                subprocess.Popen(["explorer", str(path)])
-            elif system == "Darwin":
-                subprocess.Popen(["open", str(path)])
-            else:
-                subprocess.Popen(["xdg-open", str(path)])
-        except (OSError, ValueError) as e:
-            logger.debug("Could not open folder: %s", e)
+        if not open_output_folder(path):
             self._set_status(f"Output: {path}")
+
+    def _on_set_output(self) -> None:
+        folder = choose_output_folder()
+        if folder:
+            self._controller.set_output_path(Path(folder))
+            self._set_status(f"Output: {folder}")
+
+    # ------------------------------------------------------------------
+    # Downloads and queue
+    # ------------------------------------------------------------------
 
     def _on_download_now(self) -> None:
         selected = self._results_table.get_selected_videos()
@@ -605,11 +508,9 @@ class MainWindow:
         self._controller.clear_queue()
         self._set_status("Queue cleared")
 
-    def _on_set_output(self) -> None:
-        folder = filedialog.askdirectory(title="Select Output Folder")
-        if folder:
-            self._controller.set_output_path(Path(folder))
-            self._set_status(f"Output: {folder}")
+    # ------------------------------------------------------------------
+    # Theme
+    # ------------------------------------------------------------------
 
     def _on_toggle_debug(self) -> None:
         self._debug_mode = self._debug_var.get()
@@ -631,196 +532,31 @@ class MainWindow:
     def _apply_theme_colors(self) -> None:
         colors = self._theme_manager.colors
         self._root.configure(bg=colors.BACKGROUND)
-        self._update_widget_colors(self._root, colors)
+        apply_theme_colors(self._root, colors)
         if self._menubar:
-            self._update_widget_colors(self._menubar, colors)
+            apply_theme_colors(self._menubar, colors)
         try:
             self._status_bar.set_progress_color(colors.PRIMARY)
         except tk.TclError:
             pass
 
-    def _update_widget_colors(self, widget: tk.Widget, colors: Any) -> None:
-        cls = widget.winfo_class()
-
-        def _cv(key: str) -> str:
-            return (
-                key
-                if key.startswith("#")
-                else getattr(colors, _COLOR_MAP.get(key, key.upper()), "#000000")
-            )
-
-        try:
-            if cls in ("Frame", "Labelframe"):
-                bg_key = getattr(widget, "_bg_key", "bg")
-                widget.configure(bg=_cv(bg_key))
-            elif cls == "Label":
-                try:
-                    parent_bg = widget.master.cget("bg")
-                    widget.configure(bg=parent_bg, fg=colors.TEXT)
-                except tk.TclError:
-                    widget.configure(bg=colors.BACKGROUND, fg=colors.TEXT)
-            elif cls == "Button":
-                theme = getattr(widget, "_theme", None)
-                if theme:
-                    widget.configure(
-                        bg=_cv(theme.get("bg", "surface")),
-                        fg=_cv(theme.get("fg", "text")),
-                        activebackground=_cv(theme.get("activebg", theme.get("bg", "surface"))),
-                        activeforeground=_cv(theme.get("activefg", theme.get("fg", "text"))),
-                    )
-                else:
-                    widget.configure(
-                        bg=colors.SURFACE,
-                        fg=colors.TEXT,
-                        activebackground=colors.HOVER,
-                        activeforeground=colors.TEXT,
-                    )
-            elif cls == "Entry":
-                widget.configure(bg=colors.SURFACE, fg=colors.TEXT, insertbackground=colors.TEXT)
-            elif cls in ("Checkbutton", "Radiobutton"):
-                try:
-                    parent_bg = widget.master.cget("bg")
-                    widget.configure(
-                        bg=parent_bg,
-                        fg=colors.TEXT,
-                        selectcolor=parent_bg,
-                        activebackground=parent_bg,
-                        activeforeground=colors.TEXT,
-                    )
-                except tk.TclError:
-                    widget.configure(
-                        bg=colors.SURFACE,
-                        fg=colors.TEXT,
-                        selectcolor=colors.SURFACE,
-                        activebackground=colors.SURFACE,
-                        activeforeground=colors.TEXT,
-                    )
-            elif cls == "Canvas":
-                bg_key = getattr(widget, "_bg_key", "bg")
-                widget.configure(bg=_cv(bg_key))
-            elif cls == "Menu":
-                widget.configure(bg=colors.SURFACE, fg=colors.TEXT)
-        except tk.TclError:
-            pass
-        try:
-            for child in widget.winfo_children():
-                self._update_widget_colors(child, colors)
-        except tk.TclError:
-            pass
-
-    def _on_close(self) -> None:
-        if self._config:
-            dp = self._detail_panel
-
-            def read_concurrent() -> int:
-                try:
-                    return int(dp._concurrent_var.get())
-                except (tk.TclError, KeyError, TypeError, ValueError) as e:
-                    logger.debug("Invalid concurrent downloads value, keeping saved one: %s", e)
-                    return int(self._config.get("concurrent_downloads", 1))
-
-            rate = ""
-            try:
-                rate = dp._rate_limit_var.get().strip()
-                if rate and not is_valid_rate_limit(rate):
-                    rate = ""
-            except (tk.TclError, KeyError, TypeError, ValueError) as e:
-                logger.debug("Could not read rate limit: %s", e)
-
-            fields = (
-                ("format", dp._format_var.get),
-                ("quality", dp._quality_var.get),
-                ("subtitles", dp._subtitles_var.get),
-                ("subtitle_lang", dp._subtitle_lang_var.get),
-                ("embed_subtitles", dp._embed_subs_var.get),
-                ("use_cookies", dp._use_cookies_var.get),
-                ("cookies_source", dp._cookies_source_var.get),
-                ("cookies_file", dp._cookies_file_var.get),
-                ("browser", dp._browser_var.get),
-                ("profile", dp._profile_var.get),
-                ("rate_limit", lambda: rate),
-                ("split_chapters", dp._split_chapters_var.get),
-                ("options_panel_open", dp._options_frame.winfo_ismapped),
-                ("concurrent_downloads", read_concurrent),
-            )
-            try:
-                self._config.window_geometry = self._root.geometry()
-            except (tk.TclError, KeyError, TypeError, ValueError) as e:
-                logger.debug("Could not store window geometry: %s", e)
-            for key, read in fields:
-                try:
-                    self._config.set(key, read())
-                except (tk.TclError, KeyError, TypeError, ValueError) as e:
-                    logger.debug("Could not store config field %s: %s", key, e)
-            try:
-                self._config.output_path = self._controller.get_output_path()
-            except (tk.TclError, KeyError, TypeError, ValueError) as e:
-                logger.debug("Could not store output path: %s", e)
-            try:
-                self._config.save()
-            except (tk.TclError, KeyError, TypeError, ValueError) as e:
-                logger.debug("Could not save config on close: %s", e)
-        self._controller.stop_downloads()
-        self.destroy()
+    # ------------------------------------------------------------------
+    # Settings and lifecycle
+    # ------------------------------------------------------------------
 
     def _apply_config(self) -> None:
-        if not self._config:
-            return
-        try:
-            dp = self._detail_panel
-            dp._format_var.set(self._config.get("format", "mp3"))
-            dp._quality_var.set(self._config.get("quality", "best"))
-            dp._subtitles_var.set(self._config.get("subtitles", False))
-            dp._subtitle_lang_var.set(self._config.get("subtitle_lang", "en"))
-            dp._embed_subs_var.set(self._config.get("embed_subtitles", False))
-            dp._use_cookies_var.set(self._config.get("use_cookies", False))
-            dp._cookies_source_var.set(self._config.get("cookies_source", "browser"))
-            dp._cookies_file_var.set(self._config.get("cookies_file", ""))
+        apply_settings(self._config, self._detail_panel.options, self._root)
 
-            saved_browser = self._config.get("browser", "chrome")
-            available = get_available_browsers()
-            if available:
-                browser_to_use = saved_browser if saved_browser in available else available[0]
-                dp._browser_var.set(browser_to_use)
-            else:
-                dp._browser_var.set("chrome")
-            dp._on_browser_changed()
-
-            current_profiles = list(dp._profile_combo["values"])
-            saved_profile = self._config.get("profile", "Default")
-            if saved_profile in current_profiles:
-                dp._profile_var.set(saved_profile)
-            elif current_profiles:
-                dp._profile_var.set(current_profiles[0])
-            else:
-                dp._profile_var.set("Default")
-            dp._rate_limit_var.set(self._config.get("rate_limit", ""))
-            dp._split_chapters_var.set(self._config.get("split_chapters", False))
-            dp._concurrent_var.set(self._config.get("concurrent_downloads", 1))
-
-            if self._config.get("options_panel_open", False):
-                dp._options_frame.pack(
-                    fill="both", expand=True, padx=SPACING["md"], pady=(0, SPACING["md"])
-                )
-                dp._detail_toggle_btn.configure(text="▼ OPTIONS")
-
-            geo = self._config.window_geometry
-            if geo:
-                try:
-                    self._root.geometry(geo)
-                    self._root.update_idletasks()
-                    x = self._root.winfo_x()
-                    y = self._root.winfo_y()
-                    w = self._root.winfo_width()
-                    h = self._root.winfo_height()
-                    sw = self._root.winfo_screenwidth()
-                    sh = self._root.winfo_screenheight()
-                    if x + w < 0 or y + h < 0 or x > sw or y > sh:
-                        self._root.geometry(f"{min(sw, 1200)}x{min(sh, 800)}+0+0")
-                except tk.TclError as e:
-                    logger.debug("Could not restore window geometry: %s", e)
-        except (tk.TclError, KeyError, TypeError, ValueError) as e:
-            logger.warning("Could not apply saved config: %s", e)
+    def _on_close(self) -> None:
+        if self._config and self._detail_panel:
+            try:
+                output_path = self._controller.get_output_path()
+            except (tk.TclError, KeyError, TypeError, ValueError) as e:
+                logger.debug("Could not read output path: %s", e)
+                output_path = None
+            save_settings(self._config, self._detail_panel.options, self._root, output_path)
+        self._controller.stop_downloads()
+        self.destroy()
 
     def run(self) -> None:
         self._root.protocol("WM_DELETE_WINDOW", self._on_close)

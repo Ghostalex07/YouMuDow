@@ -57,8 +57,8 @@ def detail_panel(state_window, tk_root):
     from youmudow.ui.widgets.detail_panel import DetailPanel
 
     panel = DetailPanel(state_window._main_content_frame, state_window)
-    panel._queue_frame.grid()
-    panel._queue_panel_visible = True
+    panel.queue.grid()
+    panel.queue.visible = True
     tk_root.update()
     return panel
 
@@ -218,7 +218,7 @@ class TestQueuePanel:
         return video
 
     def _rows(self, panel):
-        tree = panel._queue_tree
+        tree = panel.queue._queue_tree
         return [tree.item(iid, "values") for iid in tree.get_children("")]
 
     def test_requeued_url_does_not_break_panel(self, detail_panel, state_window):
@@ -229,13 +229,13 @@ class TestQueuePanel:
         sm = state_window._controller.state
         url = "https://www.youtube.com/watch?v=abc"
         self._download(sm, "Song", url, DownloadStatus.DONE)
-        detail_panel._update_queue_display(sm.get_snapshot())
+        detail_panel.queue.update_display(sm.get_snapshot())
 
         sm.add_to_queue(Video(title="Song", url=url))
-        for iid in detail_panel._queue_tree.get_children(""):
-            detail_panel._queue_tree.delete(iid)
+        for iid in detail_panel.queue._queue_tree.get_children(""):
+            detail_panel.queue._queue_tree.delete(iid)
 
-        detail_panel._update_queue_display(sm.get_snapshot())
+        detail_panel.queue.update_display(sm.get_snapshot())
 
         rows = self._rows(detail_panel)
         assert len(rows) == 2
@@ -246,7 +246,7 @@ class TestQueuePanel:
 
         sm = state_window._controller.state
         self._download(sm, "Secret", "https://youtu.be/x", DownloadStatus.ERROR)
-        detail_panel._update_queue_display(sm.get_snapshot())
+        detail_panel.queue.update_display(sm.get_snapshot())
 
         status, title, progress = self._rows(detail_panel)[0]
         assert status == "Failed"
@@ -261,7 +261,7 @@ class TestQueuePanel:
         sm.add_to_queue(video)
         sm.start_download(video)
         sm.cancel_download(video)
-        detail_panel._update_queue_display(sm.get_snapshot())
+        detail_panel.queue.update_display(sm.get_snapshot())
 
         assert self._rows(detail_panel)[0][0] == "Cancelled"
 
@@ -273,7 +273,7 @@ class TestQueuePanel:
 
         sm = state_window._controller.state
         finished = self._download(sm, "Done", "https://youtu.be/z", DownloadStatus.DONE)
-        detail_panel._update_queue_display(sm.get_snapshot())
+        detail_panel.queue.update_display(sm.get_snapshot())
         state_window._root.update()
 
         created = []
@@ -283,13 +283,13 @@ class TestQueuePanel:
             lambda *a, **k: created.append(_RecordingMenu()) or created[-1],
         )
 
-        iid = detail_panel._queue_tree.get_children("")[0]
+        iid = detail_panel.queue._queue_tree.get_children("")[0]
         row_y = next(
             y
-            for y in range(detail_panel._queue_tree.winfo_height())
-            if detail_panel._queue_tree.identify_row(y) == iid
+            for y in range(detail_panel.queue._queue_tree.winfo_height())
+            if detail_panel.queue._queue_tree.identify_row(y) == iid
         )
-        detail_panel._on_queue_right_click(SimpleNamespace(y=row_y, x_root=0, y_root=0))
+        detail_panel.queue._on_right_click(SimpleNamespace(y=row_y, x_root=0, y_root=0))
 
         assert created, "no context menu shown for a completed row"
         remove = created[0].commands["Remove from queue"]
@@ -298,3 +298,68 @@ class TestQueuePanel:
         assert state_window._controller.remove_from_queue.call_args.args[0].queue_id == (
             finished.queue_id
         )
+
+
+class TestDetailPanelActions:
+    def _video(self, title="Song", url="https://youtu.be/a"):
+        from youmudow.domain.models import Video
+
+        return Video(title=title, url=url)
+
+    def test_enqueue_selected_queues_every_selected_video(self, detail_panel, state_window):
+        videos = [
+            self._video("One", "https://youtu.be/1"),
+            self._video("Two", "https://youtu.be/2"),
+        ]
+        state_window._results_table.get_selected_videos.return_value = videos
+
+        detail_panel.enqueue_selected()
+
+        state_window._controller.enqueue_multiple.assert_called_once_with(videos)
+        state_window._set_status.assert_called_once_with("Added 2 to queue")
+        assert all(video.options is not None for video in videos)
+
+    def test_enqueue_selected_falls_back_to_selected_video(self, detail_panel, state_window):
+        video = self._video()
+        state_window._results_table.get_selected_videos.return_value = []
+        state_window._selected_video = video
+
+        detail_panel.enqueue_selected()
+
+        state_window._controller.enqueue.assert_called_once_with(video)
+        assert video.options is not None
+        state_window._set_status.assert_called_once_with(f"Added to queue: {video.title}")
+
+    def test_enqueue_selected_ignores_expanded_playlist_without_selection(
+        self, detail_panel, state_window
+    ):
+        state_window._results_table.get_selected_videos.return_value = []
+        state_window._results_table.is_playlist = True
+        state_window._results_table.playlist_videos = [self._video()]
+
+        detail_panel.enqueue_selected()
+
+        state_window._controller.enqueue.assert_not_called()
+        state_window._controller.enqueue_multiple.assert_not_called()
+
+    def test_add_all_queues_the_whole_playlist(self, detail_panel, state_window):
+        videos = [
+            self._video("One", "https://youtu.be/1"),
+            self._video("Two", "https://youtu.be/2"),
+        ]
+        state_window._results_table.playlist_videos = videos
+
+        detail_panel._add_all_to_queue()
+
+        state_window._controller.enqueue_multiple.assert_called_once_with(videos)
+        state_window._set_status.assert_called_once_with("Added 2 videos to queue")
+        assert all(video.options is not None for video in videos)
+
+    def test_toggle_queue_panel_flips_visibility(self, detail_panel):
+        assert detail_panel.queue_panel_visible is True
+
+        detail_panel._toggle_queue_panel()
+
+        assert detail_panel.queue_panel_visible is False
+        detail_panel._toggle_queue_panel()
+        assert detail_panel.queue_panel_visible is True

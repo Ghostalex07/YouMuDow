@@ -74,8 +74,8 @@ class TestMainWindowBuild:
 
     def test_apply_config_called_without_crashing(self, main_window):
         window, _ = main_window
-        assert window._detail_panel._format_var.get() == "mp3"
-        assert window._detail_panel._quality_var.get() == "best"
+        assert window._detail_panel.options._format_var.get() == "mp3"
+        assert window._detail_panel.options._quality_var.get() == "best"
 
     def test_main_content_fits_and_status_bar_is_mapped(self, main_window):
         window, _ = main_window
@@ -144,8 +144,8 @@ class TestMainWindowFlows:
         from youmudow.app.state import AppState
 
         window, _ = main_window
-        window._detail_panel._queue_panel_visible = True
-        window._detail_panel._update_queue_display = Mock(
+        window._detail_panel.queue.visible = True
+        window._detail_panel.queue.update_display = Mock(
             side_effect=RuntimeError("treeview exploded")
         )
         with caplog.at_level(logging.ERROR):
@@ -215,10 +215,9 @@ class TestMainWindowFlows:
         assert window._schedule.call_args[0][0] == window._log_terminal.clear
 
     def test_check_ytdlp_on_start_does_not_block_the_main_thread(self, main_window):
-        from youmudow.ui import window as window_module
+        from youmudow.ui import startup_checks
 
         window, _ = main_window
-        window._run_startup_environment_check = Mock()
         caller = threading.current_thread()
         observed = {}
         started = threading.Event()
@@ -230,7 +229,10 @@ class TestMainWindowFlows:
             release.wait(5)
             return "2026.01.01"
 
-        with patch.object(window_module, "get_ytdlp_version", slow_version):
+        with (
+            patch.object(startup_checks, "get_ytdlp_version", slow_version),
+            patch.object(startup_checks, "run_environment_check"),
+        ):
             begin = time.monotonic()
             window._check_ytdlp_on_start()
             elapsed = time.monotonic() - begin
@@ -241,21 +243,20 @@ class TestMainWindowFlows:
         assert observed["thread"] is not caller
 
     def test_startup_check_keeps_a_healthy_player_cache(self, main_window):
-        from youmudow.ui import window as window_module
+        from youmudow.ui import startup_checks
 
-        window, _ = main_window
-        window._schedule = Mock(side_effect=lambda callback, *args: callback(*args))
-        window._set_status = Mock()
+        schedule = Mock(side_effect=lambda callback, *args: callback(*args))
+        set_status = Mock()
         with (
-            patch.object(window_module, "detect_js_runtime", return_value="deno"),
-            patch.object(window_module, "is_ejs_installed", return_value=True),
-            patch.object(window_module, "repair_youtube_environment"),
-            patch.object(window_module, "clear_ytdlp_cache", create=True) as clear_cache,
+            patch.object(startup_checks, "detect_js_runtime", return_value="deno"),
+            patch.object(startup_checks, "is_ejs_installed", return_value=True),
+            patch.object(startup_checks, "repair_youtube_environment"),
+            patch.object(startup_checks, "clear_ytdlp_cache", create=True) as clear_cache,
         ):
-            window._run_startup_environment_check()
+            startup_checks.run_environment_check(schedule, set_status)
 
         assert not clear_cache.called
-        assert "cache" not in window._set_status.call_args.args[0].lower()
+        assert "cache" not in set_status.call_args.args[0].lower()
 
     def test_close_saves_every_field_when_concurrent_value_is_invalid(self, main_window):
         from youmudow.ui.window import MainWindow
@@ -264,8 +265,8 @@ class TestMainWindowFlows:
         config = window._config
         config.reset_mock()
         config.get.side_effect = lambda key, default=None: default
-        window._detail_panel._format_var.set("m4a")
-        window._detail_panel._concurrent_var.set("3x")
+        window._detail_panel.options._format_var.set("m4a")
+        window._detail_panel.options._concurrent_var.set("3x")
 
         with patch.object(MainWindow, "destroy"):
             window._on_close()
