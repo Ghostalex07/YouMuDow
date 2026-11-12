@@ -13,7 +13,7 @@ from enum import Enum, auto
 
 from youmudow.domain.enums import DownloadStatus
 from youmudow.domain.models import Video
-from youmudow.services.download_service import DownloadQueue, find_entry_index, find_video_index
+from youmudow.services.download_queue import DownloadQueue, find_entry_index, find_video_index
 
 
 class AppMode(Enum):
