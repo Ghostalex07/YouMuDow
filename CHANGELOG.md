@@ -10,8 +10,26 @@ All notable changes to this project will be documented in this file.
   (headless boot check against the real X display) and
   `scripts/measure_startup.py` (wall-clock startup measurement), the baseline
   harness for the modernization work
+- A modern UI component library under `ui/widgets/components/`: rounded
+  buttons, cards, a search entry with placeholder and focus ring, a loading
+  spinner and empty-state views
+- Scrollable thumbnail cards replace the search-results table, with lazy
+  thumbnail loading, keyboard navigation (arrows/Enter) and multi-select
+- A thumbnail cache (`~/.cache/youmudow`, LRU of 200 entries) and an
+  asynchronous thumbnail loader that never blocks the UI thread
 
 ### Changed
+
+- The three theming paths (ttk styles, widget walk, results-table styling) are
+  unified into a single `apply_theme(root, colors)` call
+- A larger, more legible type scale with explicit tokens (`display`/`h1`/`h2`/
+  `h3`/`body`/`small`/`label`/`mono`)
+- Atomic config/history persistence is shared in `services/persistence.py`
+  (removes two duplicated copies of `write_atomic`/`backup_corrupt`)
+- Thumbnail resolution in the controller is a single `_apply_thumbnail`
+  helper (was three duplicated loops)
+- The options form is built from reusable row builders instead of
+  hand-written rows, and window shortcuts move to `_bind_shortcuts()`
 
 - Repository cleanup: `ai.txt`, `robots.txt` and the local packaging leftovers
   are gone from the working tree, so a checkout contains only what the
