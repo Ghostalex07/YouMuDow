@@ -32,6 +32,21 @@ def _recording_schedule() -> tuple[Mock, threading.Event]:
     return schedule, called
 
 
+class _FakeMessagebox:
+    """Thread-safe stand-in for ``tkinter.messagebox``.
+
+    ``show_ytdlp_version`` reads ``messagebox.showinfo`` on a daemon thread so it
+    can hand it to the scheduler. ``unittest.mock.Mock`` is not safe there: its
+    lazy ``__getattr__`` builds a child mock and binds ``inspect.signature``
+    while a background thread can race garbage collection and abort the whole
+    interpreter. A plain object with a real attribute has none of that.
+    """
+
+    @staticmethod
+    def showinfo(*args: object, **kwargs: object) -> None:
+        return None
+
+
 class TestCheckClipboard:
     def _root(self, clipboard=None, error=None):
         root = Mock()
@@ -231,7 +246,7 @@ class TestInstallYtdlpUpdate:
 class TestShowYtdlpVersion:
     def test_shows_installed_version(self):
         schedule, called = _recording_schedule()
-        messagebox = Mock()
+        messagebox = _FakeMessagebox()
 
         with (
             patch.object(startup_checks, "messagebox", messagebox),
@@ -249,7 +264,7 @@ class TestShowYtdlpVersion:
         schedule, called = _recording_schedule()
 
         with (
-            patch.object(startup_checks, "messagebox", Mock()),
+            patch.object(startup_checks, "messagebox", _FakeMessagebox()),
             patch.object(startup_checks, "get_ytdlp_version", return_value=""),
         ):
             startup_checks.show_ytdlp_version(schedule, Mock())

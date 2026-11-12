@@ -33,10 +33,26 @@ class OptionsPanel:
 
     def __init__(self, parent: tk.Widget, main_window: object) -> None:
         self._mw = main_window
+        self._available_browsers: list[str] | None = None
+        self._browser_profiles_cache: dict | None = None
         self._build_header(parent)
         self._build_retry_button(parent)
         self._build_options(parent)
         self._on_subtitles_toggle()
+
+    # ------------------------------------------------------------------
+    # Browser detection (memoized per instance)
+    # ------------------------------------------------------------------
+
+    def _browser_options(self) -> list[str]:
+        if self._available_browsers is None:
+            self._available_browsers = get_available_browsers()
+        return self._available_browsers
+
+    def _browser_profiles(self) -> dict:
+        if self._browser_profiles_cache is None:
+            self._browser_profiles_cache = get_all_browser_profiles()
+        return self._browser_profiles_cache
 
     # ------------------------------------------------------------------
     # Widget construction
@@ -84,204 +100,216 @@ class OptionsPanel:
     def _build_options(self, parent: tk.Widget) -> None:
         self._options_frame = tk.Frame(parent, bg=_c("surface"))
         self._options_frame._bg_key = "surface"
-        self._build_format_row()
-        self._build_quality_row()
-        self._build_concurrent_row()
-        self._build_subtitles_row()
-        self._build_auth_row()
-        self._build_extra_row()
+        self._rows = self._build_rows()
+        self._rows_count = len(self._rows)
 
-    def _build_format_row(self) -> None:
-        format_row = tk.Frame(self._options_frame, bg=_c("surface"))
-        format_row._bg_key = "surface"
-        format_row.pack(fill="x", pady=(SPACING["sm"], SPACING["md"]))
-        tk.Label(
-            format_row,
-            text="Format:",
+    # ------------------------------------------------------------------
+    # Row and control builders
+    # ------------------------------------------------------------------
+
+    def _row(self, label: str | None = None, *, pady: tuple = (0, SPACING["md"])) -> tk.Frame:
+        row = tk.Frame(self._options_frame, bg=_c("surface"))
+        row._bg_key = "surface"
+        row.pack(fill="x", pady=pady)
+        if label is not None:
+            self._label(row, label, width=10)
+        return row
+
+    def _label(
+        self,
+        parent: tk.Widget,
+        text: str,
+        *,
+        width: int | None = None,
+        padx: tuple = (0, 0),
+    ) -> tk.Label:
+        label = tk.Label(
+            parent,
+            text=text,
             bg=_c("surface"),
             fg=_c("text_secondary"),
             font=FONT["small"],
-            width=10,
             anchor="w",
-        ).pack(side="left")
-        self._format_var = tk.StringVar(value="mp3")
-        format_combo = ttk.Combobox(
-            format_row,
-            textvariable=self._format_var,
-            values=sorted(SUPPORTED_FORMATS),
-            state="readonly",
-            width=8,
-            font=FONT["body"],
         )
-        format_combo.pack(side="left", padx=(0, SPACING["sm"]))
+        if width is not None:
+            label.configure(width=width)
+        label.pack(side="left", padx=padx)
+        return label
 
-    def _build_quality_row(self) -> None:
-        quality_row = tk.Frame(self._options_frame, bg=_c("surface"))
-        quality_row._bg_key = "surface"
-        quality_row.pack(fill="x", pady=(0, SPACING["md"]))
-        tk.Label(
-            quality_row,
-            text="Quality:",
+    def _check(
+        self,
+        parent: tk.Widget,
+        var: tk.Variable,
+        text: str,
+        *,
+        command=None,
+        font=FONT["body"],
+        fg=None,
+        padx: tuple = (0, 0),
+    ) -> tk.Checkbutton:
+        if fg is None:
+            fg = _c("text")
+        check = tk.Checkbutton(
+            parent,
+            text=text,
+            variable=var,
             bg=_c("surface"),
-            fg=_c("text_secondary"),
-            font=FONT["small"],
-            width=10,
-            anchor="w",
-        ).pack(side="left")
-        self._quality_var = tk.StringVar(value="best")
-        quality_combo = ttk.Combobox(
-            quality_row,
-            textvariable=self._quality_var,
-            values=sorted(SUPPORTED_QUALITIES),
-            state="readonly",
-            width=10,
-            font=FONT["body"],
+            fg=fg,
+            activebackground=_c("surface"),
+            activeforeground=_c("text"),
+            selectcolor=_c("surface"),
+            relief="flat",
+            font=font,
+            command=command,
         )
-        quality_combo.pack(side="left")
+        check.pack(side="left", padx=padx)
+        return check
 
-    def _build_concurrent_row(self) -> None:
-        concurrent_row = tk.Frame(self._options_frame, bg=_c("surface"))
-        concurrent_row._bg_key = "surface"
-        concurrent_row.pack(fill="x", pady=(0, SPACING["md"]))
-        tk.Label(
-            concurrent_row,
-            text="Concurrent:",
-            bg=_c("surface"),
-            fg=_c("text_secondary"),
+    def _combo(
+        self,
+        parent: tk.Widget,
+        var: tk.Variable,
+        values: list[str],
+        width: int,
+        *,
+        font=FONT["body"],
+        padx: tuple = (0, 0),
+    ) -> ttk.Combobox:
+        combo = ttk.Combobox(
+            parent,
+            textvariable=var,
+            values=values,
+            state="readonly",
+            width=width,
+            font=font,
+        )
+        combo.pack(side="left", padx=padx)
+        return combo
+
+    def _entry(
+        self,
+        parent: tk.Widget,
+        var: tk.Variable,
+        width: int,
+        *,
+        padx: tuple = (0, 0),
+    ) -> tk.Entry:
+        entry = tk.Entry(
+            parent,
+            textvariable=var,
+            bg=_c("input_bg"),
+            fg=_c("text"),
+            relief="flat",
             font=FONT["small"],
-            width=10,
-            anchor="w",
-        ).pack(side="left")
-        self._concurrent_var = tk.IntVar(value=1)
-        concurrent_spin = tk.Spinbox(
-            concurrent_row,
-            from_=1,
-            to=4,
-            textvariable=self._concurrent_var,
+            width=width,
+        )
+        entry.pack(side="left", padx=padx)
+        return entry
+
+    def _spinbox(
+        self,
+        parent: tk.Widget,
+        var: tk.Variable,
+        *,
+        from_: int,
+        to: int,
+        command=None,
+    ) -> tk.Spinbox:
+        spin = tk.Spinbox(
+            parent,
+            from_=from_,
+            to=to,
+            textvariable=var,
             state="readonly",
             bg=_c("input_bg"),
             fg=_c("text"),
             relief="flat",
             width=3,
             font=FONT["body"],
-            command=self._on_concurrent_change,
+            command=command,
         )
-        concurrent_spin.pack(side="left", padx=(0, SPACING["sm"]))
-        tk.Label(
-            concurrent_row,
-            text="(1-4)",
-            bg=_c("surface"),
-            fg=_c("text_secondary"),
-            font=FONT["small"],
-        ).pack(side="left")
+        spin.pack(side="left", padx=(0, SPACING["sm"]))
+        return spin
 
-    def _build_subtitles_row(self) -> None:
-        subtitles_row = tk.Frame(self._options_frame, bg=_c("surface"))
-        subtitles_row._bg_key = "surface"
-        subtitles_row.pack(fill="x", pady=(0, SPACING["md"]))
+    def _build_rows(self) -> list[tk.Widget]:
+        return [
+            self._build_format_row(),
+            self._build_quality_row(),
+            self._build_concurrent_row(),
+            self._build_subtitles_row(),
+            self._build_auth_row(),
+            self._build_extra_row(),
+        ]
+
+    def _build_format_row(self) -> tk.Frame:
+        self._format_var = tk.StringVar(value="mp3")
+        row = self._row("Format:", pady=(SPACING["sm"], SPACING["md"]))
+        self._combo(row, self._format_var, sorted(SUPPORTED_FORMATS), 8, padx=(0, SPACING["sm"]))
+        return row
+
+    def _build_quality_row(self) -> tk.Frame:
+        self._quality_var = tk.StringVar(value="best")
+        row = self._row("Quality:")
+        self._combo(row, self._quality_var, sorted(SUPPORTED_QUALITIES), 10)
+        return row
+
+    def _build_concurrent_row(self) -> tk.Frame:
+        self._concurrent_var = tk.IntVar(value=1)
+        row = self._row("Concurrent:")
+        self._spinbox(row, self._concurrent_var, from_=1, to=4, command=self._on_concurrent_change)
+        self._label(row, "(1-4)")
+        return row
+
+    def _build_subtitles_row(self) -> tk.Frame:
         self._subtitles_var = tk.BooleanVar(value=False)
-        subtitles_check = tk.Checkbutton(
-            subtitles_row,
-            text="Subtitles",
-            variable=self._subtitles_var,
-            bg=_c("surface"),
-            fg=_c("text"),
-            activebackground=_c("surface"),
-            activeforeground=_c("text"),
-            selectcolor=_c("surface"),
-            relief="flat",
-            font=FONT["body"],
-            command=self._on_subtitles_toggle,
-        )
-        subtitles_check.pack(side="left")
+        row = self._row()
+        self._check(row, self._subtitles_var, "Subtitles", command=self._on_subtitles_toggle)
         self._subtitle_lang_var = tk.StringVar(value="en")
-        self._subtitle_lang_entry = tk.Entry(
-            subtitles_row,
-            textvariable=self._subtitle_lang_var,
-            bg=_c("input_bg"),
-            fg=_c("text"),
-            relief="flat",
-            font=FONT["small"],
-            width=10,
+        self._subtitle_lang_entry = self._entry(
+            row, self._subtitle_lang_var, 10, padx=(SPACING["sm"], 0)
         )
-        self._subtitle_lang_entry.pack(side="left", padx=(SPACING["sm"], 0))
-        tk.Label(
-            subtitles_row,
-            text="(en,es,fr...)",
-            bg=_c("surface"),
-            fg=_c("text_secondary"),
-            font=FONT["small"],
-        ).pack(side="left", padx=(2, 0))
+        self._label(row, "(en,es,fr...)", padx=(2, 0))
         self._embed_subs_var = tk.BooleanVar(value=False)
-        self._embed_subs_check = tk.Checkbutton(
-            subtitles_row,
-            text="Embed",
-            variable=self._embed_subs_var,
-            bg=_c("surface"),
-            fg=_c("text_secondary"),
-            activebackground=_c("surface"),
-            activeforeground=_c("text"),
-            selectcolor=_c("surface"),
-            relief="flat",
+        self._embed_subs_check = self._check(
+            row,
+            self._embed_subs_var,
+            "Embed",
             font=FONT["small"],
+            fg=_c("text_secondary"),
+            padx=(SPACING["sm"], 0),
         )
-        self._embed_subs_check.pack(side="left", padx=(SPACING["sm"], 0))
+        return row
 
-    def _build_auth_row(self) -> None:
-        auth_row = tk.Frame(self._options_frame, bg=_c("surface"))
-        auth_row._bg_key = "surface"
-        auth_row.pack(fill="x", pady=(0, SPACING["md"]))
-        tk.Label(
-            auth_row,
-            text="Auth:",
-            bg=_c("surface"),
-            fg=_c("text_secondary"),
-            font=FONT["small"],
-            width=10,
-            anchor="w",
-        ).pack(side="left")
+    def _build_auth_row(self) -> tk.Frame:
         self._use_cookies_var = tk.BooleanVar(value=False)
         self._cookies_source_var = tk.StringVar(value="browser")
         self._cookies_file_var = tk.StringVar(value="")
-        cookies_check = tk.Checkbutton(
-            auth_row,
-            text="Cookies",
-            variable=self._use_cookies_var,
-            bg=_c("surface"),
-            fg=_c("text"),
-            activebackground=_c("surface"),
-            activeforeground=_c("text"),
-            selectcolor=_c("surface"),
-            relief="flat",
+        row = self._row("Auth:")
+        self._check(
+            row,
+            self._use_cookies_var,
+            "Cookies",
             font=FONT["small"],
             command=self._on_cookies_toggle,
         )
-        cookies_check.pack(side="left")
-        installed_browsers = get_available_browsers()
+        installed_browsers = self._browser_options()
         default_browser = installed_browsers[0] if installed_browsers else "chrome"
         self._browser_var = tk.StringVar(value=default_browser)
-        browser_combo = ttk.Combobox(
-            auth_row,
-            textvariable=self._browser_var,
-            values=installed_browsers if installed_browsers else ["chrome"],
-            state="readonly",
-            width=8,
+        browser_combo = self._combo(
+            row,
+            self._browser_var,
+            installed_browsers if installed_browsers else ["chrome"],
+            8,
             font=FONT["small"],
+            padx=(SPACING["sm"], 0),
         )
-        browser_combo.pack(side="left", padx=(SPACING["sm"], 0))
         browser_combo.bind("<<ComboboxSelected>>", self._on_browser_changed)
         self._profile_var = tk.StringVar(value="Default")
-        self._profile_combo = ttk.Combobox(
-            auth_row,
-            textvariable=self._profile_var,
-            values=["Default"],
-            state="readonly",
-            width=10,
-            font=FONT["small"],
+        self._profile_combo = self._combo(
+            row, self._profile_var, ["Default"], 10, font=FONT["small"], padx=(SPACING["sm"], 0)
         )
-        self._profile_combo.pack(side="left", padx=(SPACING["sm"], 0))
         self._cookies_file_btn = tk.Button(
-            auth_row,
+            row,
             text="...",
             bg=_c("surface"),
             fg=_c("text"),
@@ -293,52 +321,16 @@ class OptionsPanel:
         self._cookies_file_btn._theme = {"bg": "surface", "fg": "text"}
         self._cookies_file_btn.pack(side="left", padx=(SPACING["sm"], 0))
         add_hover_effect(self._cookies_file_btn, "hover", "surface")
+        return row
 
-    def _build_extra_row(self) -> None:
-        extra_row = tk.Frame(self._options_frame, bg=_c("surface"))
-        extra_row._bg_key = "surface"
-        extra_row.pack(fill="x", pady=(0, SPACING["md"]))
-        tk.Label(
-            extra_row,
-            text="Options:",
-            bg=_c("surface"),
-            fg=_c("text_secondary"),
-            font=FONT["small"],
-            width=10,
-            anchor="w",
-        ).pack(side="left")
+    def _build_extra_row(self) -> tk.Frame:
         self._rate_limit_var = tk.StringVar(value="")
-        rate_entry = tk.Entry(
-            extra_row,
-            textvariable=self._rate_limit_var,
-            bg=_c("input_bg"),
-            fg=_c("text"),
-            relief="flat",
-            font=FONT["small"],
-            width=8,
-        )
-        rate_entry.pack(side="left", padx=(0, SPACING["sm"]))
-        tk.Label(
-            extra_row,
-            text="Rate (e.g. 1M)",
-            bg=_c("surface"),
-            fg=_c("text_secondary"),
-            font=FONT["small"],
-        ).pack(side="left", padx=(0, SPACING["md"]))
+        row = self._row("Options:")
+        self._entry(row, self._rate_limit_var, 8, padx=(0, SPACING["sm"]))
+        self._label(row, "Rate (e.g. 1M)", padx=(0, SPACING["md"]))
         self._split_chapters_var = tk.BooleanVar(value=False)
-        split_check = tk.Checkbutton(
-            extra_row,
-            text="Split chapters",
-            variable=self._split_chapters_var,
-            bg=_c("surface"),
-            fg=_c("text"),
-            activebackground=_c("surface"),
-            activeforeground=_c("text"),
-            selectcolor=_c("surface"),
-            relief="flat",
-            font=FONT["small"],
-        )
-        split_check.pack(side="left")
+        self._check(row, self._split_chapters_var, "Split chapters", font=FONT["small"])
+        return row
 
     # ------------------------------------------------------------------
     # Public surface
@@ -391,7 +383,7 @@ class OptionsPanel:
             self._cookies_file_var.set(video.options.cookies_file)
         else:
             self._cookies_source_var.set("browser")
-            blist = get_available_browsers()
+            blist = self._browser_options()
             saved_browser = video.options.cookies_from_browser or "chrome"
             self._browser_var.set(
                 saved_browser if saved_browser in blist else (blist[0] if blist else "chrome")
@@ -418,6 +410,10 @@ class OptionsPanel:
 
     def load_settings(self, config: Any) -> None:
         """Apply persisted option values to the controls."""
+        # Re-detect browsers/profiles: loading settings is an explicit reload, so
+        # a stale memo would defeat the fallback-to-default logic.
+        self._available_browsers = None
+        self._browser_profiles_cache = None
         self._format_var.set(config.get("format", "mp3"))
         self._quality_var.set(config.get("quality", "best"))
         self._subtitles_var.set(config.get("subtitles", False))
@@ -428,7 +424,7 @@ class OptionsPanel:
         self._cookies_file_var.set(config.get("cookies_file", ""))
 
         saved_browser = config.get("browser", "chrome")
-        available = get_available_browsers()
+        available = self._browser_options()
         if available:
             self._browser_var.set(saved_browser if saved_browser in available else available[0])
         else:
@@ -544,7 +540,8 @@ class OptionsPanel:
         self._embed_subs_check.configure(state=state)
 
     def _on_cookies_toggle(self) -> None:
-        self._browser_var.set(get_available_browsers()[0] if get_available_browsers() else "chrome")
+        browsers = self._browser_options()
+        self._browser_var.set(browsers[0] if browsers else "chrome")
         self._on_browser_changed()
 
     def _on_select_cookies_file(self) -> None:
@@ -559,7 +556,7 @@ class OptionsPanel:
 
     def _on_browser_changed(self, event=None) -> None:
         browser = self._browser_var.get()
-        profiles = get_all_browser_profiles()
+        profiles = self._browser_profiles()
         browser_profiles = profiles.get(browser, [])
         profile_names = [p.name for p in browser_profiles] if browser_profiles else ["Default"]
         self._profile_combo["values"] = profile_names

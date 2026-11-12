@@ -2,12 +2,16 @@
 
 import copy
 import logging
-import threading
 import tkinter as tk
 
 from youmudow.app.state import AppStateData
 from youmudow.domain.models import DownloadOptions, Video
+from youmudow.paths import cache_dir
+from youmudow.services.thumbnail_cache import ThumbnailCache
+from youmudow.services.thumbnail_loader import ThumbnailLoader
+from youmudow.services.thumbnail_service import ThumbnailService
 from youmudow.ui.styles.constants import FONT, SPACING, _c, add_hover_effect
+from youmudow.ui.widgets.components.thumbnail import photoimage_from_bytes
 from youmudow.ui.widgets.options_panel import OptionsPanel
 from youmudow.ui.widgets.queue_panel import QueuePanel
 
@@ -17,10 +21,20 @@ logger = logging.getLogger(__name__)
 class DetailPanel(tk.Frame):
     """Video details, download actions and the options/queue sub-panels."""
 
-    def __init__(self, parent: tk.Widget, main_window: object) -> None:
+    def __init__(
+        self,
+        parent: tk.Widget,
+        main_window: object,
+        thumbnail_loader: ThumbnailLoader | None = None,
+    ) -> None:
         super().__init__(parent, bg=_c("bg"))
         self._mw = main_window
         self._last_thumb_url: str | None = None
+        self._thumbnail_loader = (
+            thumbnail_loader
+            if thumbnail_loader is not None
+            else ThumbnailLoader(self._mw._root, ThumbnailCache(cache_dir()), ThumbnailService())
+        )
 
         self.grid(
             row=1,
@@ -193,7 +207,7 @@ class DetailPanel(tk.Frame):
         add_hover_effect(self._queue_toggle_btn, "hover", "surface")
 
     # ------------------------------------------------------------------
-    # Public surface used by MainWindow / ResultsTable
+    # Public surface used by MainWindow / ResultsCards
     # ------------------------------------------------------------------
 
     def update_detail_panel(self, video: Video) -> None:
@@ -216,7 +230,7 @@ class DetailPanel(tk.Frame):
         self.queue.update_display(snapshot)
 
     def enqueue_selected(self) -> None:
-        selected = self._mw._results_table.get_selected_videos()
+        selected = self._mw._results_cards.get_selected_videos()
         if selected:
             opts = self.get_current_options()
             if opts is None:
@@ -226,7 +240,7 @@ class DetailPanel(tk.Frame):
             self._mw._controller.enqueue_multiple(selected)
             self._mw._set_status(f"Added {len(selected)} to queue")
             return
-        if self._mw._results_table.is_playlist and self._mw._results_table.playlist_videos:
+        if self._mw._results_cards.is_playlist and self._mw._results_cards.playlist_videos:
             return
         video = self._mw._selected_video
         if video is None:
@@ -240,8 +254,8 @@ class DetailPanel(tk.Frame):
         has_video = self._mw._selected_video is not None
         self._download_btn.configure(state="disabled" if is_busy or not has_video else "normal")
         self._open_folder_btn.configure(state="normal")
-        is_playlist = self._mw._results_table.is_playlist
-        has_playlist = bool(self._mw._results_table.playlist_videos)
+        is_playlist = self._mw._results_cards.is_playlist
+        has_playlist = bool(self._mw._results_cards.playlist_videos)
         self._add_all_btn.configure(state="normal" if is_playlist and has_playlist else "disabled")
         self.options.update_button_states(is_searching, is_downloading)
 
@@ -252,45 +266,26 @@ class DetailPanel(tk.Frame):
     def _load_thumbnail(self, video: Video) -> None:
         self._thumbnail_label.configure(text="[No thumbnail]")
         thumbnail_url = video.thumbnail
+        self._last_thumb_url = thumbnail_url
         if not thumbnail_url:
             return
-        self._last_thumb_url = thumbnail_url
+        self._thumbnail_loader.request(thumbnail_url, self._on_thumbnail_ready)
 
-        def _fetch_and_set() -> None:
-            try:
-                from urllib.request import urlopen
-
-                data = urlopen(thumbnail_url, timeout=5).read()
-                self._mw._schedule(_set_thumbnail, data, thumbnail_url)
-            except (OSError, ValueError) as e:
-                logger.debug("Could not fetch thumbnail %s: %s", thumbnail_url, e)
-
-        def _set_thumbnail(data: bytes, url: str) -> None:
-            if getattr(self, "_last_thumb_url", None) != url:
-                return
-            try:
-                import io
-
-                from PIL import Image, ImageTk
-
-                img = Image.open(io.BytesIO(data))
-                max_w = 240
-                max_h = 120
-                img.thumbnail((max_w, max_h), Image.LANCZOS)
-                self._tk_image = ImageTk.PhotoImage(img)
-                self._thumbnail_label.configure(image=self._tk_image, text="")
-            except ImportError:
-                self._thumbnail_label.configure(text=f"[Thumbnail: {url}]")
-            except (OSError, ValueError) as e:
-                logger.debug("Could not render thumbnail %s: %s", url, e)
-
-        threading.Thread(target=_fetch_and_set, daemon=True).start()
+    def _on_thumbnail_ready(self, url: str, data: bytes | None) -> None:
+        if self._last_thumb_url != url or data is None:
+            return
+        photo = photoimage_from_bytes(data, 240, 120)
+        if photo is None:
+            self._thumbnail_label.configure(text=f"[Thumbnail: {url}]")
+            return
+        self._tk_image = photo
+        self._thumbnail_label.configure(image=photo, text="")
 
     def _add_all_to_queue(self) -> None:
         opts = self.get_current_options()
         if opts is None:
             return
-        videos = self._mw._results_table.playlist_videos
+        videos = self._mw._results_cards.playlist_videos
         for video in videos:
             video.options = copy.copy(opts)
         self._mw._controller.enqueue_multiple(videos)

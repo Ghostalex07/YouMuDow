@@ -10,6 +10,7 @@ import copy
 import logging
 import threading
 import tkinter as tk
+import webbrowser
 from collections.abc import Callable
 from pathlib import Path
 from tkinter import ttk
@@ -20,6 +21,10 @@ from youmudow.app.events import EventBus, EventType, get_event_bus
 from youmudow.app.state import AppMode, AppState, AppStateData
 from youmudow.domain.models import Video
 from youmudow.domain.validators import is_playlist_url, is_supported_url
+from youmudow.paths import cache_dir
+from youmudow.services.thumbnail_cache import ThumbnailCache
+from youmudow.services.thumbnail_loader import ThumbnailLoader
+from youmudow.services.thumbnail_service import ThumbnailService
 from youmudow.ui.actions import choose_output_folder, export_logs, open_output_folder
 from youmudow.ui.menubar import MenuCallbacks, create_menubar
 from youmudow.ui.startup_checks import (
@@ -31,13 +36,13 @@ from youmudow.ui.startup_checks import (
     show_ytdlp_version,
 )
 from youmudow.ui.styles.constants import FONT, SPACING, _c
-from youmudow.ui.styles.styles import configure_styles
+from youmudow.ui.styles.styles import apply_theme
 from youmudow.ui.styles.theme import ThemeName, get_theme_manager
 from youmudow.ui.styles.theme_apply import apply_theme_colors
 from youmudow.ui.widgets.detail_panel import DetailPanel
 from youmudow.ui.widgets.history_panel import HistoryPanel
 from youmudow.ui.widgets.log_terminal import LogTerminal
-from youmudow.ui.widgets.results_table import ResultsTable
+from youmudow.ui.widgets.results_cards import ResultsCards
 from youmudow.ui.widgets.search_bar import SearchBar
 from youmudow.ui.widgets.status_bar import StatusBar
 from youmudow.ui.window_settings import apply_settings, save_settings
@@ -61,7 +66,7 @@ class MainWindow:
         saved_theme = self._config.get("theme", "dark") if self._config else "dark"
         self._theme_manager = get_theme_manager()
         self._theme_manager.set_theme(saved_theme)
-        configure_styles(self._theme_manager.colors)
+        apply_theme(self._root, self._theme_manager.colors)
         self._root.configure(bg=_c("bg"))
 
         self._selected_video: Video | None = None
@@ -79,10 +84,11 @@ class MainWindow:
         self._main_content_frame: tk.Frame | None = None
         self._menubar: tk.Menu | None = None
         self._search_bar: SearchBar | None = None
-        self._results_table: ResultsTable | None = None
+        self._results_cards: ResultsCards | None = None
         self._detail_panel: DetailPanel | None = None
         self._status_bar: StatusBar | None = None
         self._history_panel: HistoryPanel | None = None
+        self._thumbnail_loader: ThumbnailLoader | None = None
 
         self._setup_ui()
         self._apply_config()
@@ -146,8 +152,18 @@ class MainWindow:
         main_frame.rowconfigure(2, weight=0)
 
         self._search_bar = SearchBar(main_frame, self)
-        self._results_table = ResultsTable(main_frame, self)
-        self._detail_panel = DetailPanel(main_frame, self)
+        self._thumbnail_loader = ThumbnailLoader(
+            self._root, ThumbnailCache(cache_dir()), ThumbnailService()
+        )
+        self._results_cards = ResultsCards(
+            main_frame,
+            self._controller.state,
+            self._thumbnail_loader,
+            on_select=self._on_result_select,
+            on_double_click=self._on_download_now,
+            on_open_in_browser=self._on_open_in_browser,
+        )
+        self._detail_panel = DetailPanel(main_frame, self, thumbnail_loader=self._thumbnail_loader)
         self._status_bar = StatusBar(self._main_tab, self)
 
         history = self._config.get_search_history() if self._config else []
@@ -222,6 +238,9 @@ class MainWindow:
         self._log_unsubscribe = self._event_bus.subscribe(EventType.LOG_OUTPUT, on_log)
         self._clear_unsubscribe = self._event_bus.subscribe(EventType.LOG_CLEAR, on_clear)
 
+        self._bind_shortcuts()
+
+    def _bind_shortcuts(self) -> None:
         self._root.bind("<Control-d>", lambda _: self._on_download_now())
         self._root.bind("<Control-q>", lambda _: self._detail_panel.enqueue_selected())
         self._root.bind("<Control-l>", lambda _: self._search_bar.search_entry.focus_set())
@@ -247,10 +266,12 @@ class MainWindow:
     def _on_search_complete(self, results: list[Video]) -> None:
         try:
             self._is_searching = False
-            self._results_table.update_results(results)
+            self._results_cards.update_results(results)
             if results:
                 self._selected_video = results[0]
                 self._detail_panel.update_detail_panel(results[0])
+                self._results_cards.select(0, notify=False)
+                self._results_cards.focus_set()
                 self._set_status(f"Found: {results[0].title}")
             else:
                 self._set_status("No results found")
@@ -335,6 +356,21 @@ class MainWindow:
         if self._detail_panel:
             self._detail_panel.update_button_states(self._is_searching, self._is_downloading)
 
+    def _on_result_select(self) -> None:
+        if self._results_cards is None:
+            return
+        selected = self._results_cards.get_selected_videos()
+        if selected:
+            self._selected_video = selected[0]
+            self._detail_panel.update_detail_panel(selected[0])
+            self._set_status(f"{len(selected)} selected")
+        else:
+            self._selected_video = None
+        self._update_button_states()
+
+    def _on_open_in_browser(self, url: str) -> None:
+        webbrowser.open(url)
+
     def _on_tab_changed(self, event: tk.Event | None = None) -> None:
         if not hasattr(self, "_notebook"):
             return
@@ -354,9 +390,9 @@ class MainWindow:
         self._is_searching = True
         self._set_status("Searching...")
         self._update_button_states()
-        self._results_table.is_playlist = False
-        self._results_table.playlist_videos = []
-        self._results_table.clear_results()
+        self._results_cards.is_playlist = False
+        self._results_cards.playlist_videos = []
+        self._results_cards.clear_results()
 
         if self._config:
             self._config.add_search(query)
@@ -364,12 +400,12 @@ class MainWindow:
 
         if is_supported_url(query):
             if is_playlist_url(query):
-                self._results_table.is_playlist = True
+                self._results_cards.is_playlist = True
                 self._handle_playlist_input(query)
             else:
                 self._handle_url_input(query)
         else:
-            self._results_table.results_tree.insert("", "end", values=("Searching...", "", ""))
+            self._results_cards.show_loading()
             self._controller.search(query)
 
     def _handle_url_input(self, url: str) -> None:
@@ -417,8 +453,8 @@ class MainWindow:
 
     def _on_playlist_complete(self, videos: list[Video]) -> None:
         if videos:
-            self._results_table.update_results(videos)
-            self._results_table.playlist_videos = videos
+            self._results_cards.update_results(videos)
+            self._results_cards.playlist_videos = videos
             self._set_status(f"Playlist: {len(videos)} videos")
         else:
             self._set_status("Failed to fetch playlist")
@@ -468,7 +504,7 @@ class MainWindow:
     # ------------------------------------------------------------------
 
     def _on_download_now(self) -> None:
-        selected = self._results_table.get_selected_videos()
+        selected = self._results_cards.get_selected_videos()
         if selected:
             opts = self._detail_panel.get_current_options()
             if opts is None:
@@ -482,7 +518,7 @@ class MainWindow:
             self._set_status(f"Downloading {len(selected)} videos...")
             return
 
-        if self._results_table.is_playlist and self._results_table.playlist_videos:
+        if self._results_cards.is_playlist and self._results_cards.playlist_videos:
             return
 
         video = self._selected_video
@@ -521,8 +557,6 @@ class MainWindow:
         current = self._theme_manager.current.name
         new_theme: ThemeName = "light" if current == "dark" else "dark"
         self._theme_manager.set_theme(new_theme)
-        configure_styles(self._theme_manager.colors)
-        self._results_table._style_treeview()
         self._apply_theme_colors()
         if self._log_terminal:
             self._log_terminal.set_dark_mode(new_theme == "dark")
@@ -532,7 +566,7 @@ class MainWindow:
     def _apply_theme_colors(self) -> None:
         colors = self._theme_manager.colors
         self._root.configure(bg=colors.BACKGROUND)
-        apply_theme_colors(self._root, colors)
+        apply_theme(self._root, colors)
         if self._menubar:
             apply_theme_colors(self._menubar, colors)
         try:
@@ -567,4 +601,6 @@ class MainWindow:
             self._log_unsubscribe()
         if self._clear_unsubscribe:
             self._clear_unsubscribe()
+        if self._thumbnail_loader:
+            self._thumbnail_loader.shutdown()
         self._root.destroy()

@@ -5,7 +5,7 @@ from youmudow.ui.widgets.history_panel import HistoryPanel
 from youmudow.ui.widgets.log_terminal import LogTerminal
 from youmudow.ui.widgets.options_panel import OptionsPanel
 from youmudow.ui.widgets.queue_panel import QueuePanel
-from youmudow.ui.widgets.results_table import ResultsTable
+from youmudow.ui.widgets.results_cards import ResultsCards
 from youmudow.ui.widgets.search_bar import SearchBar
 from youmudow.ui.widgets.status_bar import StatusBar
 
@@ -15,7 +15,7 @@ __all__ = [
     "LogTerminal",
     "OptionsPanel",
     "QueuePanel",
-    "ResultsTable",
+    "ResultsCards",
     "SearchBar",
     "StatusBar",
 ]

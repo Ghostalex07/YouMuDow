@@ -120,10 +120,7 @@ class AppController:
                     return
 
             for video in results:
-                if video.thumbnail:
-                    continue
-                if is_valid_youtube_url(video.url):
-                    video.thumbnail = self._thumbnail_service.get_thumbnail_url(video.url)
+                self._apply_thumbnail(video)
 
             with self._search_epoch_lock:
                 if epoch != self._search_epoch:
@@ -174,8 +171,8 @@ class AppController:
                     self._state_manager.set_state(AppState.IDLE)
                     return
 
-            if video and not video.thumbnail and is_valid_youtube_url(video.url):
-                video.thumbnail = self._thumbnail_service.get_thumbnail_url(video.url)
+            if video:
+                self._apply_thumbnail(video)
             self._state_manager.set_state(AppState.IDLE)
             if self._search_complete_callback:
                 self._search_complete_callback([video] if video else [])
@@ -187,6 +184,10 @@ class AppController:
             self._state_manager.set_error(f"Failed to fetch URL: {e}")
             self._state_manager.set_state(AppState.IDLE)
             logger.exception("URL metadata fetch failed for %s", url)
+
+    def _apply_thumbnail(self, video: Video) -> None:
+        if not video.thumbnail and is_valid_youtube_url(video.url):
+            video.thumbnail = self._thumbnail_service.get_thumbnail_url(video.url)
 
     def cancel_search(self) -> None:
         with self._search_epoch_lock:
@@ -202,10 +203,7 @@ class AppController:
         try:
             videos = self._search_service.get_playlist(url, limit)
             for video in videos:
-                if video.thumbnail:
-                    continue
-                if is_valid_youtube_url(video.url):
-                    video.thumbnail = self._thumbnail_service.get_thumbnail_url(video.url)
+                self._apply_thumbnail(video)
             self._state_manager.set_search_results(videos)
             self._state_manager.set_state(AppState.IDLE)
             return videos

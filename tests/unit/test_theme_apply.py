@@ -15,7 +15,8 @@ pytest.importorskip("tkinter")
 if not os.environ.get("DISPLAY"):
     pytest.skip("No display server available, skipping Tk tests", allow_module_level=True)
 
-from youmudow.ui.styles.colors import DARK_COLORS
+from youmudow.ui.styles.colors import DARK_COLORS, LIGHT_COLORS
+from youmudow.ui.styles.styles import StyleManager, apply_theme
 from youmudow.ui.styles.theme_apply import (
     apply_theme_colors,
     apply_widget_colors,
@@ -201,3 +202,49 @@ class TestApplyThemeColors:
         frame.destroy()
 
         apply_theme_colors(frame, DARK_COLORS)
+
+    def test_card_keeps_surface_and_border_after_retheme(self, root):
+        from youmudow.ui.widgets.components.card import Card
+
+        card = Card(root, padding=8)
+        card.pack()
+
+        apply_theme_colors(card, LIGHT_COLORS)
+
+        assert card.cget("background") == LIGHT_COLORS.SURFACE
+        assert card.cget("highlightbackground") == LIGHT_COLORS.BORDER
+
+    def test_search_entry_keeps_surface_on_retheme(self, root):
+        from youmudow.ui.widgets.components.search_entry import SearchEntry
+
+        entry = SearchEntry(root, placeholder="Search")
+        entry.pack()
+
+        apply_theme_colors(entry, LIGHT_COLORS)
+
+        assert entry.cget("background") == LIGHT_COLORS.SURFACE
+
+    def test_canvas_window_items_are_retinted(self, root):
+        canvas = tk.Canvas(root, bg="#ffffff")
+        canvas.pack()
+        inner = tk.Frame(canvas, bg="#111111")
+        inner._bg_key = "surface"
+        canvas.create_window((0, 0), window=inner, anchor="nw")
+
+        apply_theme_colors(canvas, DARK_COLORS)
+
+        assert inner.cget("bg") == DARK_COLORS.SURFACE
+
+
+class TestApplyTheme:
+    def test_apply_theme_paints_ttk_and_tk(self, root):
+        apply_theme(root, LIGHT_COLORS)
+        btn = tk.Button(root)
+        btn.pack()
+        apply_theme(root, DARK_COLORS)
+        assert btn.cget("bg").lower() == DARK_COLORS.SURFACE.lower()
+
+    def test_treeview_styled_by_manager(self):
+        mgr = StyleManager()
+        mgr.configure(DARK_COLORS)
+        assert mgr.style.lookup("Modern.Treeview", "background")

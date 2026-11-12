@@ -5,6 +5,7 @@ from tkinter import ttk
 
 from youmudow.domain.validators import is_supported_url
 from youmudow.ui.styles.constants import FONT, SPACING, _c, add_hover_effect
+from youmudow.ui.widgets.components.spinner import Spinner
 
 
 class SearchBar(tk.Frame):
@@ -24,6 +25,8 @@ class SearchBar(tk.Frame):
         entry_frame._bg_key = "surface"
         entry_frame.pack(side="left", fill="both", expand=True, padx=(0, SPACING["sm"]))
         entry_frame.columnconfigure(0, weight=1)
+
+        self._spinner = Spinner(self, size=18, color="primary")
 
         self._search_var = tk.StringVar()
         self._search_combo = ttk.Combobox(
@@ -179,3 +182,9 @@ class SearchBar(tk.Frame):
         self._search_btn.configure(state="disabled" if is_busy else "normal")
         self._cancel_btn.configure(state="normal" if is_searching else "disabled")
         self._cancel_dl_btn.configure(state="normal" if is_downloading else "disabled")
+        if is_searching:
+            self._spinner.start()
+            self._spinner.pack(side="left", before=self._search_btn, padx=(SPACING["xs"], 0))
+        else:
+            self._spinner.stop()
+            self._spinner.pack_forget()

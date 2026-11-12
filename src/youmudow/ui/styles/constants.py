@@ -27,12 +27,13 @@ SPACING = {
 }
 
 FONT = {
-    "h1": (_SANS, 14, "bold"),
-    "h2": (_SANS, 12, "bold"),
-    "h3": (_SANS, 11, "bold"),
-    "body": (_SANS, 10),
-    "small": (_SANS, 9),
-    "label": (_SANS, 9, "bold"),
+    "display": (_SANS, 18, "bold"),
+    "h1": (_SANS, 15, "bold"),
+    "h2": (_SANS, 13, "bold"),
+    "h3": (_SANS, 12, "bold"),
+    "body": (_SANS, 11),
+    "small": (_SANS, 10),
+    "label": (_SANS, 10, "bold"),
     "mono": (_MONO, 10),
 }
 

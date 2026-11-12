@@ -14,6 +14,7 @@ class ThumbnailService:
             r"(?:v=|/v/)([\w-]{11})",
             r"youtu\.be/([\w-]{11})",
             r"shorts/([\w-]{11})",
+            r"img\.youtube\.com/vi/([\w-]{11})",
         ]
         for pattern in patterns:
             match = re.search(pattern, url)

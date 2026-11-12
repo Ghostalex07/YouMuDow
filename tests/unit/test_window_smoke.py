@@ -60,7 +60,7 @@ class TestMainWindowBuild:
         window, _ = main_window
         assert "YouMuDow" in window._root.title()
         assert window._search_bar is not None
-        assert window._results_table is not None
+        assert window._results_cards is not None
         assert window._detail_panel is not None
         assert window._status_bar is not None
         assert window._history_panel is not None
@@ -122,7 +122,7 @@ class TestMainWindowFlows:
         callback([video])
         window._root.update()
         assert window._selected_video is video
-        assert window._results_table.get_selected_videos() or True
+        assert window._results_cards.get_selected_videos() or True
 
     def test_on_download_complete_keeps_downloading_until_snapshot_says_otherwise(
         self, main_window
@@ -155,10 +155,10 @@ class TestMainWindowFlows:
     def test_playlist_input_fetches_playlist(self, main_window):
         window, _ = main_window
         url = "https://www.youtube.com/playlist?list=abc123"
-        window._results_table.is_playlist = True
+        window._results_cards.is_playlist = True
         window._handle_playlist_input(url)
         window._on_playlist_complete([Video(title="P1", url="https://example.com/1")])
-        assert window._results_table.playlist_videos
+        assert window._results_cards.playlist_videos
         assert window._is_searching is False
 
     def test_file_exit_menu_runs_full_close_sequence(self, main_window):

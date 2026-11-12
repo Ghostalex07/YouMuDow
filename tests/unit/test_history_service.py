@@ -102,7 +102,7 @@ class TestHistoryService:
         hs = HistoryService()
         hs.add(make_video(url="https://example.com/keep"), "/tmp/keep.mp3", "mp3")
         before = temp_history_file.read_text(encoding="utf-8")
-        with patch("youmudow.services.history_service.os.replace", side_effect=OSError("boom")):
+        with patch("youmudow.services.persistence.os.replace", side_effect=OSError("boom")):
             hs.add(make_video(url="https://example.com/new"), "/tmp/new.mp3", "mp3")
         assert list(temp_history_file.parent.glob("*.tmp")) == []
         assert temp_history_file.read_text(encoding="utf-8") == before

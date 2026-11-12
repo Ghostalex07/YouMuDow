@@ -3,10 +3,12 @@
 Clam-based theme with consistent widget styling.
 """
 
+import tkinter as tk
 from tkinter import ttk
 
 from youmudow.ui.styles.colors import Colors
 from youmudow.ui.styles.constants import FONT
+from youmudow.ui.styles.theme_apply import apply_theme_colors
 
 
 class StyleManager:
@@ -15,6 +17,11 @@ class StyleManager:
     def __init__(self) -> None:
         self._style = ttk.Style()
         self._colors: Colors | None = None
+
+    @property
+    def style(self) -> ttk.Style:
+        """The underlying ``ttk.Style`` instance."""
+        return self._style
 
     def configure(self, colors: Colors) -> None:
         self._colors = colors
@@ -160,6 +167,29 @@ class StyleManager:
         )
 
         self._style.configure(
+            "Modern.Treeview",
+            background=c.SURFACE,
+            foreground=c.TEXT,
+            fieldbackground=c.SURFACE,
+            borderwidth=0,
+            rowheight=40,
+            font=FONT["body"],
+        )
+        self._style.configure(
+            "Modern.Treeview.Heading",
+            background=c.BACKGROUND,
+            foreground=c.TEXT_SECONDARY,
+            borderwidth=0,
+            padding=(8, 6),
+            font=FONT["label"],
+        )
+        self._style.map(
+            "Modern.Treeview",
+            background=[("selected", c.PRIMARY)],
+            foreground=[("selected", "#FFFFFF")],
+        )
+
+        self._style.configure(
             "Horizontal.TProgressbar",
             background=c.PRIMARY,
             troughcolor=c.BORDER,
@@ -232,3 +262,13 @@ def configure_styles(colors: Colors) -> StyleManager:
     manager = StyleManager()
     manager.configure(colors)
     return manager
+
+
+def apply_theme(root: tk.Misc, colors: Colors) -> None:
+    """Apply the full theme to ``root`` in one pass.
+
+    Configures the ttk styles (including the ``Modern.Treeview`` used by the
+    results list) and repaints every Tk widget in the tree.
+    """
+    configure_styles(colors)
+    apply_theme_colors(root, colors)
