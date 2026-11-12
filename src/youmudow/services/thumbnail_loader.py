@@ -5,6 +5,7 @@ import queue
 import threading
 import tkinter as tk
 from collections.abc import Callable
+from urllib.request import urlopen
 
 from youmudow.services.thumbnail_cache import ThumbnailCache
 from youmudow.services.thumbnail_service import ThumbnailService
@@ -72,8 +73,6 @@ class ThumbnailLoader:
             self._results.put((video_url, data, on_ready))
 
     def _fetch(self, video_url: str) -> bytes | None:
-        from urllib.request import urlopen
-
         video_id = self._service.extract_video_id(video_url)
         if video_id:
             cached = self._cache.get(video_id)

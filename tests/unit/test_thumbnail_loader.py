@@ -55,7 +55,7 @@ def test_loader_uses_cache_when_present(root, tmp_path):
 
 
 def test_multiple_requests_all_deliver(root, tmp_path, monkeypatch):
-    import urllib.request
+    import youmudow.services.thumbnail_loader as loader_mod
 
     cache = ThumbnailCache(tmp_path)
     results = {}
@@ -69,7 +69,7 @@ def test_multiple_requests_all_deliver(root, tmp_path, monkeypatch):
             return _FakeResponse(b"slow")
         return _FakeResponse(b"fast")
 
-    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(loader_mod, "urlopen", fake_urlopen)
     loader = ThumbnailLoader(root, cache, ThumbnailService())
     try:
         loader.request(
@@ -104,3 +104,16 @@ def test_photoimage_from_bytes_valid(root):
 
 def test_photoimage_from_bytes_invalid(root):
     assert photoimage_from_bytes(b"not an image", 10, 10) is None
+
+
+def test_urlopen_imported_at_module_level():
+    """Regression: the worker thread must never import urllib.request.
+
+    Importing its dependency tree on a daemon thread while the Tk main
+    thread pumps events (``root.update()``) aborts the interpreter
+    (SIGABRT). ``urlopen`` must be imported at module level instead, so
+    the import happens once on the main thread before the worker starts.
+    """
+    import youmudow.services.thumbnail_loader as tl
+
+    assert "urlopen" in tl.__dict__
