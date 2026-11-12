@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Development scripts for the UI modernization: `scripts/smoke_boot.py`
+  (headless boot check against the real X display) and
+  `scripts/measure_startup.py` (wall-clock startup measurement), the baseline
+  harness for the modernization work
+
 ### Changed
 
 - Repository cleanup: `ai.txt`, `robots.txt` and the local packaging leftovers
