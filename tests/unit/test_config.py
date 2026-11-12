@@ -134,7 +134,10 @@ class TestAppConfig:
             with (
                 patch("youmudow.app.config.CONFIG_DIR", Path(tmp)),
                 patch("youmudow.app.config.CONFIG_FILE", config_file),
-                patch("youmudow.app.config.os.replace", side_effect=OSError("no space")),
+                patch(
+                    "youmudow.services.persistence.os.replace",
+                    side_effect=OSError("no space"),
+                ),
             ):
                 cfg = AppConfig()
                 cfg.set("format", "flac")

@@ -1,13 +1,12 @@
 import json
 import logging
-import os
 import platform
-import tempfile
 from pathlib import Path
 from typing import Any
 
 from youmudow.domain.models import DownloadOptions
 from youmudow.paths import config_dir
+from youmudow.services.persistence import backup_corrupt, write_atomic
 
 logger = logging.getLogger(__name__)
 
@@ -43,38 +42,6 @@ DEFAULT_CONFIG: dict[str, Any] = {
 }
 
 
-def _write_atomic(path: Path, text: str) -> None:
-    tmp: Path | None = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            "w",
-            encoding="utf-8",
-            dir=path.parent,
-            prefix=path.name + ".",
-            suffix=".tmp",
-            delete=False,
-        ) as f:
-            tmp = Path(f.name)
-            f.write(text)
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp, path)
-    except BaseException:
-        if tmp is not None:
-            tmp.unlink(missing_ok=True)
-        raise
-
-
-def _backup_corrupt(path: Path) -> Path | None:
-    backup = path.with_suffix(path.suffix + ".corrupt")
-    try:
-        os.replace(path, backup)
-    except OSError as e:
-        logger.warning("Could not preserve corrupt file %s: %s", path, e)
-        return None
-    return backup
-
-
 class AppConfig:
     def __init__(self) -> None:
         self._data: dict[str, Any] = dict(DEFAULT_CONFIG)
@@ -89,7 +56,7 @@ class AppConfig:
                     raise ValueError(f"expected a JSON object, got {type(stored).__name__}")
                 self._data = {**DEFAULT_CONFIG, **stored}
         except ValueError as e:
-            backup = _backup_corrupt(CONFIG_FILE)
+            backup = backup_corrupt(CONFIG_FILE)
             logger.warning(
                 "Corrupted config file (%s), using defaults. Original kept at %s",
                 e,
@@ -101,7 +68,7 @@ class AppConfig:
     def save(self) -> None:
         try:
             CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-            _write_atomic(CONFIG_FILE, json.dumps(self._data, indent=2))
+            write_atomic(CONFIG_FILE, json.dumps(self._data, indent=2))
         except OSError as e:
             logger.warning("Failed to save config: %s", e)
 
