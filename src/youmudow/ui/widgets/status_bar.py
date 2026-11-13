@@ -2,14 +2,16 @@
 
 import tkinter as tk
 
+from youmudow.ui.protocols import MainWindowProtocol
 from youmudow.ui.styles.constants import FONT, SPACING, _c
+from youmudow.ui.typed import setattr_any
 
 
 class StatusBar(tk.Frame):
-    def __init__(self, parent: tk.Widget, main_window: object) -> None:
+    def __init__(self, parent: tk.Widget, main_window: MainWindowProtocol) -> None:
         super().__init__(parent, bg=_c("surface"))
         self._mw = main_window
-        self._bg_key = "surface"
+        setattr_any(self, "_bg_key", "surface")
         self.grid(row=1, column=0, sticky="ew", padx=SPACING["xl"], pady=(0, SPACING["sm"]))
         self.columnconfigure(0, weight=1)
 
@@ -25,7 +27,7 @@ class StatusBar(tk.Frame):
         self._status_label.grid(row=0, column=0, sticky="w")
 
         progress_frame = tk.Frame(self, bg=_c("surface"), height=4)
-        progress_frame._bg_key = "surface"
+        setattr_any(progress_frame, "_bg_key", "surface")
         progress_frame.grid(row=1, column=0, sticky="ew", pady=(SPACING["xs"], 0))
         progress_frame.columnconfigure(0, weight=1)
 
@@ -37,7 +39,7 @@ class StatusBar(tk.Frame):
             highlightthickness=0,
             relief="flat",
         )
-        self._progress_bar._bg_key = "border"
+        setattr_any(self._progress_bar, "_bg_key", "border")
         self._progress_bar.pack(fill="x")
         self._progress_rect = self._progress_bar.create_rectangle(
             0, 0, 0, 4, fill=_c("primary"), outline=""

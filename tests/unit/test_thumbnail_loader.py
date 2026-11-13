@@ -107,6 +107,32 @@ def test_photoimage_from_bytes_invalid(root):
     assert photoimage_from_bytes(b"not an image", 10, 10) is None
 
 
+def test_resampling_constant_uses_public_api():
+    """The resampling filter must work across Pillow versions.
+
+    Pillow 10 introduced the public ``Image.Resampling`` enum and dropped the
+    module-level ``Image.LANCZOS`` alias in Pillow 12. Older versions only
+    have the alias, so the helper falls back to it.
+    """
+    from youmudow.ui.widgets.components.thumbnail import _lanczos_filter
+
+    assert _lanczos_filter() is not None
+
+
+def test_photoimage_from_bytes_renders_with_lanczos(root):
+    """A real image must still be rendered after the resampling change."""
+    import io
+
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (40, 30), (10, 20, 30)).save(buf, format="PNG")
+
+    photo = photoimage_from_bytes(buf.getvalue(), 20, 10)
+
+    assert photo is not None
+
+
 def test_urlopen_imported_at_module_level():
     """Regression: the worker thread must never import urllib.request.
 

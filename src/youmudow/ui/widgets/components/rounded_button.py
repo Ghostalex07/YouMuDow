@@ -7,6 +7,7 @@ resolved at draw time, not cached.
 """
 
 import tkinter as tk
+from collections.abc import Callable
 from tkinter import font as tkfont
 
 from youmudow.ui.styles.constants import FONT, _c
@@ -32,7 +33,7 @@ class RoundedButton(tk.Canvas):
         master: tk.Misc,
         text: str,
         *,
-        command: object | None = None,
+        command: Callable[[], None] | None = None,
         variant: str = "primary",
         width: int | None = None,
         height: int = 34,
@@ -54,8 +55,6 @@ class RoundedButton(tk.Canvas):
         self._hovered = False
         self._label_text = text
         self._font = font or FONT["body"]
-        self._fill_color: str | None = None
-        self._text_color: str = _c("text")
         self._update_colors()
 
         self.bind("<Configure>", lambda _event: self._draw())
@@ -72,17 +71,24 @@ class RoundedButton(tk.Canvas):
         return value if value.startswith("#") else _c(value)
 
     def _update_colors(self) -> None:
+        """Resolve the current fill/text colours from the active theme.
+
+        Colours are resolved on every call instead of being cached, so a theme
+        switch repaints the button without needing an explicit refresh.
+        """
         v = _VARIANTS[self._variant]
+        fill = v["fill"]
+        text = v["text"]
+        hover = v["hover"]
         if not self._enabled:
-            self._fill_color = _c("disabled") if v["fill"] is not None else None
+            self._fill_color = _c("disabled") if fill is not None else None
             self._text_color = _c("text_secondary")
             return
-        fill = v["fill"]
         if fill is not None:
-            self._fill_color = _c(v["hover"]) if self._hovered else _c(fill)
+            self._fill_color = _c(hover or fill) if self._hovered else _c(fill)
         else:
-            self._fill_color = _c("hover") if self._hovered else None
-        self._text_color = self._resolve(v["text"])
+            self._fill_color = _c(hover or "hover") if self._hovered else None
+        self._text_color = self._resolve(text or "text")
 
     def _draw(self) -> None:
         self.delete("all")
@@ -93,7 +99,8 @@ class RoundedButton(tk.Canvas):
 
         v = _VARIANTS[self._variant]
         fill = self._fill_color or _c("bg")
-        outline = _c(v["border"]) if v.get("border") else fill
+        border = v.get("border")
+        outline = _c(border) if border else fill
 
         self._rounded_rect(
             0.5, 0.5, width - 0.5, height - 0.5, self._RADIUS, fill=fill, outline=outline
@@ -107,7 +114,15 @@ class RoundedButton(tk.Canvas):
         )
 
     def _rounded_rect(
-        self, x1: float, y1: float, x2: float, y2: float, radius: int, **kwargs: object
+        self,
+        x1: float,
+        y1: float,
+        x2: float,
+        y2: float,
+        radius: int,
+        *,
+        fill: str,
+        outline: str,
     ) -> int:
         points = [
             x1 + radius,
@@ -135,7 +150,7 @@ class RoundedButton(tk.Canvas):
             x1,
             y1,
         ]
-        return self.create_polygon(points, smooth=True, **kwargs)
+        return self.create_polygon(points, smooth=True, fill=fill, outline=outline)
 
     def set_text(self, text: str) -> None:
         self._label_text = text
@@ -145,6 +160,10 @@ class RoundedButton(tk.Canvas):
         self._enabled = enabled
         self._update_colors()
         self._draw()
+
+    def is_enabled(self) -> bool:
+        """Return whether the button currently accepts clicks."""
+        return self._enabled
 
     def invoke(self) -> None:
         if self._enabled and self._command is not None:

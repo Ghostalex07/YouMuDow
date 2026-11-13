@@ -8,6 +8,7 @@ from tkinter import ttk
 from youmudow.domain.models import Video
 from youmudow.services.thumbnail_loader import ThumbnailLoader
 from youmudow.ui.styles.constants import FONT, SPACING, _c
+from youmudow.ui.typed import setattr_any
 from youmudow.ui.widgets.components.card import Card
 from youmudow.ui.widgets.components.empty_state import EmptyState
 from youmudow.ui.widgets.components.thumbnail import photoimage_from_bytes
@@ -194,7 +195,7 @@ class ResultsCards(tk.Frame):
         thumb.pack(side="left", padx=(0, SPACING["sm"]), fill="y")
 
         info = tk.Frame(card, bg=_c("surface"))
-        info._bg_key = "surface"
+        setattr_any(info, "_bg_key", "surface")
         info.pack(side="left", fill="both", expand=True)
 
         title = tk.Label(
@@ -218,10 +219,28 @@ class ResultsCards(tk.Frame):
         meta.pack(fill="x")
 
         for widget in (card, thumb, info, title, meta):
-            widget.bind("<Button-1>", lambda e, idx=index: self._on_card_click(idx, e))
-            widget.bind("<Double-Button-1>", lambda e, idx=index: self._on_card_double_click(idx))
-            widget.bind("<Button-3>", lambda e, idx=index: self._on_card_right_click(idx))
+            widget.bind("<Button-1>", self._make_click_handler(index))
+            widget.bind("<Double-Button-1>", self._make_double_click_handler(index))
+            widget.bind("<Button-3>", self._make_right_click_handler(index))
         return card, thumb
+
+    def _make_click_handler(self, index: int) -> Callable[[tk.Event], None]:
+        def handler(event: tk.Event) -> None:
+            self._on_card_click(index, event)
+
+        return handler
+
+    def _make_double_click_handler(self, index: int) -> Callable[[tk.Event], None]:
+        def handler(_event: tk.Event) -> None:
+            self._on_card_double_click(index)
+
+        return handler
+
+    def _make_right_click_handler(self, index: int) -> Callable[[tk.Event], None]:
+        def handler(_event: tk.Event) -> None:
+            self._on_card_right_click(index)
+
+        return handler
 
     def _meta_text(self, video: Video) -> str:
         parts = []
@@ -237,13 +256,14 @@ class ResultsCards(tk.Frame):
     # ------------------------------------------------------------------
 
     def _on_card_click(self, index: int, event: tk.Event) -> None:
-        if event.state & _CONTROL:
+        state = int(event.state)
+        if state & _CONTROL:
             if index in self._selected:
                 self._selected.discard(index)
             else:
                 self._selected.add(index)
             self._anchor = index
-        elif event.state & _SHIFT:
+        elif state & _SHIFT:
             if self._anchor is None:
                 self._selected = {index}
             else:
@@ -272,10 +292,10 @@ class ResultsCards(tk.Frame):
         for i, card in enumerate(self._cards):
             if i in self._selected:
                 card.configure(highlightbackground=_c("primary"), highlightthickness=2)
-                card._border_key = "primary"
+                setattr_any(card, "_border_key", "primary")
             else:
                 card.configure(highlightbackground=_c("border"), highlightthickness=1)
-                card._border_key = "border"
+                setattr_any(card, "_border_key", "border")
 
     def _on_up(self) -> None:
         self._move_selection(-1)
@@ -311,8 +331,14 @@ class ResultsCards(tk.Frame):
             if not url:
                 continue
             self._thumb_urls[i] = url
-            self._loader.request(url, lambda u, d, idx=i: self._on_thumb_ready(idx, u, d))
+            self._loader.request(url, self._make_thumb_handler(i))
         self._thumb_batch = end
+
+    def _make_thumb_handler(self, index: int) -> Callable[[str, bytes | None], None]:
+        def handler(url: str, data: bytes | None) -> None:
+            self._on_thumb_ready(index, url, data)
+
+        return handler
 
     def _on_thumb_ready(self, index: int, url: str, data: bytes | None) -> None:
         if self._thumb_urls.get(index) != url or data is None:
@@ -330,7 +356,7 @@ class ResultsCards(tk.Frame):
     # ------------------------------------------------------------------
 
     def _on_canvas_yscroll(self, *args: object) -> None:
-        self._scrollbar.set(*args)
+        self._scrollbar.set(*[str(arg) for arg in args])
         if self._canvas.yview()[1] >= 0.9:
             self._request_thumbnails()
 

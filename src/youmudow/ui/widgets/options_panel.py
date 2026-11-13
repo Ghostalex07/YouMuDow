@@ -7,8 +7,9 @@ layout order. It owns the Tk variables backing every option.
 
 import logging
 import tkinter as tk
+from collections.abc import Callable
 from tkinter import filedialog, ttk
-from typing import Any
+from typing import Any, Literal
 
 from youmudow.adapters.browser_profiles import get_all_browser_profiles, get_available_browsers
 from youmudow.domain.enums import DownloadStatus
@@ -18,7 +19,9 @@ from youmudow.domain.validators import (
     SUPPORTED_QUALITIES,
     is_valid_rate_limit,
 )
+from youmudow.ui.protocols import MainWindowProtocol
 from youmudow.ui.styles.constants import FONT, SPACING, _c, add_hover_effect
+from youmudow.ui.typed import setattr_any
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +34,7 @@ class OptionsPanel:
     layout of the detail panel unchanged.
     """
 
-    def __init__(self, parent: tk.Widget, main_window: object) -> None:
+    def __init__(self, parent: tk.Widget, main_window: MainWindowProtocol) -> None:
         self._mw = main_window
         self._available_browsers: list[str] | None = None
         self._browser_profiles_cache: dict | None = None
@@ -72,7 +75,11 @@ class OptionsPanel:
             bd=0,
             command=self.toggle,
         )
-        self._detail_toggle_btn._theme = {"bg": "bg", "fg": "text_secondary"}
+        setattr_any(
+            self._detail_toggle_btn,
+            "_theme",
+            {"bg": "bg", "fg": "text_secondary", "activebg": "hover", "activefg": "text"},
+        )
         self._detail_toggle_btn.pack(side="left")
         add_hover_effect(self._detail_toggle_btn, "hover", "bg", _c("text"), _c("text_secondary"))
 
@@ -90,16 +97,20 @@ class OptionsPanel:
             pady=6,
             command=self._on_retry_download,
         )
-        self._retry_btn._theme = {
-            "bg": "warning",
-            "fg": "#000000",
-            "activebg": "warning",
-            "activefg": "#000000",
-        }
+        setattr_any(
+            self._retry_btn,
+            "_theme",
+            {
+                "bg": "warning",
+                "fg": "#000000",
+                "activebg": "warning",
+                "activefg": "#000000",
+            },
+        )
 
     def _build_options(self, parent: tk.Widget) -> None:
         self._options_frame = tk.Frame(parent, bg=_c("surface"))
-        self._options_frame._bg_key = "surface"
+        setattr_any(self._options_frame, "_bg_key", "surface")
         self._rows = self._build_rows()
         self._rows_count = len(self._rows)
 
@@ -109,7 +120,7 @@ class OptionsPanel:
 
     def _row(self, label: str | None = None, *, pady: tuple = (0, SPACING["md"])) -> tk.Frame:
         row = tk.Frame(self._options_frame, bg=_c("surface"))
-        row._bg_key = "surface"
+        setattr_any(row, "_bg_key", "surface")
         row.pack(fill="x", pady=pady)
         if label is not None:
             self._label(row, label, width=10)
@@ -142,7 +153,7 @@ class OptionsPanel:
         var: tk.Variable,
         text: str,
         *,
-        command=None,
+        command: Callable[[], Any] | None = None,
         font=FONT["body"],
         fg=None,
         padx: tuple = (0, 0),
@@ -160,8 +171,9 @@ class OptionsPanel:
             selectcolor=_c("surface"),
             relief="flat",
             font=font,
-            command=command,
         )
+        if command is not None:
+            check.configure(command=command)
         check.pack(side="left", padx=padx)
         return check
 
@@ -213,7 +225,7 @@ class OptionsPanel:
         *,
         from_: int,
         to: int,
-        command=None,
+        command: Callable[[], Any] | None = None,
     ) -> tk.Spinbox:
         spin = tk.Spinbox(
             parent,
@@ -226,8 +238,9 @@ class OptionsPanel:
             relief="flat",
             width=3,
             font=FONT["body"],
-            command=command,
         )
+        if command is not None:
+            spin.configure(command=command)
         spin.pack(side="left", padx=(0, SPACING["sm"]))
         return spin
 
@@ -318,7 +331,7 @@ class OptionsPanel:
             width=2,
             command=self._on_select_cookies_file,
         )
-        self._cookies_file_btn._theme = {"bg": "surface", "fg": "text"}
+        setattr_any(self._cookies_file_btn, "_theme", {"bg": "surface", "fg": "text"})
         self._cookies_file_btn.pack(side="left", padx=(SPACING["sm"], 0))
         add_hover_effect(self._cookies_file_btn, "hover", "surface")
         return row
@@ -530,12 +543,12 @@ class OptionsPanel:
             val = self._concurrent_var.get()
         except (tk.TclError, TypeError, ValueError):
             return
-        if hasattr(self._mw, "_controller") and self._mw._controller:
-            ds = self._mw._controller._download_service
+        ds = getattr(self._mw._controller, "_download_service", None)
+        if ds is not None:
             ds.set_max_concurrent(val)
 
     def _on_subtitles_toggle(self) -> None:
-        state = "normal" if self._subtitles_var.get() else "disabled"
+        state: Literal["normal", "disabled"] = "normal" if self._subtitles_var.get() else "disabled"
         self._subtitle_lang_entry.configure(state=state)
         self._embed_subs_check.configure(state=state)
 

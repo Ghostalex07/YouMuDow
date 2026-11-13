@@ -13,8 +13,9 @@ from collections.abc import Callable
 from typing import Any
 
 from youmudow.ui.styles.constants import _COLOR_MAP
+from youmudow.ui.typed import configure_widget
 
-ColorRule = Callable[[tk.Widget, Any], None]
+ColorRule = Callable[..., None]
 
 
 def resolve_color(colors: Any, key: str) -> str:
@@ -32,14 +33,14 @@ def _parent_background(widget: tk.Widget, colors: Any) -> str:
 
 
 def _style_frame(widget: tk.Widget, colors: Any) -> None:
-    widget.configure(bg=resolve_color(colors, getattr(widget, "_bg_key", "bg")))
+    configure_widget(widget, bg=resolve_color(colors, getattr(widget, "_bg_key", "bg")))
     border_key = getattr(widget, "_border_key", None)
     if border_key is not None:
-        widget.configure(highlightbackground=resolve_color(colors, border_key))
+        configure_widget(widget, highlightbackground=resolve_color(colors, border_key))
 
 
 def _style_label(widget: tk.Widget, colors: Any) -> None:
-    widget.configure(bg=_parent_background(widget, colors), fg=colors.TEXT)
+    configure_widget(widget, bg=_parent_background(widget, colors), fg=colors.TEXT)
 
 
 def _style_button(widget: tk.Widget, colors: Any) -> None:
@@ -47,14 +48,16 @@ def _style_button(widget: tk.Widget, colors: Any) -> None:
     if theme:
         background = theme.get("bg", "surface")
         foreground = theme.get("fg", "text")
-        widget.configure(
+        configure_widget(
+            widget,
             bg=resolve_color(colors, background),
             fg=resolve_color(colors, foreground),
             activebackground=resolve_color(colors, theme.get("activebg", background)),
             activeforeground=resolve_color(colors, theme.get("activefg", foreground)),
         )
         return
-    widget.configure(
+    configure_widget(
+        widget,
         bg=colors.SURFACE,
         fg=colors.TEXT,
         activebackground=colors.HOVER,
@@ -63,7 +66,8 @@ def _style_button(widget: tk.Widget, colors: Any) -> None:
 
 
 def _style_entry(widget: tk.Widget, colors: Any) -> None:
-    widget.configure(
+    configure_widget(
+        widget,
         bg=colors.SURFACE,
         fg=colors.TEXT,
         insertbackground=colors.TEXT,
@@ -77,7 +81,8 @@ def _style_toggle(widget: tk.Widget, colors: Any) -> None:
         parent_bg = str(widget.master.cget("bg"))
     except (tk.TclError, AttributeError):
         parent_bg = str(colors.SURFACE)
-    widget.configure(
+    configure_widget(
+        widget,
         bg=parent_bg,
         fg=colors.TEXT,
         selectcolor=parent_bg,
@@ -87,11 +92,11 @@ def _style_toggle(widget: tk.Widget, colors: Any) -> None:
 
 
 def _style_canvas(widget: tk.Widget, colors: Any) -> None:
-    widget.configure(bg=resolve_color(colors, getattr(widget, "_bg_key", "bg")))
+    configure_widget(widget, bg=resolve_color(colors, getattr(widget, "_bg_key", "bg")))
 
 
 def _style_menu(widget: tk.Widget, colors: Any) -> None:
-    widget.configure(bg=colors.SURFACE, fg=colors.TEXT)
+    configure_widget(widget, bg=colors.SURFACE, fg=colors.TEXT)
 
 
 _RULES: dict[str, ColorRule] = {
@@ -107,7 +112,7 @@ _RULES: dict[str, ColorRule] = {
 }
 
 
-def apply_widget_colors(widget: tk.Widget, colors: Any) -> None:
+def apply_widget_colors(widget: tk.Misc, colors: Any) -> None:
     """Apply the colour rule for this widget's class, if it has one.
 
     Widget classes without a rule (for example ttk widgets, which are styled
@@ -125,7 +130,7 @@ def apply_widget_colors(widget: tk.Widget, colors: Any) -> None:
         pass
 
 
-def apply_theme_colors(widget: tk.Widget, colors: Any) -> None:
+def apply_theme_colors(widget: tk.Misc, colors: Any) -> None:
     """Apply theme colours to ``widget`` and every descendant it owns."""
     apply_widget_colors(widget, colors)
     try:
@@ -137,7 +142,7 @@ def apply_theme_colors(widget: tk.Widget, colors: Any) -> None:
     # Canvas ``window`` items are not ``winfo_children``, so recurse into
     # them explicitly (scrollable card lists embed their content this way).
     try:
-        if widget.winfo_class() == "Canvas":
+        if widget.winfo_class() == "Canvas" and isinstance(widget, tk.Canvas):
             for item in widget.find_all():
                 if widget.type(item) == "window":
                     child = widget.nametowidget(widget.itemcget(item, "window"))

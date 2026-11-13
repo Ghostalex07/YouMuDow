@@ -48,3 +48,42 @@ def test_set_and_clear(root):
     assert e.get() == "abc"
     e.clear()
     assert e.get() == ""
+
+
+class TestSearchEntryHistory:
+    def test_history_dropdown_does_not_open_without_history(self, root):
+        e = SearchEntry(root, history=[])
+        e.open_history()
+        assert not e.history_is_open()
+
+    def test_history_dropdown_opens_with_history(self, root):
+        e = SearchEntry(root, history=["url1", "url2"])
+        e.open_history()
+        assert e.history_is_open()
+
+    def test_set_history_updates_dropdown_contents(self, root):
+        e = SearchEntry(root, history=["url1"])
+        e.open_history()
+        e.set_history(["a", "b"])
+        assert list(e._history_listbox.get(0, "end")) == ["a", "b"]
+
+    def test_selecting_history_item_sets_field_and_fires_command(self, root):
+        calls = []
+        e = SearchEntry(root, command=lambda: calls.append(1), history=["url1"])
+        e.open_history()
+        e._history_listbox.selection_set(0)
+        e._on_history_select(None)
+        assert e.get() == "url1"
+        assert calls == [1]
+
+    def test_close_history_hides_dropdown(self, root):
+        e = SearchEntry(root, history=["url1"])
+        e.open_history()
+        e.close_history()
+        assert not e.history_is_open()
+
+    def test_clear_closes_history(self, root):
+        e = SearchEntry(root, history=["url1"])
+        e.open_history()
+        e.clear()
+        assert not e.history_is_open()

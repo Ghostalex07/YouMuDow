@@ -6,6 +6,7 @@ import webbrowser
 from tkinter import messagebox, ttk
 
 from youmudow.domain.models import HistoryEntry
+from youmudow.ui.protocols import MainWindowProtocol
 from youmudow.ui.styles.constants import FONT, SPACING, _c
 from youmudow.ui.widgets.components.empty_state import EmptyState
 
@@ -13,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class HistoryPanel(tk.Frame):
-    def __init__(self, parent: tk.Widget, main_window: object) -> None:
+    def __init__(self, parent: tk.Widget, main_window: MainWindowProtocol) -> None:
         super().__init__(parent, bg=_c("bg"))
         self._mw = main_window
         self._all_entries: list[HistoryEntry] = []
@@ -86,8 +87,6 @@ class HistoryPanel(tk.Frame):
         self._tree.bind("<Double-Button-1>", self._on_redownload)
 
     def refresh(self) -> None:
-        if not hasattr(self._mw, "_controller"):
-            return
         self._all_entries = self._mw._controller.history.get_all()
         self._apply_filter(self._search_var.get())
 
@@ -161,10 +160,11 @@ class HistoryPanel(tk.Frame):
         entry = self._get_selected_entry()
         if not entry:
             return
-        self._mw._search_bar.search_var.set(entry.url)
+        search_bar = self._mw._search_bar
+        if search_bar is not None:
+            search_bar.search_var.set(entry.url)
         self._mw._on_search()
-        if hasattr(self._mw, "_notebook"):
-            self._mw._notebook.select(0)
+        self._mw._notebook.select(0)
 
     def _on_remove(self) -> None:
         entry = self._get_selected_entry()

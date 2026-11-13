@@ -11,6 +11,8 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import ttk
 
+from youmudow.ui.typed import configure_widget
+
 logger = logging.getLogger(__name__)
 
 _MAX_LINES = 1000
@@ -134,10 +136,10 @@ class LogTerminal(ttk.Frame):
             normal_bg = c["background"]
 
             def on_enter(e: tk.Event) -> None:
-                widget.configure(bg=hover_bg)
+                configure_widget(widget, bg=hover_bg)
 
             def on_leave(e: tk.Event) -> None:
-                widget.configure(bg=normal_bg)
+                configure_widget(widget, bg=normal_bg)
 
             widget.bind("<Enter>", on_enter)
             widget.bind("<Leave>", on_leave)

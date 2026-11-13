@@ -1,6 +1,7 @@
 """A centered placeholder shown when a list has no content."""
 
 import tkinter as tk
+from collections.abc import Callable
 
 from youmudow.ui.styles.constants import FONT, _c
 from youmudow.ui.widgets.components.rounded_button import RoundedButton
@@ -16,7 +17,7 @@ class EmptyState(tk.Frame):
         icon: str = "",
         message: str = "",
         action_text: str | None = None,
-        action_command=None,
+        action_command: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(master, background=_c("background"))
         self._icon_label = tk.Label(

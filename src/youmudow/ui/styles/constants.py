@@ -4,6 +4,7 @@ import platform
 import tkinter as tk
 
 from youmudow.ui.styles.theme import get_theme_manager
+from youmudow.ui.typed import FontSpec, configure_widget
 
 _SYSTEM = platform.system()
 
@@ -26,7 +27,7 @@ SPACING = {
     "2xl": 32,
 }
 
-FONT = {
+FONT: dict[str, FontSpec] = {
     "display": (_SANS, 18, "bold"),
     "h1": (_SANS, 15, "bold"),
     "h2": (_SANS, 13, "bold"),
@@ -69,14 +70,14 @@ def add_hover_effect(
     leave_fg: str | None = None,
 ) -> None:
     def on_enter(e: tk.Event) -> None:
-        widget.configure(bg=_c(enter_key))
+        configure_widget(widget, bg=_c(enter_key))
         if enter_fg:
-            widget.configure(fg=enter_fg)
+            configure_widget(widget, fg=enter_fg)
 
     def on_leave(e: tk.Event) -> None:
-        widget.configure(bg=_c(leave_key))
+        configure_widget(widget, bg=_c(leave_key))
         if leave_fg:
-            widget.configure(fg=leave_fg)
+            configure_widget(widget, fg=leave_fg)
 
     widget.bind("<Enter>", on_enter)
     widget.bind("<Leave>", on_leave)

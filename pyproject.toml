@@ -76,9 +76,3 @@ warn_redundant_casts = true
 warn_unused_ignores = true
 warn_return_any = true
 no_implicit_optional = true
-
-[[tool.mypy.overrides]]
-# The tkinter UI layer is deliberately dynamic (widgets access private
-# attributes of the main window); strict typing there adds noise without value.
-module = "youmudow.ui.*"
-ignore_errors = true
