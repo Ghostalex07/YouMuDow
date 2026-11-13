@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- The UI layer is now type-checked by mypy with no per-package override:
+  `youmudow.ui.typed` provides the typed Tkinter helpers (`FontSpec`,
+  `configure_widget`, `setattr_any`) and `youmudow.ui.protocols` defines the
+  `MainWindowProtocol` interface the widgets are typed against
+- `SearchEntry` has a history dropdown (`set_history`, `open_history`,
+  `close_history`, `history_is_open`) with a lazily created list, opened with
+  the Down arrow
+
+### Changed
+
+- The search bar uses the `SearchEntry` and `RoundedButton` components instead
+  of a `ttk.Combobox` with a hand-rolled placeholder and three `tk.Button`s;
+  every keyboard shortcut is preserved
+- `RoundedButton` repaints when the theme changes, because it resolves its
+  colours at draw time
+
 ## [1.3.0] - 2026-11-12
 
 ### Added
