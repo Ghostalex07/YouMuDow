@@ -48,7 +48,16 @@ class SearchEntry(tk.Frame):
         self._entry.bind("<Return>", self._on_return)
         self._entry.bind("<Down>", self._on_down)
 
+        self._var.trace_add("write", self._on_var_changed)
         self._show_placeholder_if_empty()
+
+    def _on_var_changed(self, *_args) -> None:
+        """Keep the placeholder state in sync when the variable changes externally."""
+        if self._showing_placeholder and self._var.get() != self._placeholder:
+            self._showing_placeholder = False
+            self._entry.config(foreground=_c("text"))
+        elif not self._showing_placeholder and not self._var.get():
+            self._show_placeholder_if_empty()
 
     def _on_focus_in(self, _event):
         self._entry.config(highlightcolor=_c("primary"))

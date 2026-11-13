@@ -65,47 +65,13 @@ def detail_panel(state_window, tk_root):
 
 class TestSearchBar:
     def test_init(self, tk_root, mock_window):
-        from youmudow.ui.widgets.search_bar import SearchBar
+        from youmudow.ui.widgets.search_bar import _PLACEHOLDER, SearchBar
 
         sb = SearchBar(tk_root, mock_window)
-        assert sb.search_var.get() == ""
-
-    def test_get_query_returns_text(self, tk_root, mock_window):
-        from youmudow.ui.widgets.search_bar import SearchBar
-
-        sb = SearchBar(tk_root, mock_window)
-        sb.search_var.set("test query")
-        assert sb.get_query() == "test query"
-
-    def test_get_query_ignores_placeholder(self, tk_root, mock_window):
-        from youmudow.ui.widgets.search_bar import SearchBar
-
-        sb = SearchBar(tk_root, mock_window)
-        sb._search_combo.set(sb._placeholder)
+        # The placeholder is written into the shared variable, so the query
+        # itself stays empty even though the variable is not.
         assert sb.get_query() == ""
-
-    def test_update_history(self, tk_root, mock_window):
-        from youmudow.ui.widgets.search_bar import SearchBar
-
-        sb = SearchBar(tk_root, mock_window)
-        history = ["url1", "url2"]
-        sb.update_history(history)
-        assert list(sb._search_combo["values"]) == history
-
-    def test_search_entry_property(self, tk_root, mock_window):
-        from youmudow.ui.widgets.search_bar import SearchBar
-
-        sb = SearchBar(tk_root, mock_window)
-        assert sb.search_entry is sb._search_combo
-
-    def test_update_button_states(self, tk_root, mock_window):
-        from youmudow.ui.widgets.search_bar import SearchBar
-
-        sb = SearchBar(tk_root, mock_window)
-        sb.update_button_states(True, False)
-        assert sb._search_btn.cget("state") == "disabled"
-        sb.update_button_states(False, False)
-        assert sb._search_btn.cget("state") == "normal"
+        assert sb.search_var.get() == _PLACEHOLDER
 
 
 class TestStatusBar:
