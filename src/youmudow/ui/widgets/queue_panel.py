@@ -9,6 +9,7 @@ from youmudow.domain.enums import DownloadStatus
 from youmudow.domain.models import Video
 from youmudow.ui.protocols import MainWindowProtocol
 from youmudow.ui.styles.constants import FONT, SPACING, _c
+from youmudow.ui.typed import setattr_any
 from youmudow.ui.widgets.components.empty_state import EmptyState
 
 _STATUS_DISPLAY: dict[DownloadStatus, tuple[str, str]] = {
@@ -39,7 +40,7 @@ class QueuePanel(tk.Frame):
 
     def __init__(self, parent: tk.Widget, main_window: MainWindowProtocol) -> None:
         super().__init__(parent, bg=_c("surface"))
-        self._bg_key = "surface"
+        setattr_any(self, "_bg_key", "surface")
         self._mw = main_window
         self._visible = False
         self._empty_state: EmptyState | None = None
@@ -52,7 +53,7 @@ class QueuePanel(tk.Frame):
 
     def _build_header(self) -> None:
         qheader = tk.Frame(self, bg=_c("surface"))
-        qheader._bg_key = "surface"
+        setattr_any(qheader, "_bg_key", "surface")
         qheader.pack(fill="x", pady=(SPACING["sm"], SPACING["xs"]))
         tk.Label(
             qheader, text="QUEUE", bg=_c("surface"), fg=_c("text_secondary"), font=FONT["label"]

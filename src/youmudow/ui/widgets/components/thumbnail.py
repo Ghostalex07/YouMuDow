@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from PIL import ImageTk
+    from PIL import ImageTk  # type: ignore[import-untyped]
 
 
 def photoimage_from_bytes(data: bytes, width: int, height: int) -> "ImageTk.PhotoImage | None":

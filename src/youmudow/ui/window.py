@@ -27,6 +27,7 @@ from youmudow.services.thumbnail_loader import ThumbnailLoader
 from youmudow.services.thumbnail_service import ThumbnailService
 from youmudow.ui.actions import choose_output_folder, export_logs, open_output_folder
 from youmudow.ui.menubar import MenuCallbacks, create_menubar
+from youmudow.ui.protocols import AppControllerProtocol, ResultsCardsWriter
 from youmudow.ui.startup_checks import (
     check_clipboard,
     check_ytdlp,
@@ -55,17 +56,21 @@ logger = logging.getLogger(__name__)
 
 class MainWindow:
     def __init__(
-        self, controller: "AppController", debug_mode: bool = True, config: Any = None
+        self,
+        controller: "AppController",
+        debug_mode: bool = True,
+        config: Any = None,
     ) -> None:
         self._config = config
-        self._controller = controller
+        self._controller: AppControllerProtocol = controller
         self._root = tk.Tk()
         self._root.title(f"YouMuDow v{__version__}")
         self._root.withdraw()
         self._root.minsize(800, 600)
         saved_theme = self._config.get("theme", "dark") if self._config else "dark"
+        theme: ThemeName = "light" if saved_theme == "light" else "dark"
         self._theme_manager = get_theme_manager()
-        self._theme_manager.set_theme(saved_theme)
+        self._theme_manager.set_theme(theme)
         apply_theme(self._root, self._theme_manager.colors)
         self._root.configure(bg=_c("bg"))
 
@@ -84,7 +89,7 @@ class MainWindow:
         self._main_content_frame: tk.Frame | None = None
         self._menubar: tk.Menu | None = None
         self._search_bar: SearchBar | None = None
-        self._results_cards: ResultsCards | None = None
+        self._results_cards: ResultsCardsWriter | None = None
         self._detail_panel: DetailPanel | None = None
         self._status_bar: StatusBar | None = None
         self._history_panel: HistoryPanel | None = None
@@ -142,9 +147,12 @@ class MainWindow:
         self._update_debug_visibility()
 
     def _create_main_content(self) -> None:
-        main_frame = tk.Frame(self._paned_window, bg=_c("bg"))
+        paned_window = self._paned_window
+        if paned_window is None:
+            return
+        main_frame = tk.Frame(paned_window, bg=_c("bg"))
         self._main_content_frame = main_frame
-        self._paned_window.add(main_frame, weight=3)
+        paned_window.add(main_frame, weight=3)
 
         main_frame.columnconfigure(0, weight=3)
         main_frame.columnconfigure(1, weight=2)
@@ -205,14 +213,17 @@ class MainWindow:
         self._menubar = create_menubar(self._root, callbacks, self._debug_var)
 
     def _update_debug_visibility(self) -> None:
-        if not self._paned_window or not self._log_frame:
+        paned_window = self._paned_window
+        log_frame = self._log_frame
+        log_terminal = self._log_terminal
+        if paned_window is None or log_frame is None or log_terminal is None:
             return
         if self._debug_mode and not self._debug_panel_visible:
-            self._paned_window.add(self._log_frame, weight=1)
+            paned_window.add(log_frame, weight=1)
             self._debug_panel_visible = True
-            self._log_terminal.append("YouMuDow initialized", level="info")
+            log_terminal.append("YouMuDow initialized", level="info")
         elif not self._debug_mode and self._debug_panel_visible:
-            self._paned_window.forget(self._log_frame)
+            paned_window.forget(log_frame)
             self._debug_panel_visible = False
 
     # ------------------------------------------------------------------
@@ -241,10 +252,18 @@ class MainWindow:
         self._bind_shortcuts()
 
     def _bind_shortcuts(self) -> None:
+        detail_panel = self._detail_panel
+        search_bar = self._search_bar
         self._root.bind("<Control-d>", lambda _: self._on_download_now())
-        self._root.bind("<Control-q>", lambda _: self._detail_panel.enqueue_selected())
-        self._root.bind("<Control-l>", lambda _: self._search_bar.search_entry.focus_set())
-        self._root.bind("<Control-n>", lambda _: self._search_bar.search_var.set(""))
+        self._root.bind(
+            "<Control-q>", lambda _: detail_panel.enqueue_selected() if detail_panel else None
+        )
+        self._root.bind(
+            "<Control-l>", lambda _: search_bar.search_entry.focus_set() if search_bar else None
+        )
+        self._root.bind(
+            "<Control-n>", lambda _: search_bar.search_var.set("") if search_bar else None
+        )
         self._root.bind("<Escape>", lambda _: self._on_cancel_search())
         self._root.bind("<Control-o>", lambda _: self._on_open_folder())
         self._root.bind(
@@ -266,12 +285,17 @@ class MainWindow:
     def _on_search_complete(self, results: list[Video]) -> None:
         try:
             self._is_searching = False
-            self._results_cards.update_results(results)
+            results_cards = self._results_cards
+            detail_panel = self._detail_panel
+            if results_cards is None:
+                return
+            results_cards.update_results(results)
             if results:
                 self._selected_video = results[0]
-                self._detail_panel.update_detail_panel(results[0])
-                self._results_cards.select(0, notify=False)
-                self._results_cards.focus_set()
+                if detail_panel is not None:
+                    detail_panel.update_detail_panel(results[0])
+                results_cards.select(0, notify=False)
+                results_cards.focus_set()
                 self._set_status(f"Found: {results[0].title}")
             else:
                 self._set_status("No results found")
@@ -298,6 +322,8 @@ class MainWindow:
 
     def _apply_snapshot(self, snapshot: AppStateData) -> None:
         self._is_downloading = snapshot.state is AppState.DOWNLOADING
+        status_bar = self._status_bar
+        detail_panel = self._detail_panel
 
         if snapshot.state is AppState.SEARCHING:
             self._is_searching = True
@@ -306,7 +332,8 @@ class MainWindow:
             self._is_searching = False
             if snapshot.active_downloads:
                 active = snapshot.active_downloads[0]
-                self._status_bar.progress_var.set(active.progress)
+                if status_bar is not None:
+                    status_bar.progress_var.set(active.progress)
                 speed_info = (
                     f" · {active.speed}"
                     if active.speed and active.speed != "Calculating..."
@@ -314,10 +341,12 @@ class MainWindow:
                 )
                 eta_info = f" · ETA {active.eta}" if active.eta and active.eta != "00:00" else ""
                 self._set_status(f"Downloading: {active.progress:.1f}%{speed_info}{eta_info}")
-                self._status_bar.set_progress_color(_c("primary"))
+                if status_bar is not None:
+                    status_bar.set_progress_color(_c("primary"))
             else:
-                self._status_bar.progress_var.set(0)
-                self._status_bar.set_progress_color(_c("primary"))
+                if status_bar is not None:
+                    status_bar.progress_var.set(0)
+                    status_bar.set_progress_color(_c("primary"))
                 self._set_status("Downloading...")
         elif snapshot.state is AppState.ERROR:
             self._is_searching = False
@@ -325,20 +354,22 @@ class MainWindow:
             self._set_status(
                 f"Error: {snapshot.error_message}" if snapshot.error_message else "Error occurred"
             )
-            self._status_bar.progress_var.set(0)
-            self._status_bar.set_progress_color(_c("error"))
+            if status_bar is not None:
+                status_bar.progress_var.set(0)
+                status_bar.set_progress_color(_c("error"))
         else:
             self._is_searching = False
             self._is_downloading = False
             self._set_status("Ready" if snapshot.state is AppState.IDLE else snapshot.state.name)
-            if not snapshot.active_downloads:
-                self._status_bar.progress_var.set(0)
-                self._status_bar.set_progress_color(_c("border"))
+            if not snapshot.active_downloads and status_bar is not None:
+                status_bar.progress_var.set(0)
+                status_bar.set_progress_color(_c("border"))
 
         self._update_button_states()
-        if self._detail_panel.queue_panel_visible:
-            self._detail_panel.update_queue(snapshot)
-        self._root.after(50, self._status_bar.update_progress_bar)
+        if detail_panel is not None and detail_panel.queue_panel_visible:
+            detail_panel.update_queue(snapshot)
+        if status_bar is not None:
+            self._root.after(50, status_bar.update_progress_bar)
 
         mode_is_debug = snapshot.mode is AppMode.DEBUG
         if mode_is_debug != self._debug_mode:
@@ -347,22 +378,28 @@ class MainWindow:
             self._update_debug_visibility()
 
     def _set_status(self, message: str) -> None:
-        if self._status_bar:
-            self._status_bar.set_status(message)
+        status_bar = self._status_bar
+        if status_bar is not None:
+            status_bar.set_status(message)
 
     def _update_button_states(self) -> None:
-        if self._search_bar:
-            self._search_bar.update_button_states(self._is_searching, self._is_downloading)
-        if self._detail_panel:
-            self._detail_panel.update_button_states(self._is_searching, self._is_downloading)
+        search_bar = self._search_bar
+        detail_panel = self._detail_panel
+        if search_bar is not None:
+            search_bar.update_button_states(self._is_searching, self._is_downloading)
+        if detail_panel is not None:
+            detail_panel.update_button_states(self._is_searching, self._is_downloading)
 
     def _on_result_select(self) -> None:
-        if self._results_cards is None:
+        results_cards = self._results_cards
+        if results_cards is None:
             return
-        selected = self._results_cards.get_selected_videos()
+        selected = results_cards.get_selected_videos()
         if selected:
             self._selected_video = selected[0]
-            self._detail_panel.update_detail_panel(selected[0])
+            detail_panel = self._detail_panel
+            if detail_panel is not None:
+                detail_panel.update_detail_panel(selected[0])
             self._set_status(f"{len(selected)} selected")
         else:
             self._selected_video = None
@@ -372,40 +409,46 @@ class MainWindow:
         webbrowser.open(url)
 
     def _on_tab_changed(self, event: tk.Event | None = None) -> None:
-        if not hasattr(self, "_notebook"):
+        notebook = getattr(self, "_notebook", None)
+        if notebook is None:
             return
-        current = self._notebook.index(self._notebook.select())
-        if current == 1 and self._history_panel:
-            self._history_panel.refresh()
+        current = notebook.index(notebook.select())
+        history_panel = self._history_panel
+        if current == 1 and history_panel is not None:
+            history_panel.refresh()
 
     # ------------------------------------------------------------------
     # Search flow
     # ------------------------------------------------------------------
 
     def _on_search(self) -> None:
-        query = self._search_bar.get_query()
+        search_bar = self._search_bar
+        results_cards = self._results_cards
+        if search_bar is None or results_cards is None:
+            return
+        query = search_bar.get_query()
         if not query or self._is_searching:
             return
 
         self._is_searching = True
         self._set_status("Searching...")
         self._update_button_states()
-        self._results_cards.is_playlist = False
-        self._results_cards.playlist_videos = []
-        self._results_cards.clear_results()
+        results_cards.is_playlist = False
+        results_cards.playlist_videos = []
+        results_cards.clear_results()
 
         if self._config:
             self._config.add_search(query)
-            self._search_bar.update_history(self._config.get_search_history())
+            search_bar.update_history(self._config.get_search_history())
 
         if is_supported_url(query):
             if is_playlist_url(query):
-                self._results_cards.is_playlist = True
+                results_cards.is_playlist = True
                 self._handle_playlist_input(query)
             else:
                 self._handle_url_input(query)
         else:
-            self._results_cards.show_loading()
+            results_cards.show_loading()
             self._controller.search(query)
 
     def _handle_url_input(self, url: str) -> None:
@@ -452,9 +495,11 @@ class MainWindow:
             )
 
     def _on_playlist_complete(self, videos: list[Video]) -> None:
+        results_cards = self._results_cards
         if videos:
-            self._results_cards.update_results(videos)
-            self._results_cards.playlist_videos = videos
+            if results_cards is not None:
+                results_cards.update_results(videos)
+                results_cards.playlist_videos = videos
             self._set_status(f"Playlist: {len(videos)} videos")
         else:
             self._set_status("Failed to fetch playlist")
@@ -466,7 +511,9 @@ class MainWindow:
     # ------------------------------------------------------------------
 
     def _check_clipboard_on_start(self) -> None:
-        check_clipboard(self._root, self._search_bar.search_var.set)
+        search_bar = self._search_bar
+        if search_bar is not None:
+            check_clipboard(self._root, search_bar.search_var.set)
 
     def _check_ytdlp_on_start(self) -> None:
         check_ytdlp(self._schedule, self._set_status)
@@ -504,9 +551,13 @@ class MainWindow:
     # ------------------------------------------------------------------
 
     def _on_download_now(self) -> None:
-        selected = self._results_cards.get_selected_videos()
+        results_cards = self._results_cards
+        detail_panel = self._detail_panel
+        if results_cards is None or detail_panel is None:
+            return
+        selected = results_cards.get_selected_videos()
         if selected:
-            opts = self._detail_panel.get_current_options()
+            opts = detail_panel.get_current_options()
             if opts is None:
                 return
             self._is_downloading = True
@@ -518,19 +569,19 @@ class MainWindow:
             self._set_status(f"Downloading {len(selected)} videos...")
             return
 
-        if self._results_cards.is_playlist and self._results_cards.playlist_videos:
+        if results_cards.is_playlist and results_cards.playlist_videos:
             return
 
-        video = self._selected_video
-        if video is None:
+        target_video = self._selected_video
+        if target_video is None:
             return
 
         self._is_downloading = True
         self._update_button_states()
-        self._detail_panel.apply_options_to_video(video)
-        self._controller.enqueue(video)
+        detail_panel.apply_options_to_video(target_video)
+        self._controller.enqueue(target_video)
         self._controller.start_downloads()
-        self._set_status(f"Downloading: {video.title}")
+        self._set_status(f"Downloading: {target_video.title}")
 
     def _on_start_queue(self) -> None:
         if self._is_downloading:
@@ -567,28 +618,35 @@ class MainWindow:
         colors = self._theme_manager.colors
         self._root.configure(bg=colors.BACKGROUND)
         apply_theme(self._root, colors)
-        if self._menubar:
-            apply_theme_colors(self._menubar, colors)
-        try:
-            self._status_bar.set_progress_color(colors.PRIMARY)
-        except tk.TclError:
-            pass
+        menubar = self._menubar
+        if menubar is not None:
+            apply_theme_colors(menubar, colors)
+        status_bar = self._status_bar
+        if status_bar is not None:
+            try:
+                status_bar.set_progress_color(colors.PRIMARY)
+            except tk.TclError:
+                pass
 
     # ------------------------------------------------------------------
     # Settings and lifecycle
     # ------------------------------------------------------------------
 
     def _apply_config(self) -> None:
-        apply_settings(self._config, self._detail_panel.options, self._root)
+        detail_panel = self._detail_panel
+        if detail_panel is None:
+            return
+        apply_settings(self._config, detail_panel.options, self._root)
 
     def _on_close(self) -> None:
-        if self._config and self._detail_panel:
+        detail_panel = self._detail_panel
+        if self._config and detail_panel is not None:
             try:
                 output_path = self._controller.get_output_path()
             except (tk.TclError, KeyError, TypeError, ValueError) as e:
                 logger.debug("Could not read output path: %s", e)
                 output_path = None
-            save_settings(self._config, self._detail_panel.options, self._root, output_path)
+            save_settings(self._config, detail_panel.options, self._root, output_path)
         self._controller.stop_downloads()
         self.destroy()
 

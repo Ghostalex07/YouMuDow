@@ -29,7 +29,10 @@ class TestMainWindowProtocol:
         assert isinstance(instance, MainWindowProtocol)
 
     def test_protocol_members_are_declared(self):
+        # Protocol members declared as attributes live in ``__annotations__``;
+        # those declared as read-only properties live in the class namespace.
         names = set(MainWindowProtocol.__annotations__)
+        names |= {name for name in MainWindowProtocol.__dict__ if not name.startswith("_abc")}
         assert {
             "_root",
             "_controller",

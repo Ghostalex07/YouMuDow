@@ -162,10 +162,13 @@ class HistoryPanel(tk.Frame):
         entry = self._get_selected_entry()
         if not entry:
             return
-        self._mw._search_bar.search_var.set(entry.url)
+        search_bar = self._mw._search_bar
+        if search_bar is not None:
+            search_bar.search_var.set(entry.url)
         self._mw._on_search()
-        if hasattr(self._mw, "_notebook"):
-            self._mw._notebook.select(0)
+        notebook = getattr(self._mw, "_notebook", None)
+        if notebook is not None:
+            notebook.select(0)
 
     def _on_remove(self) -> None:
         entry = self._get_selected_entry()

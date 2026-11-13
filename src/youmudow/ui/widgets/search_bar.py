@@ -6,6 +6,7 @@ from tkinter import ttk
 from youmudow.domain.validators import is_supported_url
 from youmudow.ui.protocols import MainWindowProtocol
 from youmudow.ui.styles.constants import FONT, SPACING, _c, add_hover_effect
+from youmudow.ui.typed import setattr_any
 from youmudow.ui.widgets.components.spinner import Spinner
 
 
@@ -23,7 +24,7 @@ class SearchBar(tk.Frame):
             highlightthickness=1,
             highlightbackground=_c("border"),
         )
-        entry_frame._bg_key = "surface"
+        setattr_any(entry_frame, "_bg_key", "surface")
         entry_frame.pack(side="left", fill="both", expand=True, padx=(0, SPACING["sm"]))
         entry_frame.columnconfigure(0, weight=1)
 
@@ -77,12 +78,16 @@ class SearchBar(tk.Frame):
             pady=6,
             command=lambda: self._mw._on_search(),
         )
-        self._search_btn._theme = {
-            "bg": "primary",
-            "fg": "#FFFFFF",
-            "activebg": "secondary",
-            "activefg": "#FFFFFF",
-        }
+        setattr_any(
+            self._search_btn,
+            "_theme",
+            {
+                "bg": "primary",
+                "fg": "#FFFFFF",
+                "activebg": "secondary",
+                "activefg": "#FFFFFF",
+            },
+        )
         self._search_btn.pack(side="left", padx=(SPACING["sm"], 0))
         add_hover_effect(self._search_btn, "secondary", "primary")
 
@@ -100,12 +105,16 @@ class SearchBar(tk.Frame):
             pady=6,
             command=lambda: self._mw._on_cancel_search(),
         )
-        self._cancel_btn._theme = {
-            "bg": "surface",
-            "fg": "text",
-            "activebg": "hover",
-            "activefg": "text",
-        }
+        setattr_any(
+            self._cancel_btn,
+            "_theme",
+            {
+                "bg": "surface",
+                "fg": "text",
+                "activebg": "hover",
+                "activefg": "text",
+            },
+        )
         self._cancel_btn.pack(side="left", padx=(SPACING["xs"], 0))
         self._cancel_btn.configure(state="disabled")
         add_hover_effect(self._cancel_btn, "hover", "surface")
@@ -124,12 +133,16 @@ class SearchBar(tk.Frame):
             pady=6,
             command=lambda: self._mw._on_cancel_download(),
         )
-        self._cancel_dl_btn._theme = {
-            "bg": "error",
-            "fg": "#FFFFFF",
-            "activebg": "error",
-            "activefg": "#FFFFFF",
-        }
+        setattr_any(
+            self._cancel_dl_btn,
+            "_theme",
+            {
+                "bg": "error",
+                "fg": "#FFFFFF",
+                "activebg": "error",
+                "activefg": "#FFFFFF",
+            },
+        )
         self._cancel_dl_btn.pack(side="left", padx=(SPACING["xs"], 0))
         self._cancel_dl_btn.configure(state="disabled")
         add_hover_effect(self._cancel_dl_btn, "error", "error")
