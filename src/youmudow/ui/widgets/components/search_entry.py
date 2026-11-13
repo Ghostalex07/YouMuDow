@@ -93,7 +93,12 @@ class SearchEntry(tk.Frame):
         return None
 
     def get(self) -> str:
-        return "" if self._showing_placeholder else self._var.get()
+        """Return the typed text, or an empty string while the placeholder shows."""
+        if self._showing_placeholder:
+            return ""
+        if self._var.get() == self._placeholder:
+            return ""
+        return self._var.get()
 
     def set(self, value: str) -> None:
         self._var.set(value)
@@ -104,8 +109,10 @@ class SearchEntry(tk.Frame):
             self._entry.config(foreground=_c("text"))
 
     def clear(self) -> None:
+        """Empty the field, close the dropdown and restore the placeholder."""
         self.close_history()
         self._var.set("")
+        self._showing_placeholder = False
         self._show_placeholder_if_empty()
 
     def focus_set(self) -> None:

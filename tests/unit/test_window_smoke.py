@@ -87,6 +87,20 @@ class TestMainWindowBuild:
         assert window._paned_window.winfo_height() <= main_tab.winfo_height()
         assert window._status_bar.winfo_ismapped()
 
+    def test_control_n_clears_the_search_entry_component(self, main_window):
+        window, _ = main_window
+        search_bar = window._search_bar
+        search_bar.update_history(["url1", "url2"])
+        search_bar.search_var.set("https://youtu.be/abc12345678")
+        search_bar.search_entry.open_history()
+        assert search_bar.search_entry.history_is_open()
+
+        window._root.event_generate("<Control-n>")
+        window._root.update()
+
+        assert not search_bar.search_entry.history_is_open()
+        assert search_bar.get_query() == ""
+
 
 class TestMainWindowFlows:
     def test_search_delegates_to_controller(self, main_window):

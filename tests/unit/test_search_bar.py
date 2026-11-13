@@ -84,3 +84,15 @@ class TestSearchBarWiring:
         bar.search_var.set("https://youtu.be/abc12345678")
         bar.search_entry._on_return(None)
         mw._on_search.assert_called_once()
+
+    def test_clear_closes_history_dropdown_and_empties_query(self, root, mw):
+        bar = SearchBar(root, mw)
+        bar.update_history(["url1", "url2"])
+        bar.search_var.set("https://youtu.be/abc12345678")
+        bar.search_entry.open_history()
+        assert bar.search_entry.history_is_open()
+
+        bar.search_entry.clear()
+
+        assert not bar.search_entry.history_is_open()
+        assert bar.get_query() == ""

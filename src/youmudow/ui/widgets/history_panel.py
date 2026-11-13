@@ -87,8 +87,6 @@ class HistoryPanel(tk.Frame):
         self._tree.bind("<Double-Button-1>", self._on_redownload)
 
     def refresh(self) -> None:
-        if not hasattr(self._mw, "_controller"):
-            return
         self._all_entries = self._mw._controller.history.get_all()
         self._apply_filter(self._search_var.get())
 
@@ -166,9 +164,7 @@ class HistoryPanel(tk.Frame):
         if search_bar is not None:
             search_bar.search_var.set(entry.url)
         self._mw._on_search()
-        notebook = getattr(self._mw, "_notebook", None)
-        if notebook is not None:
-            notebook.select(0)
+        self._mw._notebook.select(0)
 
     def _on_remove(self) -> None:
         entry = self._get_selected_entry()

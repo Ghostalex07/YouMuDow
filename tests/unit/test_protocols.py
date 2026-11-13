@@ -16,15 +16,15 @@ class TestMainWindowProtocol:
         from youmudow.ui.window import MainWindow
 
         instance = MainWindow.__new__(MainWindow)
-        # Attribute checks only: the protocol describes instance state that is
-        # assigned in ``MainWindow.__init__``, which this test deliberately skips.
-        instance._root = Mock()
-        instance._controller = Mock()
-        instance._selected_video = None
-        instance._results_cards = Mock()
-        instance._search_bar = Mock()
-        instance._notebook = Mock()
-        instance._main_content_frame = Mock()
+        # The protocol members are read-only properties backed by private
+        # attributes, so the backing stores are what this test populates.
+        instance._tk_root = Mock()
+        instance._controller_impl = Mock()
+        instance._selected_video_impl = None
+        instance._results_cards_impl = Mock()
+        instance._search_bar_impl = Mock()
+        instance._notebook_widget = Mock()
+        instance._main_content_frame_impl = Mock()
 
         assert isinstance(instance, MainWindowProtocol)
 

@@ -6,7 +6,7 @@ import pytest
 
 pytest.importorskip("tkinter")
 
-from youmudow.ui.typed import configure_widget, font_tuple, setattr_any
+from youmudow.ui.typed import configure_widget, setattr_any
 
 
 @pytest.fixture
@@ -29,14 +29,6 @@ class TestConfigureWidget:
                 raise tk.TclError("nope")
 
         configure_widget(Frozen(), bg="#123456")  # must not raise
-
-
-class TestFontTuple:
-    def test_returns_two_tuple_unchanged(self):
-        assert font_tuple(("Ubuntu", 11)) == ("Ubuntu", 11)
-
-    def test_returns_three_tuple_unchanged(self):
-        assert font_tuple(("Ubuntu", 11, "bold")) == ("Ubuntu", 11, "bold")
 
 
 class TestSetattrAny:

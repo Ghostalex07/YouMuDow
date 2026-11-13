@@ -7,6 +7,7 @@ layout order. It owns the Tk variables backing every option.
 
 import logging
 import tkinter as tk
+from collections.abc import Callable
 from tkinter import filedialog, ttk
 from typing import Any, Literal
 
@@ -152,7 +153,7 @@ class OptionsPanel:
         var: tk.Variable,
         text: str,
         *,
-        command=None,
+        command: Callable[[], Any] | None = None,
         font=FONT["body"],
         fg=None,
         padx: tuple = (0, 0),
@@ -170,8 +171,9 @@ class OptionsPanel:
             selectcolor=_c("surface"),
             relief="flat",
             font=font,
-            command=command,
         )
+        if command is not None:
+            check.configure(command=command)
         check.pack(side="left", padx=padx)
         return check
 
@@ -223,7 +225,7 @@ class OptionsPanel:
         *,
         from_: int,
         to: int,
-        command=None,
+        command: Callable[[], Any] | None = None,
     ) -> tk.Spinbox:
         spin = tk.Spinbox(
             parent,
@@ -236,8 +238,9 @@ class OptionsPanel:
             relief="flat",
             width=3,
             font=FONT["body"],
-            command=command,
         )
+        if command is not None:
+            spin.configure(command=command)
         spin.pack(side="left", padx=(0, SPACING["sm"]))
         return spin
 
@@ -540,10 +543,9 @@ class OptionsPanel:
             val = self._concurrent_var.get()
         except (tk.TclError, TypeError, ValueError):
             return
-        if hasattr(self._mw, "_controller") and self._mw._controller:
-            ds = getattr(self._mw._controller, "_download_service", None)
-            if ds is not None:
-                ds.set_max_concurrent(val)
+        ds = getattr(self._mw._controller, "_download_service", None)
+        if ds is not None:
+            ds.set_max_concurrent(val)
 
     def _on_subtitles_toggle(self) -> None:
         state: Literal["normal", "disabled"] = "normal" if self._subtitles_var.get() else "disabled"

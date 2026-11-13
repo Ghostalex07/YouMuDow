@@ -20,11 +20,6 @@ def configure_widget(widget: tk.Misc, **options: str) -> None:
         pass
 
 
-def font_tuple(spec: FontSpec) -> tuple[str, int] | tuple[str, int, str]:
-    """Return a font spec Tk accepts, unchanged."""
-    return spec
-
-
 def setattr_any(obj: object, name: str, value: object) -> None:
     """Set a dynamic attribute on an otherwise statically typed object."""
     object.__setattr__(obj, name, value)
