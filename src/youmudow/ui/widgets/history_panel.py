@@ -6,6 +6,7 @@ import webbrowser
 from tkinter import messagebox, ttk
 
 from youmudow.domain.models import HistoryEntry
+from youmudow.ui.protocols import MainWindowProtocol
 from youmudow.ui.styles.constants import FONT, SPACING, _c
 from youmudow.ui.widgets.components.empty_state import EmptyState
 
@@ -13,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class HistoryPanel(tk.Frame):
-    def __init__(self, parent: tk.Widget, main_window: object) -> None:
+    def __init__(self, parent: tk.Widget, main_window: MainWindowProtocol) -> None:
         super().__init__(parent, bg=_c("bg"))
         self._mw = main_window
         self._all_entries: list[HistoryEntry] = []

@@ -7,6 +7,7 @@ from tkinter import ttk
 from youmudow.app.state import AppStateData
 from youmudow.domain.enums import DownloadStatus
 from youmudow.domain.models import Video
+from youmudow.ui.protocols import MainWindowProtocol
 from youmudow.ui.styles.constants import FONT, SPACING, _c
 from youmudow.ui.widgets.components.empty_state import EmptyState
 
@@ -36,7 +37,7 @@ def _queue_iid(video: Video) -> str:
 class QueuePanel(tk.Frame):
     """The queue tree, its count label and its context menu."""
 
-    def __init__(self, parent: tk.Widget, main_window: object) -> None:
+    def __init__(self, parent: tk.Widget, main_window: MainWindowProtocol) -> None:
         super().__init__(parent, bg=_c("surface"))
         self._bg_key = "surface"
         self._mw = main_window

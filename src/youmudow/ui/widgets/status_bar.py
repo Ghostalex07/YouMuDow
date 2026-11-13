@@ -2,11 +2,12 @@
 
 import tkinter as tk
 
+from youmudow.ui.protocols import MainWindowProtocol
 from youmudow.ui.styles.constants import FONT, SPACING, _c
 
 
 class StatusBar(tk.Frame):
-    def __init__(self, parent: tk.Widget, main_window: object) -> None:
+    def __init__(self, parent: tk.Widget, main_window: MainWindowProtocol) -> None:
         super().__init__(parent, bg=_c("surface"))
         self._mw = main_window
         self._bg_key = "surface"

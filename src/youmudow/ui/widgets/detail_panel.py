@@ -10,6 +10,7 @@ from youmudow.paths import cache_dir
 from youmudow.services.thumbnail_cache import ThumbnailCache
 from youmudow.services.thumbnail_loader import ThumbnailLoader
 from youmudow.services.thumbnail_service import ThumbnailService
+from youmudow.ui.protocols import MainWindowProtocol
 from youmudow.ui.styles.constants import FONT, SPACING, _c, add_hover_effect
 from youmudow.ui.widgets.components.thumbnail import photoimage_from_bytes
 from youmudow.ui.widgets.options_panel import OptionsPanel
@@ -24,7 +25,7 @@ class DetailPanel(tk.Frame):
     def __init__(
         self,
         parent: tk.Widget,
-        main_window: object,
+        main_window: MainWindowProtocol,
         thumbnail_loader: ThumbnailLoader | None = None,
     ) -> None:
         super().__init__(parent, bg=_c("bg"))

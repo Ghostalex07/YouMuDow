@@ -4,12 +4,13 @@ import tkinter as tk
 from tkinter import ttk
 
 from youmudow.domain.validators import is_supported_url
+from youmudow.ui.protocols import MainWindowProtocol
 from youmudow.ui.styles.constants import FONT, SPACING, _c, add_hover_effect
 from youmudow.ui.widgets.components.spinner import Spinner
 
 
 class SearchBar(tk.Frame):
-    def __init__(self, parent: tk.Widget, main_window: object) -> None:
+    def __init__(self, parent: tk.Widget, main_window: MainWindowProtocol) -> None:
         super().__init__(parent, bg=_c("bg"))
         self._mw = main_window
         self.grid(

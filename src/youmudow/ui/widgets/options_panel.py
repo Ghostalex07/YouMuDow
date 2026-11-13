@@ -18,6 +18,7 @@ from youmudow.domain.validators import (
     SUPPORTED_QUALITIES,
     is_valid_rate_limit,
 )
+from youmudow.ui.protocols import MainWindowProtocol
 from youmudow.ui.styles.constants import FONT, SPACING, _c, add_hover_effect
 
 logger = logging.getLogger(__name__)
@@ -31,7 +32,7 @@ class OptionsPanel:
     layout of the detail panel unchanged.
     """
 
-    def __init__(self, parent: tk.Widget, main_window: object) -> None:
+    def __init__(self, parent: tk.Widget, main_window: MainWindowProtocol) -> None:
         self._mw = main_window
         self._available_browsers: list[str] | None = None
         self._browser_profiles_cache: dict | None = None
