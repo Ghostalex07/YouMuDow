@@ -86,6 +86,10 @@ class AppController:
     def get_output_path(self) -> Path:
         return self._download_service.get_output_path()
 
+    def set_max_concurrent(self, value: int) -> None:
+        """Change how many downloads may run at once."""
+        self._download_service.set_max_concurrent(value)
+
     def on_download_complete(self, callback: DownloadCompleteCallback) -> None:
         self._download_complete_callback = callback
 

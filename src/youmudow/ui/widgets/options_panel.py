@@ -543,9 +543,8 @@ class OptionsPanel:
             val = self._concurrent_var.get()
         except (tk.TclError, TypeError, ValueError):
             return
-        ds = getattr(self._mw._controller, "_download_service", None)
-        if ds is not None:
-            ds.set_max_concurrent(val)
+        ds = self._mw._controller
+        ds.set_max_concurrent(val)
 
     def _on_subtitles_toggle(self) -> None:
         state: Literal["normal", "disabled"] = "normal" if self._subtitles_var.get() else "disabled"

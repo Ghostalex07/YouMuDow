@@ -12,6 +12,25 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 
+def _fsync_directory(directory: Path) -> None:
+    """Flush the directory entry so the rename survives a power loss.
+
+    ``os.replace`` is atomic, but the new name is only durable once the
+    directory itself is flushed. Platforms that cannot open a directory for
+    fsync (Windows) are skipped rather than failing the write.
+    """
+    try:
+        fd = os.open(directory, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(fd)
+    except OSError:
+        pass
+    finally:
+        os.close(fd)
+
+
 def write_atomic(path: Path, text: str) -> None:
     """Write ``text`` to ``path`` atomically, leaving no temp file behind."""
     tmp: Path | None = None
@@ -29,6 +48,7 @@ def write_atomic(path: Path, text: str) -> None:
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp, path)
+        _fsync_directory(path.parent)
     except BaseException:
         if tmp is not None:
             tmp.unlink(missing_ok=True)

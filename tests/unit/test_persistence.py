@@ -21,6 +21,27 @@ def test_write_atomic_keeps_original_on_failure(tmp_path, monkeypatch):
     assert p.read_text() == "orig"
 
 
+def test_write_atomic_fsyncs_the_parent_directory(tmp_path, monkeypatch):
+    import os
+
+    p = tmp_path / "f.json"
+    fsynced: list[int] = []
+    real_open = os.open
+
+    def fake_open(path, flags, *args, **kwargs):
+        if str(path) == str(tmp_path):
+            return 999
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr("os.open", fake_open)
+    monkeypatch.setattr("os.fsync", lambda fd: fsynced.append(fd))
+    monkeypatch.setattr("os.close", lambda fd: None)
+
+    write_atomic(p, "{}")
+
+    assert 999 in fsynced
+
+
 def test_backup_corrupt_renames(tmp_path):
     p = tmp_path / "f.json"
     p.write_text("bad")

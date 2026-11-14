@@ -87,3 +87,66 @@ class TestSearchEntryHistory:
         e.open_history()
         e.clear()
         assert not e.history_is_open()
+
+
+class TestSearchEntryKeyboard:
+    def test_down_opens_then_moves_the_selection(self, root):
+        e = SearchEntry(root, history=["one", "two"])
+        e._on_down(None)
+        assert e.history_is_open()
+        e._on_down(None)
+        assert e._history_listbox.curselection() == (0,)
+        e._on_down(None)
+        assert e._history_listbox.curselection() == (1,)
+
+    def test_down_wraps_back_to_the_first_item(self, root):
+        e = SearchEntry(root, history=["one", "two"])
+        e.open_history()
+        e._move_history_selection(1)
+        e._move_history_selection(1)
+        e._move_history_selection(1)
+        assert e._history_listbox.curselection() == (0,)
+
+    def test_up_moves_the_selection_backwards(self, root):
+        e = SearchEntry(root, history=["one", "two"])
+        e._move_history_selection(1)
+        e._move_history_selection(1)
+        e._move_history_selection(-1)
+        assert e._history_listbox.curselection() == (0,)
+
+    def test_escape_closes_the_dropdown(self, root):
+        e = SearchEntry(root, history=["one"])
+        e.open_history()
+        e.bind_shortcut("<Escape>", e._on_escape)
+        assert e._on_escape(None) == "break"
+        assert not e.history_is_open()
+
+
+class TestSearchEntryClearButton:
+    def test_clear_button_appears_only_with_text(self, root):
+        e = SearchEntry(root, placeholder="Search…")
+        assert e._clear_button.winfo_manager() == ""
+        e.set("hello")
+        assert e._clear_button.winfo_manager() == "place"
+        e.clear()
+        assert e._clear_button.winfo_manager() == ""
+
+    def test_clicking_the_clear_button_empties_the_field(self, root):
+        e = SearchEntry(root, placeholder="Search…")
+        e.set("hello")
+        e._on_clear_click(None)
+        assert e.get() == ""
+
+
+class TestSearchEntryShortcutBinding:
+    def test_bind_shortcut_binds_on_the_inner_entry(self, root):
+        e = SearchEntry(root)
+        e.bind_shortcut("<Control-x>", lambda _event: "break")
+        assert e._entry.bind("<Control-x>")
+
+    def test_select_all_selects_the_query(self, root):
+        e = SearchEntry(root)
+        e.set("hello")
+        e.select_all()
+        assert e._entry.index("sel.first") == 0
+        assert e._entry.index("sel.last") == 5

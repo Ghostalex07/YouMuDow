@@ -32,8 +32,6 @@ class SearchBar(tk.Frame):
 
         self._spinner = Spinner(self, size=18, color="primary")
 
-        inner_entry = self._entry._entry
-
         def _on_paste(event) -> str | None:
             try:
                 clipboard = self._mw._root.clipboard_get()
@@ -44,17 +42,17 @@ class SearchBar(tk.Frame):
                 return "break"
             return None
 
-        inner_entry.bind(
+        self._entry.bind_shortcut(
             "<Control-Return>",
             lambda _: (
                 self._mw._on_download_now() if self._mw._selected_video else self._mw._on_search()
             ),
         )
-        inner_entry.bind("<Control-v>", _on_paste)
-        inner_entry.bind("<Control-V>", _on_paste)
-        inner_entry.bind("<Control-a>", self._on_select_all)
-        inner_entry.bind("<Control-A>", self._on_select_all)
-        inner_entry.bind("<Control-BackSpace>", self._on_delete_word)
+        self._entry.bind_shortcut("<Control-v>", _on_paste)
+        self._entry.bind_shortcut("<Control-V>", _on_paste)
+        self._entry.bind_shortcut("<Control-a>", self._on_select_all)
+        self._entry.bind_shortcut("<Control-A>", self._on_select_all)
+        self._entry.bind_shortcut("<Control-BackSpace>", self._on_delete_word)
 
         self._search_btn = RoundedButton(
             self,
@@ -100,7 +98,7 @@ class SearchBar(tk.Frame):
         self._mw._on_search()
 
     def _on_select_all(self, event: tk.Event) -> str | None:
-        self._entry._entry.select_range(0, "end")
+        self._entry.select_all()
         return "break"
 
     def _on_delete_word(self, event: tk.Event) -> str | None:
