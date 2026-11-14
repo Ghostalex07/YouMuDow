@@ -151,6 +151,8 @@ pública de añadir atajos.
   el compilador ni los tipos avisen.
 - **Cómo arreglarlo:** añadir `SearchEntry.bind_shortcut(sequence, handler)` (o
   `bind_key`) y usarlo desde `SearchBar`.
+- **✅ Arreglado (2026-11-14):** `SearchEntry.bind_shortcut()` y `SearchEntry.select_all()`
+  encapsulan el `Entry` interno; `search_bar.py` ya no toca `self._entry._entry`.
 
 ### 2. El placeholder vive en la variable compartida (`search_var`)
 
@@ -182,6 +184,8 @@ if ds is not None:
   silencio.
 - **Cómo arreglarlo:** exponer `AppController.set_max_concurrent(n: int)` público,
   añadirlo al protocolo y llamarlo directo.
+- **✅ Arreglado (2026-11-14):** `AppController.set_max_concurrent()` existe y está en
+  `AppControllerProtocol`; `options_panel` lo llama sin `getattr` ni `hasattr`.
 
 ### 4. El patrón *backing store + property read-only* de `MainWindow` es verboso
 
@@ -215,6 +219,8 @@ fichero y `os.replace`, pero no sincroniza el directorio que contiene el rename.
   función existe para evitar.
 - **Cómo arreglarlo:** abrir el directorio (`os.open(path.parent, os.O_DIRECTORY)`) y
   `os.fsync` tras el `os.replace` (con `try/except` para plataformas sin `O_DIRECTORY`).
+- **✅ Arreglado (2026-11-14):** `_fsync_directory()` sincroniza el directorio tras el
+  rename y se salta en silencio las plataformas que no permiten abrir directorios.
 
 ### 7. Cobertura por debajo del objetivo que se fijó el plan (86,6 % vs ≥87 %)
 
@@ -240,12 +246,16 @@ de la lista.
 - **Dónde:** `_ensure_history_listbox()`.
 - **Cómo:** enlazar `<Up>`/`<Down>` para mover `selection_clear`/`selection_set` y
   `<Escape>` a `close_history()`.
+- **✅ Arreglado (2026-11-14):** `<Up>`/`<Down>` recorren la lista con wrap-around y
+  `<Escape>` cierra el desplegable sin cancelar la búsqueda (solo si está abierto).
 
 ### 2. No hay botón visible para limpiar la búsqueda
 
 Hoy existe `Ctrl+N` (que ya limpia el componente y cierra el desplegable tras el fix
 `fbdffb8`), pero no un control visible en la barra. Un botón "×" dentro de `SearchEntry`
 sería descubrible para quien no conoce atajos.
+- **✅ Arreglado (2026-11-14):** `SearchEntry` muestra un "×" solo mientras hay texto;
+  al pulsarlo limpia el campo, cierra el desplegable y devuelve el foco.
 
 ### 3. No hay forma de vaciar el caché de miniaturas
 
@@ -280,6 +290,9 @@ git branch -d feature/ui-typing-and-wiring
 git push origin --delete feature/ui-typing-and-wiring
 ```
 
+- **✅ Arreglado (2026-11-14):** borradas `feature/ui-typing-and-wiring` y
+  `fix/p1-hardening` en local y en remoto. Solo queda `main`.
+
 ### 2. El workflow de release no se ha probado de punta a punta tras el tipado
 
 El release `v1.3.0` salió antes del PR #35. Conviene publicar la siguiente versión
@@ -290,6 +303,9 @@ El release `v1.3.0` salió antes del PR #35. Conviene publicar la siguiente vers
 
 `docs/contributing.md` debería indicar crear un venv e instalar
 `pip install -e ".[dev]"` para que local case con CI (ver P1.3).
+- **✅ Arreglado (2026-11-14):** `docs/contributing.md` ya documenta
+  `python -m venv .venv` + `pip install -e ".[dev]"`; además el venv local existe con
+  Pillow 12.3.0, igual que el CI.
 
 ---
 
