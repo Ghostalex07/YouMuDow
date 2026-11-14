@@ -336,6 +336,18 @@ class TestControllerSearchFlows:
         c.reset()
         assert c._download_service.max_concurrent == 3
 
+    def test_set_max_concurrent_reaches_the_download_service(self):
+        dl = Mock()
+        c = AppController(
+            search_service=Mock(),
+            download_service=dl,
+            thumbnail_service=Mock(),
+            state_manager=Mock(),
+            history_service=Mock(),
+        )
+        c.set_max_concurrent(4)
+        dl.set_max_concurrent.assert_called_once_with(4)
+
     def test_reset_preserves_output_path(self):
         dl = Mock()
         dl.get_output_path.return_value = Path("/preserved/output")
