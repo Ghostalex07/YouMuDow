@@ -32,24 +32,14 @@ class SearchBar(tk.Frame):
 
         self._spinner = Spinner(self, size=18, color="primary")
 
-        def _on_paste(event) -> str | None:
-            try:
-                clipboard = self._mw._root.clipboard_get()
-            except tk.TclError:
-                return None
-            if is_supported_url(clipboard):
-                self._search_var.set(clipboard)
-                return "break"
-            return None
-
         self._entry.bind_shortcut(
             "<Control-Return>",
             lambda _: (
                 self._mw._on_download_now() if self._mw._selected_video else self._mw._on_search()
             ),
         )
-        self._entry.bind_shortcut("<Control-v>", _on_paste)
-        self._entry.bind_shortcut("<Control-V>", _on_paste)
+        self._entry.bind_shortcut("<Control-v>", self._on_paste)
+        self._entry.bind_shortcut("<Control-V>", self._on_paste)
         self._entry.bind_shortcut("<Control-a>", self._on_select_all)
         self._entry.bind_shortcut("<Control-A>", self._on_select_all)
         self._entry.bind_shortcut("<Control-BackSpace>", self._on_delete_word)
@@ -96,6 +86,17 @@ class SearchBar(tk.Frame):
 
     def _on_submit(self) -> None:
         self._mw._on_search()
+
+    def _on_paste(self, event: tk.Event) -> str | None:
+        """Paste a supported URL straight into the query; leave other text to Tk."""
+        try:
+            clipboard = self._mw._root.clipboard_get()
+        except tk.TclError:
+            return None
+        if is_supported_url(clipboard):
+            self._search_var.set(clipboard)
+            return "break"
+        return None
 
     def _on_select_all(self, event: tk.Event) -> str | None:
         self._entry.select_all()

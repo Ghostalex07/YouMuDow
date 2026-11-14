@@ -48,6 +48,7 @@ from youmudow.ui.styles.constants import FONT, SPACING, _c
 from youmudow.ui.styles.styles import apply_theme
 from youmudow.ui.styles.theme import ThemeName, get_theme_manager
 from youmudow.ui.styles.theme_apply import apply_theme_colors
+from youmudow.ui.typed import readonly_property
 from youmudow.ui.widgets.detail_panel import DetailPanel
 from youmudow.ui.widgets.history_panel import HistoryPanel
 from youmudow.ui.widgets.log_terminal import LogTerminal
@@ -103,6 +104,7 @@ class MainWindow(MainWindowProtocol):
         self._status_bar_impl: StatusBar | None = None
         self._history_panel_impl: HistoryPanel | None = None
         self._thumbnail_loader: ThumbnailLoader | None = None
+        self._thumbnail_cache: ThumbnailCache | None = None
 
         self._setup_ui()
         self._apply_config()
@@ -125,13 +127,22 @@ class MainWindow(MainWindowProtocol):
     # Protocol surface
     # ------------------------------------------------------------------
 
-    @property
-    def _root(self) -> tk.Tk:
-        return self._tk_root
-
-    @property
-    def _controller(self) -> AppControllerProtocol:
-        return self._controller_impl
+    _root: readonly_property[tk.Tk] = readonly_property("_tk_root")
+    _controller: readonly_property[AppControllerProtocol] = readonly_property("_controller_impl")
+    _search_bar: readonly_property[SearchBarLike | None] = readonly_property("_search_bar_impl")
+    _results_cards: readonly_property[ResultsCardsWriter | None] = readonly_property(
+        "_results_cards_impl"
+    )
+    _status_bar: readonly_property[StatusBarLike | None] = readonly_property("_status_bar_impl")
+    _history_panel: readonly_property[HistoryPanelLike | None] = readonly_property(
+        "_history_panel_impl"
+    )
+    _main_content_frame: readonly_property[tk.Frame | None] = readonly_property(
+        "_main_content_frame_impl"
+    )
+    _detail_panel: readonly_property[DetailPanelLike | None] = readonly_property(
+        "_detail_panel_widget"
+    )
 
     @property
     def _selected_video(self) -> Video | None:
@@ -142,35 +153,11 @@ class MainWindow(MainWindowProtocol):
         self._selected_video_impl = video
 
     @property
-    def _search_bar(self) -> SearchBarLike | None:
-        return self._search_bar_impl
-
-    @property
-    def _results_cards(self) -> ResultsCardsWriter | None:
-        return self._results_cards_impl
-
-    @property
-    def _status_bar(self) -> StatusBarLike | None:
-        return self._status_bar_impl
-
-    @property
-    def _history_panel(self) -> HistoryPanelLike | None:
-        return self._history_panel_impl
-
-    @property
-    def _main_content_frame(self) -> tk.Frame | None:
-        return self._main_content_frame_impl
-
-    @property
     def _notebook(self) -> ttk.Notebook:
         notebook = self._notebook_widget
         if notebook is None:
             raise RuntimeError("notebook is not built yet")
         return notebook
-
-    @property
-    def _detail_panel(self) -> DetailPanelLike | None:
-        return self._detail_panel_widget
 
     # ------------------------------------------------------------------
     # Layout
@@ -221,8 +208,9 @@ class MainWindow(MainWindowProtocol):
         main_frame.rowconfigure(2, weight=0)
 
         self._search_bar_impl = SearchBar(main_frame, self)
+        self._thumbnail_cache = ThumbnailCache(cache_dir())
         self._thumbnail_loader = ThumbnailLoader(
-            self._tk_root, ThumbnailCache(cache_dir()), ThumbnailService()
+            self._tk_root, self._thumbnail_cache, ThumbnailService()
         )
         self._results_cards_impl = ResultsCards(
             main_frame,
@@ -263,6 +251,7 @@ class MainWindow(MainWindowProtocol):
             set_output=self._on_set_output,
             open_output_folder=self._on_open_folder,
             export_logs=self._on_export_logs,
+            clear_thumbnail_cache=self._on_clear_thumbnail_cache,
             close=self._on_close,
             start_queue=self._on_start_queue,
             clear_queue=self._on_clear_queue,
@@ -597,6 +586,14 @@ class MainWindow(MainWindowProtocol):
         if not self._log_terminal:
             return
         export_logs(self._log_terminal, self._set_status)
+
+    def _on_clear_thumbnail_cache(self) -> None:
+        """Drop the on-disk and in-memory thumbnails from the File menu."""
+        cache = self._thumbnail_cache
+        if cache is None:
+            return
+        cache.clear()
+        self._set_status("Thumbnail cache cleared")
 
     def _on_open_folder(self) -> None:
         path = self._controller.get_output_path()

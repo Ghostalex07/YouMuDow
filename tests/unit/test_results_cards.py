@@ -140,3 +140,44 @@ def test_clear_results_empties_cards(root, state, loader):
     assert w.card_count() == 0
     assert w.get_selected() == []
     w.destroy()
+
+
+class TestThumbnailRetry:
+    def test_failed_thumbnail_is_retried_once(self, root, state, loader):
+        w = ResultsCards(root, state, loader)
+        w._thumb_urls[0] = "https://example.com/t.jpg"
+        scheduled = []
+        w.after = lambda ms, cb: scheduled.append((ms, cb))
+
+        w._on_thumb_ready(0, "https://example.com/t.jpg", None)
+        w._on_thumb_ready(0, "https://example.com/t.jpg", None)
+
+        assert len(scheduled) == 1  # one retry, not a loop
+        scheduled[0][1]()
+        loader.request.assert_called_once()
+        w.destroy()
+
+    def test_retry_is_dropped_when_the_card_moved_on(self, root, state, loader):
+        w = ResultsCards(root, state, loader)
+        scheduled = []
+        w.after = lambda ms, cb: scheduled.append((ms, cb))
+        w._thumb_urls[0] = "https://example.com/old.jpg"
+
+        w._on_thumb_ready(0, "https://example.com/old.jpg", None)
+        w._thumb_urls[0] = "https://example.com/new.jpg"
+        scheduled[0][1]()
+
+        loader.request.assert_not_called()
+        w.destroy()
+
+
+class TestCardPlaceholders:
+    def test_missing_title_gets_a_readable_fallback(self, root, state, loader):
+        w = ResultsCards(root, state, loader)
+        assert w._title_text(Video(title="", url="https://example.com/x")) == "Untitled video"
+        w.destroy()
+
+    def test_missing_metadata_says_so_instead_of_showing_nothing(self, root, state, loader):
+        w = ResultsCards(root, state, loader)
+        assert w._meta_text(Video(title="T", url="https://example.com/x")) == "Metadata unavailable"
+        w.destroy()

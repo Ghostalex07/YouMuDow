@@ -291,3 +291,12 @@ class TestMainWindowFlows:
         assert stored["concurrent_downloads"] == 1
         assert "quality" in stored
         assert config.output_path is controller.get_output_path.return_value
+
+
+class TestClearThumbnailCache:
+    def test_clears_the_cache_and_reports_it(self, main_window):
+        window, _ = main_window
+        cache = Mock()
+        window._thumbnail_cache = cache
+        window._on_clear_thumbnail_cache()
+        cache.clear.assert_called_once_with()

@@ -49,3 +49,9 @@ class ThumbnailCache:
             oldest_path = self.get_path(oldest)
             if oldest_path.exists():
                 oldest_path.unlink()
+
+    def clear(self) -> None:
+        """Drop every cached thumbnail, from memory and from disk."""
+        self._memory.clear()
+        for path in self._dir.glob("*.jpg"):
+            path.unlink(missing_ok=True)

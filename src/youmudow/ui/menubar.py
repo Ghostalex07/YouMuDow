@@ -21,6 +21,7 @@ class MenuCallbacks:
     set_output: Callable[[], None]
     open_output_folder: Callable[[], None]
     export_logs: Callable[[], None]
+    clear_thumbnail_cache: Callable[[], None]
     close: Callable[[], None]
     start_queue: Callable[[], None]
     clear_queue: Callable[[], None]
@@ -45,6 +46,8 @@ def build_menubar(menubar: tk.Menu, callbacks: MenuCallbacks, debug_var: tk.Bool
         label="Open Output Folder    Ctrl+O", command=callbacks.open_output_folder
     )
     file_menu.add_command(label="Export Logs...", command=callbacks.export_logs)
+    file_menu.add_separator()
+    file_menu.add_command(label="Clear Thumbnail Cache", command=callbacks.clear_thumbnail_cache)
     file_menu.add_separator()
     file_menu.add_command(label="Exit", command=callbacks.close)
 
