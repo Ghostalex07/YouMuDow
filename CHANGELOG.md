@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.4.0] - 2026-11-14
 
 ### Added
 
@@ -12,7 +12,13 @@ All notable changes to this project will be documented in this file.
   `MainWindowProtocol` interface the widgets are typed against
 - `SearchEntry` has a history dropdown (`set_history`, `open_history`,
   `close_history`, `history_is_open`) with a lazily created list, opened with
-  the Down arrow
+  the Down arrow and navigated with Up/Down; Escape closes it without
+  cancelling the search
+- `SearchEntry` shows a clear button while it holds text
+- `AppController.set_max_concurrent()` is public, so the options panel no
+  longer reaches into the download service to honour the concurrency setting
+- The test suite fails fast when a test leaks a Tk root or a thumbnail worker,
+  instead of aborting the interpreter later
 
 ### Changed
 
@@ -21,6 +27,26 @@ All notable changes to this project will be documented in this file.
   every keyboard shortcut is preserved
 - `RoundedButton` repaints when the theme changes, because it resolves its
   colours at draw time
+- `SearchEntry` encapsulates its inner entry behind `bind_shortcut()` and
+  `select_all()`, so callers no longer touch private Tk widgets
+- `write_atomic()` fsyncs the parent directory after the rename, so a saved
+  file survives a power loss
+
+### Fixed
+
+- The intermittent `Fatal Python error: Aborted` in the test suite. Three
+  separate leaks fed the garbage collector objects it then freed off the main
+  thread: a `Mock` called from the version-check daemon, a `tk.Tk()` left alive
+  by a fixture, and `ttk.Style()` creating an implicit root. `StyleManager` now
+  takes a master, the fixtures destroy their roots, and `tests/conftest.py`
+  collects on the main thread and fails the test that leaks
+- `DetailPanel` requires an injected `ThumbnailLoader` instead of silently
+  spawning a real one, so tests no longer start a background thread or write to
+  the user's cache
+- The test jobs no longer run mypy in a subprocess, which used to turn a single
+  type error into three failing jobs
+- Pillow is pinned to `>=10,<13` and CI runs the minimum supported version, so
+  the drift between local and CI toolchains is caught in a pull request
 
 ## [1.3.0] - 2026-11-12
 
