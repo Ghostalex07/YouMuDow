@@ -40,6 +40,35 @@ una regresión. Un caso concreto ya se corrigió (`test_startup_checks.py`, dond
      determinista y no como abort del intérprete.
   3. Opcional: `pytest-timeout` para acotar cuelgues.
 
+- **✅ Arreglado (2026-11-14):** `ThumbnailLoader.shutdown()` acepta un `timeout` y hace
+  `join` del hilo; `tests/conftest.py` gana la fixture autouse `_no_leaked_thumbnail_workers`,
+  que espera hasta 2 s a que muera cualquier hilo `thumbnail-loader` y falla el test si
+  queda vivo (el abort intermitente pasa a ser un fallo determinista). Verificado con 4
+  pasadas consecutivas de la suite completa, sin abortos. Queda pendiente, si vuelve a
+  aparecer, añadir `pytest-timeout`.
+
+- **✅ Arreglado (2026-11-14) — causa real del abort del CI:** el CI seguía abortando
+  (exit 134) tras el arreglo anterior. El culpable no era el `ThumbnailLoader`: en
+  `show_ytdlp_version` un hilo daemon llamaba a `schedule`, y en los tests ese `schedule`
+  era un `Mock`, cuyo `__call__` resuelve `inspect.signature` de forma perezosa dentro
+  del hilo daemon mientras el hilo principal recolectaba basura → `Fatal Python error:
+  Aborted`. Se sustituyó por la clase real `_RecordingSchedule` (lista `calls` +
+  `threading.Event`) y se añadió el test de regresión
+  `test_scheduler_double_is_thread_safe`, que falla si ese doble vuelve a ser un `Mock`.
+
+- **✅ Arreglado (2026-11-14) — tercera causa, la de fondo:** el CI volvió a abortar con
+  el mismo `exit 134`, y esta vez el traceback señalaba *Garbage-collecting* en un hilo
+  daemon. Un hilo que recolecta nunca es el culpable; el problema es **qué** se libera
+  ahí: cualquier objeto Tk. Dos fugas reales lo provocaban.
+  1. `tests/unit/test_search_bar.py`: la fixture `mw` creaba `tk.Tk()` y no lo destruía.
+  2. `tests/unit/test_theme_apply.py::test_treeview_styled_by_manager` construía
+     `StyleManager()` sin raíz; `ttk.Style()` creaba entonces una raíz Tk implícita que
+     nunca se destruía. Ahora `StyleManager(master)` y `configure_styles(colors, master)`
+     aceptan la raíz y `apply_theme` se la pasa, así que no se crean raíces implícitas.
+  Además `tests/conftest.py` gana la fixture autouse `_collect_tk_garbage_on_main_thread`,
+  que recolecta en el hilo principal y falla el test si queda viva una raíz Tk
+  (`tkinter._default_root`), convirtiendo el abort aleatorio en un fallo con nombre y línea.
+
 ### 2. El test que invoca `mypy` en subprocess acopla el job de tests al entorno de Pillow
 
 **Verificado.** `tests/unit/test_typing.py::test_mypy_passes_on_ui_package` lanza
@@ -53,6 +82,11 @@ test, no por defectos independientes.
   (`pyproject.toml` sin `ignore_errors`) y mover la comprobación real de `mypy` al job
   `typecheck`, que ya lo ejecuta. Alternativa: marcarlo `@pytest.mark.slow` y excluirlo
   del job de tests.
+- **✅ Arreglado (2026-11-14):** eliminado `test_mypy_passes_on_ui_package`; las
+  aserciones de configuración se quedan y el typecheck real lo hace solo el job
+  `typecheck`. Añadido el test guardián
+  `TestNoDuplicateTypecheck::test_no_test_module_shells_out_to_mypy`, que falla si
+  cualquier módulo de `tests/` vuelve a invocar mypy por subprocess.
 
 ### 3. Deriva de versión de Pillow entre local y CI
 
@@ -72,6 +106,13 @@ alias de módulo `Image.LANCZOS`.
      (`python -m pip install -e ".[dev]"` en un venv limpio).
   2. Fijar un rango explícito (p. ej. `Pillow>=10,<13`) y/o añadir una fila de matriz
      que pruebe la versión mínima.
+- **✅ Arreglado (2026-11-14):** `pyproject.toml` fija ahora `Pillow>=10,<13`, y el job
+  `test` del CI gana una fila extra (`Pillow minimum`, Python 3.10) que instala
+  `Pillow>=10,<11` para probar el extremo inferior del rango.
+- **✅ Arreglado (2026-11-14):** venv local recreado (`.venv`, Python 3.10.12 +
+  **Pillow 12.3.0**), así que local ya casa con el CI. Suite completa, ruff, formato y
+  mypy verdes con Pillow 12. Usar `.venv/bin/python` (o `source .venv/bin/activate`)
+  para trabajar; el venv está gitignored y se elimina con `rm -rf .venv`.
 
 ### 4. `DetailPanel` construye un `ThumbnailLoader` real cuando no se le inyecta
 
@@ -89,6 +130,11 @@ self._thumbnail_loader = thumbnail_loader if thumbnail_loader is not None else T
 - **Cómo arreglarlo:** hacer el loader obligatorio en el constructor (el único sitio de
   producción ya lo inyecta desde `MainWindow`), o aceptar una interfaz mínima
   (`Protocol`) y usar un doble no-op en tests.
+- **✅ Arreglado (2026-11-14):** `thumbnail_loader` es ahora obligatorio en
+  `DetailPanel.__init__` y se eliminó el fallback que construía un loader real; también
+  sobraron los imports de `cache_dir`/`ThumbnailCache`/`ThumbnailService`. Test guardián:
+  `test_widgets.py::test_detail_panel_requires_a_thumbnail_loader` (construir sin loader
+  lanza `TypeError`). La fixture de tests inyecta un `Mock`.
 
 ---
 

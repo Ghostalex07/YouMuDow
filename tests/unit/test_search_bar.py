@@ -29,7 +29,8 @@ def mw():
     m._root.withdraw()
     m._controller = Mock()
     m._selected_video = None
-    return m
+    yield m
+    m._root.destroy()
 
 
 class TestSearchBarWiring:

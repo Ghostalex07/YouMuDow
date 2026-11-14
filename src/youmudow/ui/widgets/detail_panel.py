@@ -6,10 +6,7 @@ import tkinter as tk
 
 from youmudow.app.state import AppStateData
 from youmudow.domain.models import DownloadOptions, Video
-from youmudow.paths import cache_dir
-from youmudow.services.thumbnail_cache import ThumbnailCache
 from youmudow.services.thumbnail_loader import ThumbnailLoader
-from youmudow.services.thumbnail_service import ThumbnailService
 from youmudow.ui.protocols import MainWindowProtocol
 from youmudow.ui.styles.constants import FONT, SPACING, _c, add_hover_effect
 from youmudow.ui.typed import setattr_any
@@ -27,16 +24,12 @@ class DetailPanel(tk.Frame):
         self,
         parent: tk.Widget,
         main_window: MainWindowProtocol,
-        thumbnail_loader: ThumbnailLoader | None = None,
+        thumbnail_loader: ThumbnailLoader,
     ) -> None:
         super().__init__(parent, bg=_c("bg"))
         self._mw = main_window
         self._last_thumb_url: str | None = None
-        self._thumbnail_loader = (
-            thumbnail_loader
-            if thumbnail_loader is not None
-            else ThumbnailLoader(self._mw._root, ThumbnailCache(cache_dir()), ThumbnailService())
-        )
+        self._thumbnail_loader = thumbnail_loader
 
         self.grid(
             row=1,

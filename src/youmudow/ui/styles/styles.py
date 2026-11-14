@@ -14,8 +14,8 @@ from youmudow.ui.styles.theme_apply import apply_theme_colors
 class StyleManager:
     """Manages ttk styles for the application."""
 
-    def __init__(self) -> None:
-        self._style = ttk.Style()
+    def __init__(self, master: tk.Misc | None = None) -> None:
+        self._style = ttk.Style(master=master)
         self._colors: Colors | None = None
 
     @property
@@ -258,8 +258,8 @@ class StyleManager:
         )
 
 
-def configure_styles(colors: Colors) -> StyleManager:
-    manager = StyleManager()
+def configure_styles(colors: Colors, master: tk.Misc | None = None) -> StyleManager:
+    manager = StyleManager(master)
     manager.configure(colors)
     return manager
 
@@ -270,5 +270,5 @@ def apply_theme(root: tk.Misc, colors: Colors) -> None:
     Configures the ttk styles (including the ``Modern.Treeview`` used by the
     results list) and repaints every Tk widget in the tree.
     """
-    configure_styles(colors)
+    configure_styles(colors, master=root)
     apply_theme_colors(root, colors)

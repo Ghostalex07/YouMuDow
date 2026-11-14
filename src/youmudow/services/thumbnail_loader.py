@@ -49,13 +49,15 @@ class ThumbnailLoader:
     def request(self, video_url: str, on_ready: Callable[[str, bytes | None], None]) -> None:
         self._queue.put((video_url, on_ready))
 
-    def shutdown(self) -> None:
+    def shutdown(self, timeout: float | None = 1.0) -> None:
         self._stop.set()
         try:
             self._root.after_cancel(self._poll_id)
         except (AttributeError, ValueError):
             pass
         self._queue.put(None)
+        if timeout is not None:
+            self._thread.join(timeout)
 
     # ------------------------------------------------------------------
     # Worker thread (never touches Tk)
