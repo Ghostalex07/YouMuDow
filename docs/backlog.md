@@ -40,6 +40,13 @@ una regresión. Un caso concreto ya se corrigió (`test_startup_checks.py`, dond
      determinista y no como abort del intérprete.
   3. Opcional: `pytest-timeout` para acotar cuelgues.
 
+- **✅ Arreglado (2026-11-14):** `ThumbnailLoader.shutdown()` acepta un `timeout` y hace
+  `join` del hilo; `tests/conftest.py` gana la fixture autouse `_no_leaked_thumbnail_workers`,
+  que espera hasta 2 s a que muera cualquier hilo `thumbnail-loader` y falla el test si
+  queda vivo (el abort intermitente pasa a ser un fallo determinista). Verificado con 4
+  pasadas consecutivas de la suite completa, sin abortos. Queda pendiente, si vuelve a
+  aparecer, añadir `pytest-timeout`.
+
 ### 2. El test que invoca `mypy` en subprocess acopla el job de tests al entorno de Pillow
 
 **Verificado.** `tests/unit/test_typing.py::test_mypy_passes_on_ui_package` lanza
