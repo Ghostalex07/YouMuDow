@@ -8,6 +8,7 @@ the mock sets, never with a sleep.
 
 import threading
 import tkinter as tk
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import pytest
@@ -25,11 +26,36 @@ def _immediate_schedule() -> Mock:
     return Mock(side_effect=lambda callback, *args: callback(*args))
 
 
-def _recording_schedule() -> tuple[Mock, threading.Event]:
-    """A schedule mock that signals an event on its first call."""
-    called = threading.Event()
-    schedule = Mock(side_effect=lambda *args, **kwargs: called.set())
-    return schedule, called
+class _RecordingSchedule:
+    """A real scheduler double that is safe to call from a worker thread.
+
+    ``show_ytdlp_version`` hands ``messagebox.showinfo`` to the scheduler from a
+    daemon thread. A ``unittest.mock.Mock`` is not safe there: its lazy child
+    mocks build signatures while the main thread can be garbage collecting, and
+    the race aborts the interpreter (``Fatal Python error: Aborted``). A plain
+    object with a real ``__call__`` has none of that machinery.
+    """
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[object, ...]] = []
+        self._called = threading.Event()
+
+    def __call__(self, *args: object, **kwargs: object) -> None:
+        self.calls.append(args)
+        self._called.set()
+
+    def wait(self, timeout: float) -> bool:
+        return self._called.wait(timeout)
+
+    @property
+    def call_args(self) -> SimpleNamespace:
+        return SimpleNamespace(args=self.calls[-1])
+
+
+def _recording_schedule() -> tuple[_RecordingSchedule, threading.Event]:
+    """A scheduler double that records calls and signals its first one."""
+    schedule = _RecordingSchedule()
+    return schedule, schedule._called
 
 
 class _FakeMessagebox:
@@ -244,6 +270,12 @@ class TestInstallYtdlpUpdate:
 
 
 class TestShowYtdlpVersion:
+    def test_scheduler_double_is_thread_safe(self):
+        """The daemon thread must not call a Mock: it aborts the interpreter."""
+        schedule, _ = _recording_schedule()
+
+        assert not isinstance(schedule, Mock)
+
     def test_shows_installed_version(self):
         schedule, called = _recording_schedule()
         messagebox = _FakeMessagebox()

@@ -47,6 +47,15 @@ una regresión. Un caso concreto ya se corrigió (`test_startup_checks.py`, dond
   pasadas consecutivas de la suite completa, sin abortos. Queda pendiente, si vuelve a
   aparecer, añadir `pytest-timeout`.
 
+- **✅ Arreglado (2026-11-14) — causa real del abort del CI:** el CI seguía abortando
+  (exit 134) tras el arreglo anterior. El culpable no era el `ThumbnailLoader`: en
+  `show_ytdlp_version` un hilo daemon llamaba a `schedule`, y en los tests ese `schedule`
+  era un `Mock`, cuyo `__call__` resuelve `inspect.signature` de forma perezosa dentro
+  del hilo daemon mientras el hilo principal recolectaba basura → `Fatal Python error:
+  Aborted`. Se sustituyó por la clase real `_RecordingSchedule` (lista `calls` +
+  `threading.Event`) y se añadió el test de regresión
+  `test_scheduler_double_is_thread_safe`, que falla si ese doble vuelve a ser un `Mock`.
+
 ### 2. El test que invoca `mypy` en subprocess acopla el job de tests al entorno de Pillow
 
 **Verificado.** `tests/unit/test_typing.py::test_mypy_passes_on_ui_package` lanza
