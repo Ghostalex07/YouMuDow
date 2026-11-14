@@ -72,13 +72,13 @@ def test_detail_panel_requires_a_thumbnail_loader(state_window):
 
 class TestSearchBar:
     def test_init(self, tk_root, mock_window):
-        from youmudow.ui.widgets.search_bar import _PLACEHOLDER, SearchBar
+        from youmudow.ui.widgets.search_bar import SearchBar
 
         sb = SearchBar(tk_root, mock_window)
-        # The placeholder is written into the shared variable, so the query
-        # itself stays empty even though the variable is not.
+        # The placeholder is a visual overlay, so the shared variable holds
+        # only what the user typed.
         assert sb.get_query() == ""
-        assert sb.search_var.get() == _PLACEHOLDER
+        assert sb.search_var.get() == ""
 
 
 class TestStatusBar:
@@ -93,6 +93,15 @@ class TestStatusBar:
 
         sb = StatusBar(tk_root, mock_window)
         sb.set_status("test status")
+
+    def test_progress_bar_tracks_the_variable(self, tk_root, mock_window):
+        from youmudow.ui.widgets.status_bar import StatusBar
+
+        sb = StatusBar(tk_root, mock_window)
+        sb.progress_var.set(50)
+        sb.update_progress_bar()
+        sb.set_progress_color("#123456")
+        assert sb.progress_var.get() == 50
 
 
 class TestHistoryPanel:

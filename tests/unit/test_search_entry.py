@@ -50,6 +50,23 @@ def test_set_and_clear(root):
     assert e.get() == ""
 
 
+class TestSearchEntryPlaceholder:
+    def test_placeholder_never_enters_the_shared_variable(self, root):
+        var = tk.StringVar(root)
+        SearchEntry(root, placeholder="Search…", textvariable=var)
+        assert var.get() == ""
+
+    def test_placeholder_label_hides_with_text_and_returns_on_clear(self, root):
+        e = SearchEntry(root, placeholder="Search…")
+        e.pack()
+        root.update()
+        assert e._placeholder_label.winfo_manager() == "place"
+        e.set("abc")
+        assert e._placeholder_label.winfo_manager() == ""
+        e.clear()
+        assert e._placeholder_label.winfo_manager() == "place"
+
+
 class TestSearchEntryHistory:
     def test_history_dropdown_does_not_open_without_history(self, root):
         e = SearchEntry(root, history=[])

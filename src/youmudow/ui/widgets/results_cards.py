@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 _THUMB_WIDTH = 120
 _THUMB_HEIGHT = 68
 _INITIAL_BATCH = 12
+_RETRY_DELAY_MS = 1500
 
 # tkinter event.state modifier masks (same values across platforms).
 _SHIFT = 0x0001
@@ -59,6 +60,8 @@ class ResultsCards(tk.Frame):
         self._cards: list[Card] = []
         self._thumb_labels: list[tk.Label] = []
         self._thumb_urls: dict[int, str] = {}
+        self._retried: set[int] = set()
+        self._retry_delay_ms = _RETRY_DELAY_MS
         self._thumb_batch = 0
         self._photo_refs: dict[int, object] = {}
         self._empty_state: EmptyState | None = None
@@ -167,6 +170,7 @@ class ResultsCards(tk.Frame):
         self._selected = set()
         self._anchor = None
         self._thumb_urls = {}
+        self._retried = set()
         self._thumb_batch = 0
         self._photo_refs = {}
         self._empty_state = None
@@ -200,7 +204,7 @@ class ResultsCards(tk.Frame):
 
         title = tk.Label(
             info,
-            text=video.title or "",
+            text=self._title_text(video),
             bg=_c("surface"),
             fg=_c("text"),
             font=FONT["body"],
@@ -242,14 +246,18 @@ class ResultsCards(tk.Frame):
 
         return handler
 
+    def _title_text(self, video: Video) -> str:
+        """Title as given, or a readable placeholder when the search returned none."""
+        return video.title.strip() or "Untitled video"
+
     def _meta_text(self, video: Video) -> str:
         parts = []
         if video.uploader:
             parts.append(video.uploader)
         duration = video.format_duration()
-        if duration:
+        if duration and duration != "-":
             parts.append(duration)
-        return "  ·  ".join(parts) if parts else ""
+        return "  ·  ".join(parts) if parts else "Metadata unavailable"
 
     # ------------------------------------------------------------------
     # Selection
@@ -341,7 +349,10 @@ class ResultsCards(tk.Frame):
         return handler
 
     def _on_thumb_ready(self, index: int, url: str, data: bytes | None) -> None:
-        if self._thumb_urls.get(index) != url or data is None:
+        if self._thumb_urls.get(index) != url:
+            return
+        if data is None:
+            self._schedule_thumb_retry(index, url)
             return
         if index >= len(self._thumb_labels):
             return
@@ -350,6 +361,18 @@ class ResultsCards(tk.Frame):
             return
         self._photo_refs[index] = photo
         self._thumb_labels[index].configure(image=photo, width=_THUMB_WIDTH, height=_THUMB_HEIGHT)
+
+    def _schedule_thumb_retry(self, index: int, url: str) -> None:
+        """Retry a failed download once, so a blip does not leave a blank card."""
+        if index in self._retried:
+            return
+        self._retried.add(index)
+        self.after(self._retry_delay_ms, lambda: self._retry_thumb(index, url))
+
+    def _retry_thumb(self, index: int, url: str) -> None:
+        if self._thumb_urls.get(index) != url:
+            return
+        self._loader.request(url, self._make_thumb_handler(index))
 
     # ------------------------------------------------------------------
     # Scrolling

@@ -97,3 +97,41 @@ class TestSearchBarWiring:
 
         assert not bar.search_entry.history_is_open()
         assert bar.get_query() == ""
+
+
+class TestSearchBarShortcuts:
+    def test_paste_of_a_supported_url_fills_the_query(self, root, mw):
+        bar = SearchBar(root, mw)
+        mw._root.clipboard_clear()
+        mw._root.clipboard_append("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+        assert bar._on_paste(Mock()) == "break"
+        assert bar.get_query().startswith("https://www.youtube.com")
+
+    def test_paste_of_plain_text_is_left_to_the_entry(self, root, mw):
+        bar = SearchBar(root, mw)
+        mw._root.clipboard_clear()
+        mw._root.clipboard_append("just some words")
+        assert bar._on_paste(Mock()) is None
+        assert bar.get_query() == ""
+
+    def test_paste_with_an_empty_clipboard_is_a_noop(self, root, mw):
+        bar = SearchBar(root, mw)
+        mw._root.clipboard_clear()
+        assert bar._on_paste(Mock()) is None
+
+    def test_delete_word_removes_the_last_word(self, root, mw):
+        bar = SearchBar(root, mw)
+        bar.search_var.set("lofi hip hop")
+        bar._on_delete_word(Mock())
+        assert bar.get_query() == "lofi hip"
+
+    def test_delete_word_on_empty_query_is_a_noop(self, root, mw):
+        bar = SearchBar(root, mw)
+        assert bar._on_delete_word(Mock()) == "break"
+        assert bar.get_query() == ""
+
+    def test_select_all_selects_the_whole_query(self, root, mw):
+        bar = SearchBar(root, mw)
+        bar.search_var.set("abc")
+        assert bar._on_select_all(Mock()) == "break"
+        assert bar._entry._entry.selection_present()

@@ -166,6 +166,10 @@ fuera una búsqueda.
 - **Cómo arreglarlo:** separar `query_var` (nunca contiene el placeholder) de una
   etiqueta visual de placeholder dibujada aparte, o encapsular todo acceso en
   `SearchBar.get_query()/set_query()` y no exponer `search_var`.
+- **✅ Arreglado (2026-11-14):** el placeholder es ahora una `tk.Label` superpuesta
+  dentro de `SearchEntry`, así que `search_var` solo contiene texto real. `get()`
+  devuelve la variable sin comparaciones y el `trace` quedó reducido a refrescar
+  placeholder y botón de limpiar.
 
 ### 3. `_download_service` se lee con `getattr` desde `options_panel`
 
@@ -199,6 +203,9 @@ una property por cada uno.
 - **Cómo arreglarlo:** un descriptor pequeño reutilizable (p. ej.
   `readonly_property(backing_name)`) o permitir en el protocolo atributos mutables allí
   donde la ventana realmente los reasigna.
+- **✅ Arreglado (2026-11-14):** `youmudow.ui.typed.readonly_property(backing)` sustituye
+  las ocho properties de una línea; `_selected_video` (setter) y `_notebook` (error si
+  aún no existe) siguen como properties explícitas porque no son solo lectura.
 
 ### 5. `configure_widget()` no cubre todos los `configure()` de Tk
 
@@ -208,6 +215,9 @@ vuelven a `widget.configure(...)` directo.
 
 - **Cómo arreglarlo:** añadir una sobrecarga que acepte `Mapping[str, Any]` y tipos
   `Literal` para `state`, o un helper `set_state(widget, enabled)`.
+- **✅ Arreglado (2026-11-14):** `configure_widget(widget, options: Mapping[str, object] |
+  None = None, **extra: object)` acepta la forma dict y valores no `str`; el `configure`
+  interno usa un único `cast` documentado.
 
 ### 6. `write_atomic()` no hace `fsync` del directorio padre
 
@@ -231,6 +241,10 @@ aspiracional del plan.
 - **Cómo arreglarlo:** `PYTHONPATH=src python3 -m pytest --cov=youmudow --cov-report=term-missing`
   y cubrir las ramas con más líneas sin ejecutar (normalmente manejo de errores de
   `ThumbnailLoader`, `OptionsPanel` y `window`).
+- **✅ Arreglado (2026-11-14):** cobertura **87,31 %** (4950 sentencias, 485 sin
+  ejecutar). Se cubrieron el pegado de URL y el borrado de palabra en `search_bar`, la
+  lectura desde disco del caché de miniaturas y la barra de progreso; `search_bar`
+  subió del 73 % al cubrir sus tres ramas de pegado.
 
 ---
 
@@ -265,6 +279,9 @@ expulsar, pero no hay acción de usuario ni comando para vaciarlo, ni un tope en
 
 - **Cómo:** añadir "Clear thumbnail cache" al menú (junto a las acciones de
   mantenimiento) y, opcionalmente, un tope de tamaño total.
+- **✅ Arreglado (2026-11-14):** `ThumbnailCache.clear()` borra memoria y ficheros, y
+  `File > Clear Thumbnail Cache` lo invoca y deja "Thumbnail cache cleared" en la barra
+  de estado. El tope en bytes sigue pendiente (ver P3.6).
 
 ### 4. Miniaturas sin reintento
 
@@ -272,10 +289,24 @@ Si la descarga de una miniatura falla (red, 404), la tarjeta se queda sin imagen
 que se vuelve a buscar. Un reintento manual (clic derecho → "Retry thumbnail") o
 automático con backoff sería suficiente.
 
+- **✅ Arreglado (2026-11-14):** `ResultsCards` reintenta una vez cada miniatura fallida
+  tras 1,5 s y descarta el reintento si la tarjeta ya apunta a otra URL.
+
 ### 5. Estados de error poco explícitos en las tarjetas
 
 Las tarjetas muestran título/uploader/duración; un fallo de metadatos deja campos
 vacíos sin explicación. Valorar un estado por tarjeta ("metadata unavailable").
+
+- **✅ Arreglado (2026-11-14):** una tarjeta sin título muestra "Untitled video" y una sin
+  uploader ni duración muestra "Metadata unavailable" en lugar de una línea vacía.
+
+### 6. El caché de miniaturas no tiene tope en bytes
+
+`ThumbnailCache` acota por número de entradas (`max_entries=200`), pero no por tamaño
+total: 200 miniaturas grandes pueden ocupar más de lo esperado.
+
+- **Cómo:** llevar la cuenta de bytes escritos y expulsar del LRU hasta bajar del tope,
+  o comprobar el tamaño del directorio al arrancar.
 
 ---
 

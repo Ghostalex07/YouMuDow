@@ -23,7 +23,8 @@ class SearchEntry(tk.Frame):
         self._bg_key = "surface"
         self._command = command
         self._placeholder = placeholder
-        self._showing_placeholder = False
+        self._has_focus = False
+        self._placeholder_label: tk.Label | None = None
         self._history: list[str] = list(history or [])
         self._history_listbox: tk.Listbox | None = None
         self._var = textvariable if textvariable is not None else tk.StringVar(self)
@@ -60,6 +61,16 @@ class SearchEntry(tk.Frame):
         )
         self._clear_button.bind("<Button-1>", self._on_clear_click)
 
+        self._placeholder_label = tk.Label(
+            self,
+            text=placeholder,
+            font=FONT["body"],
+            background=_c("surface"),
+            foreground=_c("text_secondary"),
+            cursor="xterm",
+        )
+        self._placeholder_label.bind("<Button-1>", self._on_placeholder_click)
+
         self._entry.bind("<FocusIn>", self._on_focus_in)
         self._entry.bind("<FocusOut>", self._on_focus_out)
         self._entry.bind("<Return>", self._on_return)
@@ -68,37 +79,36 @@ class SearchEntry(tk.Frame):
         self._entry.bind("<Escape>", self._on_escape)
 
         self._var.trace_add("write", self._on_var_changed)
-        self._show_placeholder_if_empty()
+        self._update_placeholder()
 
     def _on_var_changed(self, *_args) -> None:
-        """Keep the placeholder state in sync when the variable changes externally."""
-        if self._showing_placeholder and self._var.get() != self._placeholder:
-            self._showing_placeholder = False
-            self._entry.config(foreground=_c("text"))
-        elif not self._showing_placeholder and not self._var.get():
-            self._show_placeholder_if_empty()
+        """Keep the clear button and the placeholder in sync with the text."""
         self._update_clear_button()
+        self._update_placeholder()
 
     def _on_focus_in(self, _event):
+        self._has_focus = True
         self._entry.config(highlightcolor=_c("primary"))
-        if self._showing_placeholder:
-            self._var.set("")
-            self._showing_placeholder = False
-            self._entry.config(foreground=_c("text"))
+        self._update_placeholder()
 
     def _on_focus_out(self, _event):
+        self._has_focus = False
         self._entry.config(highlightcolor=_c("border"))
-        self._show_placeholder_if_empty()
+        self._update_placeholder()
 
-    def _show_placeholder_if_empty(self):
-        if self._placeholder and not self._var.get():
-            self._var.set(self._placeholder)
-            self._showing_placeholder = True
-            self._entry.config(foreground=_c("text_secondary"))
+    def _update_placeholder(self) -> None:
+        """Show the placeholder as an overlay so it never enters the variable."""
+        label = self._placeholder_label
+        if label is None:
+            return
+        if self._placeholder and not self._var.get() and not self._has_focus:
+            label.place(x=SPACING["md"] + SPACING["xs"], rely=0.5, anchor="w")
         else:
-            self._showing_placeholder = False
-            self._entry.config(foreground=_c("text"))
-        self._update_clear_button()
+            label.place_forget()
+
+    def _on_placeholder_click(self, _event) -> str:
+        self.focus_set()
+        return "break"
 
     def _on_return(self, _event):
         if self._history_listbox is not None and self.history_is_open():
@@ -145,27 +155,17 @@ class SearchEntry(tk.Frame):
         listbox.see(index)
 
     def get(self) -> str:
-        """Return the typed text, or an empty string while the placeholder shows."""
-        if self._showing_placeholder:
-            return ""
-        if self._var.get() == self._placeholder:
-            return ""
+        """Return the typed text; the placeholder never counts as text."""
         return self._var.get()
 
     def set(self, value: str) -> None:
         self._var.set(value)
-        if value == "":
-            self._show_placeholder_if_empty()
-        else:
-            self._showing_placeholder = False
-            self._entry.config(foreground=_c("text"))
 
     def clear(self) -> None:
         """Empty the field, close the dropdown and restore the placeholder."""
         self.close_history()
         self._var.set("")
-        self._showing_placeholder = False
-        self._show_placeholder_if_empty()
+        self._update_placeholder()
 
     def focus_set(self) -> None:
         self._entry.focus_set()
