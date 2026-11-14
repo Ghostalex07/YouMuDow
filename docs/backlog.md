@@ -281,7 +281,7 @@ expulsar, pero no hay acción de usuario ni comando para vaciarlo, ni un tope en
   mantenimiento) y, opcionalmente, un tope de tamaño total.
 - **✅ Arreglado (2026-11-14):** `ThumbnailCache.clear()` borra memoria y ficheros, y
   `File > Clear Thumbnail Cache` lo invoca y deja "Thumbnail cache cleared" en la barra
-  de estado. El tope en bytes sigue pendiente (ver P3.6).
+  de estado. El tope en bytes que faltaba quedó en P3.6 (ya arreglado).
 
 ### 4. Miniaturas sin reintento
 
@@ -307,6 +307,10 @@ total: 200 miniaturas grandes pueden ocupar más de lo esperado.
 
 - **Cómo:** llevar la cuenta de bytes escritos y expulsar del LRU hasta bajar del tope,
   o comprobar el tamaño del directorio al arrancar.
+- **✅ Arreglado (2026-11-14):** `ThumbnailCache` acepta `max_bytes` (32 MiB por
+  defecto, `DEFAULT_MAX_BYTES`; `0` lo desactiva). Lleva la cuenta de bytes en disco y,
+  al escribir o al arrancar, expulsa del LRU hasta caber en el presupuesto. Una entrada
+  mayor que el tope se conserva sola en vez de vaciar el caché entero.
 
 ---
 

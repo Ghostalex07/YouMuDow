@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.1] - 2026-11-14
+
+### Added
+
+- The thumbnail cache now has a 32 MiB budget on disk (`DEFAULT_MAX_BYTES`) and
+  evicts the least recently used thumbnails until the cache fits, either when
+  writing or when the app starts and finds a cache left large by a previous run
+
 ## [1.5.0] - 2026-11-14
 
 ### Added
