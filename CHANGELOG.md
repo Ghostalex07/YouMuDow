@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.0] - 2026-11-14
+
+### Added
+
+- `File > Clear Thumbnail Cache` empties the memory and disk caches and
+  confirms it in the status bar
+- A failed thumbnail is retried once after 1.5 s; the retry is dropped if the
+  card has moved on to another URL
+- `youmudow.ui.typed.readonly_property()` declares the read-only window
+  interfaces once instead of eight hand-written properties
+
+### Changed
+
+- The search placeholder is an overlaid label instead of text written into
+  `search_var`, so the variable only ever holds what the user typed
+- `configure_widget()` accepts a mapping and non-string values, removing the
+  per-call workarounds around Tkinter options
+- Cards show "Untitled video" and "Metadata unavailable" instead of blank
+  fields when a search result lacks metadata
+- Test coverage is 87.31 %, up from 86.6 %
+
 ## [1.4.0] - 2026-11-14
 
 ### Added
