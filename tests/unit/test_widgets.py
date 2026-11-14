@@ -56,11 +56,18 @@ def state_window(tk_root):
 def detail_panel(state_window, tk_root):
     from youmudow.ui.widgets.detail_panel import DetailPanel
 
-    panel = DetailPanel(state_window._main_content_frame, state_window)
+    panel = DetailPanel(state_window._main_content_frame, state_window, Mock())
     panel.queue.grid()
     panel.queue.visible = True
     tk_root.update()
     return panel
+
+
+def test_detail_panel_requires_a_thumbnail_loader(state_window):
+    from youmudow.ui.widgets.detail_panel import DetailPanel
+
+    with pytest.raises(TypeError):
+        DetailPanel(state_window._main_content_frame, state_window)  # type: ignore[call-arg]
 
 
 class TestSearchBar:

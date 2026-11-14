@@ -94,6 +94,11 @@ self._thumbnail_loader = thumbnail_loader if thumbnail_loader is not None else T
 - **Cómo arreglarlo:** hacer el loader obligatorio en el constructor (el único sitio de
   producción ya lo inyecta desde `MainWindow`), o aceptar una interfaz mínima
   (`Protocol`) y usar un doble no-op en tests.
+- **✅ Arreglado (2026-11-14):** `thumbnail_loader` es ahora obligatorio en
+  `DetailPanel.__init__` y se eliminó el fallback que construía un loader real; también
+  sobraron los imports de `cache_dir`/`ThumbnailCache`/`ThumbnailService`. Test guardián:
+  `test_widgets.py::test_detail_panel_requires_a_thumbnail_loader` (construir sin loader
+  lanza `TypeError`). La fixture de tests inyecta un `Mock`.
 
 ---
 
