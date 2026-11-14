@@ -1,7 +1,9 @@
 """Shared pytest fixtures for YouMuDow tests."""
 
+import gc
 import threading
 import time
+import tkinter
 
 import pytest
 
@@ -75,4 +77,31 @@ def _no_leaked_thumbnail_workers():
         pytest.fail(
             f"{len(leaked)} thumbnail worker thread(s) still alive after the test: "
             + ", ".join(thread.name for thread in leaked)
+        )
+
+
+@pytest.fixture(autouse=True)
+def _collect_tk_garbage_on_main_thread():
+    """Collect garbage on the main thread after every test.
+
+    Tkinter objects must be destroyed by the thread that owns Tk. When the
+    cyclic collector runs inside a daemon thread and frees a leftover
+    ``tk.Tk``, Tcl panics and aborts the interpreter (``Fatal Python error:
+    Aborted``), which is what killed the CI test jobs. Collecting here, on the
+    main thread, keeps those destructors where Tcl expects them, and the check
+    below turns a leaked root into a normal test failure.
+    """
+    yield
+    gc.collect()
+    leftover = tkinter._default_root
+    if leftover is None:
+        return
+    try:
+        alive = leftover.winfo_exists()
+    except tkinter.TclError:
+        return
+    if alive:
+        pytest.fail(
+            "a test left a Tk root alive; destroy it in the fixture so the "
+            "collector never frees Tk objects on a worker thread"
         )

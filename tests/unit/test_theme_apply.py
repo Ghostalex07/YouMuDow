@@ -244,7 +244,7 @@ class TestApplyTheme:
         apply_theme(root, DARK_COLORS)
         assert btn.cget("bg").lower() == DARK_COLORS.SURFACE.lower()
 
-    def test_treeview_styled_by_manager(self):
-        mgr = StyleManager()
+    def test_treeview_styled_by_manager(self, root):
+        mgr = StyleManager(root)
         mgr.configure(DARK_COLORS)
         assert mgr.style.lookup("Modern.Treeview", "background")

@@ -56,6 +56,19 @@ una regresión. Un caso concreto ya se corrigió (`test_startup_checks.py`, dond
   `threading.Event`) y se añadió el test de regresión
   `test_scheduler_double_is_thread_safe`, que falla si ese doble vuelve a ser un `Mock`.
 
+- **✅ Arreglado (2026-11-14) — tercera causa, la de fondo:** el CI volvió a abortar con
+  el mismo `exit 134`, y esta vez el traceback señalaba *Garbage-collecting* en un hilo
+  daemon. Un hilo que recolecta nunca es el culpable; el problema es **qué** se libera
+  ahí: cualquier objeto Tk. Dos fugas reales lo provocaban.
+  1. `tests/unit/test_search_bar.py`: la fixture `mw` creaba `tk.Tk()` y no lo destruía.
+  2. `tests/unit/test_theme_apply.py::test_treeview_styled_by_manager` construía
+     `StyleManager()` sin raíz; `ttk.Style()` creaba entonces una raíz Tk implícita que
+     nunca se destruía. Ahora `StyleManager(master)` y `configure_styles(colors, master)`
+     aceptan la raíz y `apply_theme` se la pasa, así que no se crean raíces implícitas.
+  Además `tests/conftest.py` gana la fixture autouse `_collect_tk_garbage_on_main_thread`,
+  que recolecta en el hilo principal y falla el test si queda viva una raíz Tk
+  (`tkinter._default_root`), convirtiendo el abort aleatorio en un fallo con nombre y línea.
+
 ### 2. El test que invoca `mypy` en subprocess acopla el job de tests al entorno de Pillow
 
 **Verificado.** `tests/unit/test_typing.py::test_mypy_passes_on_ui_package` lanza
