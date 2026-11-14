@@ -86,8 +86,11 @@ alias de módulo `Image.LANCZOS`.
      que pruebe la versión mínima.
 - **✅ Arreglado (2026-11-14):** `pyproject.toml` fija ahora `Pillow>=10,<13`, y el job
   `test` del CI gana una fila extra (`Pillow minimum`, Python 3.10) que instala
-  `Pillow>=10,<11` para probar el extremo inferior del rango. Pendiente (requiere tocar
-  el entorno del usuario): recrear el venv local, que sigue con Pillow 9.0.1.
+  `Pillow>=10,<11` para probar el extremo inferior del rango.
+- **✅ Arreglado (2026-11-14):** venv local recreado (`.venv`, Python 3.10.12 +
+  **Pillow 12.3.0**), así que local ya casa con el CI. Suite completa, ruff, formato y
+  mypy verdes con Pillow 12. Usar `.venv/bin/python` (o `source .venv/bin/activate`)
+  para trabajar; el venv está gitignored y se elimina con `rm -rf .venv`.
 
 ### 4. `DetailPanel` construye un `ThumbnailLoader` real cuando no se le inyecta
 
