@@ -53,6 +53,11 @@ test, no por defectos independientes.
   (`pyproject.toml` sin `ignore_errors`) y mover la comprobación real de `mypy` al job
   `typecheck`, que ya lo ejecuta. Alternativa: marcarlo `@pytest.mark.slow` y excluirlo
   del job de tests.
+- **✅ Arreglado (2026-11-14):** eliminado `test_mypy_passes_on_ui_package`; las
+  aserciones de configuración se quedan y el typecheck real lo hace solo el job
+  `typecheck`. Añadido el test guardián
+  `TestNoDuplicateTypecheck::test_no_test_module_shells_out_to_mypy`, que falla si
+  cualquier módulo de `tests/` vuelve a invocar mypy por subprocess.
 
 ### 3. Deriva de versión de Pillow entre local y CI
 
