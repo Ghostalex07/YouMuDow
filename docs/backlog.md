@@ -84,6 +84,10 @@ alias de módulo `Image.LANCZOS`.
      (`python -m pip install -e ".[dev]"` en un venv limpio).
   2. Fijar un rango explícito (p. ej. `Pillow>=10,<13`) y/o añadir una fila de matriz
      que pruebe la versión mínima.
+- **✅ Arreglado (2026-11-14):** `pyproject.toml` fija ahora `Pillow>=10,<13`, y el job
+  `test` del CI gana una fila extra (`Pillow minimum`, Python 3.10) que instala
+  `Pillow>=10,<11` para probar el extremo inferior del rango. Pendiente (requiere tocar
+  el entorno del usuario): recrear el venv local, que sigue con Pillow 9.0.1.
 
 ### 4. `DetailPanel` construye un `ThumbnailLoader` real cuando no se le inyecta
 
