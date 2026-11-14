@@ -299,6 +299,10 @@ El release `v1.3.0` salió antes del PR #35. Conviene publicar la siguiente vers
 (p. ej. `v1.4.0`) y comprobar que `release.yml` construye el ejecutable con el nuevo
 `pyproject.toml` (sin el override de mypy) y con Pillow 12.
 
+- **✅ Arreglado (2026-11-14):** `v1.4.0` publicado desde `main` con el `pyproject.toml`
+  ya tipado y `Pillow>=10,<13`. El workflow `Release` tardó 2m36s y adjuntó
+  `YouMuDow-v1.4.0-linux.zip`, `-darwin.zip`, `-windows.zip` y `SHA256SUMS`.
+
 ### 3. Falta un paso de "entorno limpio" documentado
 
 `docs/contributing.md` debería indicar crear un venv e instalar
