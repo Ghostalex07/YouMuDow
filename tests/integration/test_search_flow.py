@@ -1,0 +1,44 @@
+from conftest import pump
+
+from youmudow.domain.models import Video
+
+
+def test_query_renders_one_card_per_result(stack):
+    stack.adapter.results = [
+        Video(title="Lofi One", url="https://example.com/1", uploader="A", duration=61),
+        Video(title="Lofi Two", url="https://example.com/2", uploader="B", duration=122),
+    ]
+    stack.window._search_bar.search_var.set("lofi")
+    stack.window._on_search()
+    pump(stack.window, lambda: stack.window._results_cards.card_count() == 2)
+    assert stack.window._results_cards.card_count() == 2
+    assert stack.window._is_searching is False
+
+
+def test_selecting_a_card_fills_the_detail_panel(stack):
+    video = Video(title="Lofi One", url="https://example.com/1", uploader="A")
+    stack.adapter.results = [video]
+    stack.window._search_bar.search_var.set("lofi")
+    stack.window._on_search()
+    pump(stack.window, lambda: stack.window._results_cards.card_count() == 1)
+    stack.window._results_cards.select(0)
+    stack.window._root.update()
+    assert stack.window._selected_video is video
+    assert stack.window._detail_panel._detail_title.cget("text") == "Lofi One"
+
+
+def test_empty_query_never_reaches_the_service(stack):
+    stack.window._search_bar.search_var.set("   ")
+    stack.window._on_search()
+    assert stack.adapter.queries == []
+
+
+def test_failing_search_leaves_the_busy_state(stack, monkeypatch):
+    def explode(query, limit=10):
+        raise RuntimeError("network down")
+
+    monkeypatch.setattr(stack.adapter, "search", explode)
+    stack.window._search_bar.search_var.set("lofi")
+    stack.window._on_search()
+    pump(stack.window, lambda: stack.window._is_searching is False)
+    assert stack.window._results_cards.card_count() == 0
