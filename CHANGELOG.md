@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.0] - 2026-11-18
+
+### Added
+
+- Channels: `@handle`, `/channel/`, `/c/` and `/user/` URLs queue their videos,
+  with or without the `/videos`, `/shorts` or `/streams` suffix
+- `playlist_limit` setting (1-500, default 50) and
+  `youmudow-cli download <url> --limit N` for playlists
+- Duration and estimated size in the detail panel, computed from the real
+  format list reported by yt-dlp
+- Download presets: "Music 320", "Video 1080" and "Archive FLAC"; editing any
+  field switches back to "Custom"
+- Failed downloads retry with backoff (`max_retries`, default 2)
+- The pending queue is saved to `queue.json` and restored on startup, with a
+  "Restored N download(s)" status message; a download interrupted by quitting
+  is queued again for the next run
+- Optional system tray (`minimize_to_tray`): closing the window keeps the queue
+  running, with Show / Start downloads / Quit
+- `Help > Export Diagnostics...` writes version, platform, yt-dlp, ffmpeg,
+  environment status, a redacted config and the log tail into one file
+
+### Changed
+
+- Search results highlight the first entry and preview its details immediately
+
 ## [1.5.1] - 2026-11-14
 
 ### Added

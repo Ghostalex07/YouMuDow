@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "youmudow"
-version = "1.5.1"
+version = "1.6.0"
 description = "Music & Video Downloader - A modern desktop application"
 readme = "README.md"
 license = {text = "MIT"}
@@ -24,6 +24,7 @@ classifiers = [
 dependencies = [
     "yt-dlp>=2024.0.0",
     "Pillow>=10,<13",
+    "pystray>=0.19",
 ]
 
 [project.optional-dependencies]
@@ -79,3 +80,7 @@ warn_redundant_casts = true
 warn_unused_ignores = true
 warn_return_any = true
 no_implicit_optional = true
+
+[[tool.mypy.overrides]]
+module = ["pystray", "pystray.*"]
+ignore_missing_imports = true

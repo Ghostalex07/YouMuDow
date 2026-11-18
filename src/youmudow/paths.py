@@ -12,6 +12,11 @@ def config_dir() -> Path:
     return Path.home() / ".config" / "youmudow"
 
 
+def queue_file() -> Path:
+    """Return the path of the persisted pending download queue."""
+    return config_dir() / "queue.json"
+
+
 def cache_dir() -> Path:
     """Return the platform-specific cache directory.
 

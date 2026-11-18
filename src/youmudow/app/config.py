@@ -38,7 +38,9 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "debug_mode": False,
     "options_panel_open": False,
     "theme": "dark",
+    "minimize_to_tray": False,
     "concurrent_downloads": 1,
+    "max_retries": 2,
     "playlist_limit": 50,
     "search_history": [],
 }

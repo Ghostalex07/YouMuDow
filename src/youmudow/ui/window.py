@@ -49,6 +49,7 @@ from youmudow.ui.styles.constants import FONT, SPACING, _c
 from youmudow.ui.styles.styles import apply_theme
 from youmudow.ui.styles.theme import ThemeName, get_theme_manager
 from youmudow.ui.styles.theme_apply import apply_theme_colors
+from youmudow.ui.tray import TrayIcon
 from youmudow.ui.typed import readonly_property
 from youmudow.ui.widgets.detail_panel import DetailPanel
 from youmudow.ui.widgets.history_panel import HistoryPanel
@@ -71,6 +72,7 @@ class MainWindow(MainWindowProtocol):
         debug_mode: bool = True,
         config: Any = None,
         run_startup_checks: bool = True,
+        restored_count: int = 0,
     ) -> None:
         self._config = config
         self._controller_impl: AppControllerProtocol = controller
@@ -85,6 +87,8 @@ class MainWindow(MainWindowProtocol):
         apply_theme(self._tk_root, self._theme_manager.colors)
         self._tk_root.configure(bg=_c("bg"))
 
+        self._restored_count = restored_count
+        self._tray: TrayIcon | None = None
         self._selected_video_impl: Video | None = None
         self._is_searching = False
         self._is_downloading = False
@@ -125,6 +129,8 @@ class MainWindow(MainWindowProtocol):
         except (ImportError, OSError, tk.TclError, ValueError) as e:
             logger.debug("Could not set window icon: %s", e)
         self._tk_root.deiconify()
+        if self._restored_count:
+            self._set_status(f"Restored {self._restored_count} download(s)")
 
     # ------------------------------------------------------------------
     # Protocol surface
@@ -251,22 +257,27 @@ class MainWindow(MainWindowProtocol):
 
     def _create_menu(self) -> None:
         self._debug_var = tk.BooleanVar(value=self._debug_mode)
+        tray_enabled = bool(self._config.get("minimize_to_tray", False)) if self._config else False
+        self._tray_var = tk.BooleanVar(value=tray_enabled)
         callbacks = MenuCallbacks(
             set_output=self._on_set_output,
             open_output_folder=self._on_open_folder,
             export_logs=self._on_export_logs,
             clear_thumbnail_cache=self._on_clear_thumbnail_cache,
             close=self._on_close,
+            quit=self._on_quit,
             start_queue=self._on_start_queue,
             clear_queue=self._on_clear_queue,
             toggle_debug=self._on_toggle_debug,
             toggle_theme=self._on_toggle_theme,
+            toggle_tray=self._on_toggle_tray,
             update_ytdlp=self._on_update_ytdlp,
             repair_youtube=self._on_repair_youtube,
             show_ytdlp_version=self._on_show_ytdlp_version,
+            export_diagnostics=self._on_export_diagnostics,
             about=self._on_about,
         )
-        self._menubar = create_menubar(self._tk_root, callbacks, self._debug_var)
+        self._menubar = create_menubar(self._tk_root, callbacks, self._debug_var, self._tray_var)
 
     def _update_debug_visibility(self) -> None:
         paned_window = self._paned_window
@@ -744,7 +755,41 @@ class MainWindow(MainWindowProtocol):
             return
         apply_settings(self._config, detail_panel.options, self._tk_root)
 
+    def _on_export_diagnostics(self) -> None:
+        from tkinter import filedialog
+
+        from youmudow.services.diagnostics_service import export_diagnostics
+
+        path = filedialog.asksaveasfilename(
+            defaultextension=".txt",
+            initialfile="youmudow-diagnostics.txt",
+            filetypes=[("Text", "*.txt"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        destination = Path(path)
+        self._set_status("Writing diagnostics...")
+
+        def write() -> None:
+            # The report shells out to yt-dlp and ffmpeg: never on the Tk thread.
+            try:
+                saved = export_diagnostics(destination)
+            except OSError as e:
+                logger.exception("Could not export diagnostics")
+                self._schedule(self._set_status, f"Could not save diagnostics: {e}")
+                return
+            self._schedule(self._set_status, f"Diagnostics saved to {saved}")
+
+        threading.Thread(target=write, name="diagnostics-export", daemon=True).start()
+
     def _on_close(self) -> None:
+        self._save_settings()
+        if self._should_use_tray():
+            self._tk_root.withdraw()
+            return
+        self._shutdown()
+
+    def _save_settings(self) -> None:
         detail_panel = self._detail_panel_widget
         if self._config and detail_panel is not None:
             try:
@@ -753,14 +798,48 @@ class MainWindow(MainWindowProtocol):
                 logger.debug("Could not read output path: %s", e)
                 output_path = None
             save_settings(self._config, detail_panel.options, self._tk_root, output_path)
+
+    def _should_use_tray(self) -> bool:
+        """True when closing must only hide the window and keep the queue alive."""
+        if not self._config or not self._config.get("minimize_to_tray", False):
+            return False
+        if self._tray is None:
+            self._tray = TrayIcon(
+                on_show=self._show_from_tray,
+                on_quit=self._quit_from_tray,
+                on_start_queue=lambda: self._schedule(self._on_start_queue),
+            )
+        return self._tray.start()
+
+    def _shutdown(self) -> None:
+        self._save_settings()
         self._controller.stop_downloads()
         self.destroy()
+
+    def _on_quit(self) -> None:
+        """File > Exit: always leaves the application, tray or not."""
+        self._shutdown()
+
+    def _quit_from_tray(self) -> None:
+        self._schedule(self._shutdown)
+
+    def _show_from_tray(self) -> None:
+        self._schedule(self._tk_root.deiconify)
+
+    def _on_toggle_tray(self) -> None:
+        if self._config is None:
+            return
+        self._config.set("minimize_to_tray", bool(self._tray_var.get()))
+        self._config.save()
 
     def run(self) -> None:
         self._tk_root.protocol("WM_DELETE_WINDOW", self._on_close)
         self._tk_root.mainloop()
 
     def destroy(self) -> None:
+        if self._tray is not None:
+            self._tray.stop()
+            self._tray = None
         if self._log_unsubscribe:
             self._log_unsubscribe()
         if self._clear_unsubscribe:

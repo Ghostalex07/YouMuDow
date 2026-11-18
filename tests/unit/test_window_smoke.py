@@ -184,7 +184,7 @@ class TestMainWindowFlows:
         config.get_search_history.return_value = []
         config.window_geometry = ""
 
-        with patch.object(MainWindow, "_on_close") as close:
+        with patch.object(MainWindow, "_on_quit") as close:
             window = MainWindow(controller=controller, config=config)
             try:
                 file_index = next(
@@ -300,3 +300,42 @@ class TestClearThumbnailCache:
         window._thumbnail_cache = cache
         window._on_clear_thumbnail_cache()
         cache.clear.assert_called_once_with()
+
+
+class TestRestoredQueueMessage:
+    def test_startup_reports_how_many_downloads_were_restored(self):
+        from youmudow.ui.window import MainWindow
+
+        config = Mock()
+        config.get.side_effect = lambda key, default=None: default
+        config.get_search_history.return_value = []
+        config.window_geometry = ""
+        window = MainWindow(controller=Mock(), config=config, restored_count=2)
+        try:
+            assert "Restored 2" in window._status_bar._status_var.get()
+        finally:
+            window.destroy()
+
+    def test_startup_is_quiet_without_a_restored_queue(self, main_window):
+        window, _ = main_window
+        assert "Restored" not in window._status_bar._status_var.get()
+
+
+class TestExportDiagnostics:
+    def test_writes_the_report_and_reports_the_path(self, main_window, monkeypatch, tmp_path):
+        window, _ = main_window
+        target = tmp_path / "diag.txt"
+        monkeypatch.setattr("tkinter.filedialog.asksaveasfilename", lambda **kwargs: str(target))
+        window._on_export_diagnostics()
+        assert "Writing diagnostics" in window._status_bar._status_var.get()
+        deadline = time.monotonic() + 3.0
+        while not target.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert target.exists()
+
+    def test_cancelling_the_dialog_changes_nothing(self, main_window, monkeypatch):
+        window, _ = main_window
+        monkeypatch.setattr("tkinter.filedialog.asksaveasfilename", lambda **kwargs: "")
+        before = window._status_bar._status_var.get()
+        window._on_export_diagnostics()
+        assert window._status_bar._status_var.get() == before

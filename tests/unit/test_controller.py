@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from youmudow.app.config import AppConfig
 from youmudow.app.controller import AppController
 from youmudow.app.state import AppMode, AppState
 from youmudow.domain.models import Video
@@ -588,3 +589,16 @@ def test_search_playlist_reads_the_clamping_property():
     controller.search_playlist("https://youtube.com/@x")
 
     search.get_playlist.assert_called_once_with("https://youtube.com/@x", 500)
+
+
+def test_controller_uses_the_configured_retry_count():
+    config = AppConfig()
+    config.set("max_retries", 4)
+    controller = AppController(search_service=Mock(), config=config)
+    assert controller._download_service.max_retries == 4
+
+
+def test_controller_passes_the_queue_file_to_the_service(tmp_path):
+    queue = tmp_path / "queue.json"
+    controller = AppController(search_service=Mock(), config=AppConfig(), queue_file=queue)
+    assert controller._download_service._queue_file == queue

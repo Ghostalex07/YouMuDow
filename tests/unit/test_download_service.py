@@ -1350,7 +1350,10 @@ class TestCancelRaces:
         assert not any(e.type == DownloadEventType.ERROR for e in events)
         assert service.active_count == 0
         assert service._workers == []
-        assert v.status == DownloadStatus.CANCELLED
+        # A shutdown interrupts the download rather than cancelling the user's
+        # request, so the video goes back to the queue for the next session.
+        assert v.status == DownloadStatus.QUEUED
+        assert service.queue_size == 1
 
 
 class TestLifecycleRace:
@@ -1451,3 +1454,22 @@ class TestDownloadNowException:
         terminal = [e for e in events if e.type == DownloadEventType.ERROR]
         assert len(terminal) == 1
         assert terminal[0].video is result
+
+
+def test_service_passes_max_retries_to_its_workers(mock_adapter, tmp_path):
+    service = DownloadService(adapter=mock_adapter, default_output_path=tmp_path, max_retries=3)
+    service.add_to_queue(Video(title="A", url="https://x.test/a"))
+    service.start()
+    try:
+        assert service._workers
+        assert all(w._max_retries == 3 for w in service._workers)
+    finally:
+        service.stop()
+
+
+def test_set_max_retries_clamps_to_the_supported_range(tmp_path):
+    service = DownloadService(adapter=Mock(), default_output_path=tmp_path)
+    service.set_max_retries(99)
+    assert service.max_retries == 5
+    service.set_max_retries(-4)
+    assert service.max_retries == 0
