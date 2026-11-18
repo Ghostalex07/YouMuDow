@@ -300,3 +300,22 @@ class TestClearThumbnailCache:
         window._thumbnail_cache = cache
         window._on_clear_thumbnail_cache()
         cache.clear.assert_called_once_with()
+
+
+class TestRestoredQueueMessage:
+    def test_startup_reports_how_many_downloads_were_restored(self):
+        from youmudow.ui.window import MainWindow
+
+        config = Mock()
+        config.get.side_effect = lambda key, default=None: default
+        config.get_search_history.return_value = []
+        config.window_geometry = ""
+        window = MainWindow(controller=Mock(), config=config, restored_count=2)
+        try:
+            assert "Restored 2" in window._status_bar._status_var.get()
+        finally:
+            window.destroy()
+
+    def test_startup_is_quiet_without_a_restored_queue(self, main_window):
+        window, _ = main_window
+        assert "Restored" not in window._status_bar._status_var.get()

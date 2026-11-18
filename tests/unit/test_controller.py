@@ -596,3 +596,9 @@ def test_controller_uses_the_configured_retry_count():
     config.set("max_retries", 4)
     controller = AppController(search_service=Mock(), config=config)
     assert controller._download_service.max_retries == 4
+
+
+def test_controller_passes_the_queue_file_to_the_service(tmp_path):
+    queue = tmp_path / "queue.json"
+    controller = AppController(search_service=Mock(), config=AppConfig(), queue_file=queue)
+    assert controller._download_service._queue_file == queue

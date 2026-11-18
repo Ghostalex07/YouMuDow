@@ -27,7 +27,12 @@ class TestMain:
         setup_logging.assert_called_once_with(log_dir=main_module.CONFIG_DIR, level=logging.INFO)
         controller.set_output_path.assert_called_once_with(config.output_path)
         assert config.output_path.is_dir()
-        window_cls.assert_called_once_with(controller, debug_mode=False, config=config)
+        window_cls.assert_called_once_with(
+            controller,
+            debug_mode=False,
+            config=config,
+            restored_count=controller.restore_queue.return_value,
+        )
         window.run.assert_called_once_with()
 
     def test_debug_mode_sets_debug_log_level(self, tmp_path: Path) -> None:

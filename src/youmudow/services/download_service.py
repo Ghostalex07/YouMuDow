@@ -23,6 +23,7 @@ from youmudow.services.download_queue import (
     is_same_video,
 )
 from youmudow.services.download_worker import DownloadWorker, _format_speed
+from youmudow.services.queue_store import load_queue, save_queue
 
 __all__ = [
     "DownloadEvent",
@@ -55,9 +56,11 @@ class DownloadService:
         default_output_path: Path | None = None,
         max_concurrent: int = 1,
         max_retries: int = 0,
+        queue_file: Path | None = None,
     ) -> None:
         self._adapter = adapter or YtdlpAdapter()
         self._max_retries = max(0, max_retries)
+        self._queue_file = queue_file
         self._queue = DownloadQueue()
         self._output_path = default_output_path or Path.home() / "Downloads"
         self._max_concurrent = max_concurrent
@@ -146,7 +149,31 @@ class DownloadService:
 
     def clear_queue(self) -> None:
         self._queue.clear()
+        self._persist_queue()
         self._queue_event.set()
+
+    def _persist_queue(self) -> None:
+        if self._queue_file is None:
+            return
+        try:
+            save_queue(self._queue_file, self._queue.peek())
+        except OSError as exc:
+            logger.debug("Could not persist the download queue: %s", exc)
+
+    def restore_queue(self) -> int:
+        """Re-add the videos left in the queue file by the previous session."""
+        if self._queue_file is None:
+            return 0
+        restored = 0
+        for video in load_queue(self._queue_file):
+            if self._is_known(video):
+                continue
+            self._queue.add(video)
+            restored += 1
+        if restored:
+            logger.info("Restored %s queued download(s)", restored)
+        self._persist_queue()
+        return restored
 
     def add_to_queue(self, video: Video) -> None:
         if self._is_known(video):
@@ -155,6 +182,7 @@ class DownloadService:
             logger.debug("Ignoring duplicate queue entry for %s", video.url)
             return
         self._queue.add(video)
+        self._persist_queue()
         self._queue_event.set()
         self._emit_event(DownloadEvent(type=DownloadEventType.QUEUED, video=video))
 
@@ -285,6 +313,7 @@ class DownloadService:
                     worker.cancel()
                     return False
         if removed is not None:
+            self._persist_queue()
             removed.status = DownloadStatus.CANCELLED
             removed.error_message = "Cancelled by user"
             self._emit_event(DownloadEvent(type=DownloadEventType.CANCELLED, video=removed))
@@ -318,6 +347,7 @@ class DownloadService:
                 if not worker.submit(video):
                     self._queue.add(video)
                     continue
+                self._persist_queue()
                 self._active_downloads[worker.worker_id] = video
             if not self._run_event.is_set():
                 # stop() ran between dispatch and the broadcast below; the

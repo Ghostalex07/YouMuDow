@@ -59,6 +59,7 @@ class AppController:
         state_manager: StateManager | None = None,
         history_service: HistoryService | None = None,
         config: Any | None = None,
+        queue_file: Path | None = None,
     ) -> None:
         self._config = config
         self._search_service = search_service or SearchService()
@@ -70,7 +71,7 @@ class AppController:
             except (TypeError, ValueError):
                 logger.warning("Ignoring invalid max_retries in config, using 2")
         self._download_service = download_service or DownloadService(
-            max_concurrent=concurrent, max_retries=retries
+            max_concurrent=concurrent, max_retries=retries, queue_file=queue_file
         )
         self._thumbnail_service = thumbnail_service or ThumbnailService()
         self._state_manager = state_manager or StateManager()
@@ -268,6 +269,10 @@ class AppController:
     def enqueue_multiple(self, videos: list[Video]) -> None:
         for video in videos:
             self.enqueue(video)
+
+    def restore_queue(self) -> int:
+        """Restore the pending downloads left by the previous session."""
+        return self._download_service.restore_queue()
 
     def remove_from_queue(self, video: Video) -> None:
         """Remove a video from the queue, cancelling it if actively downloading.

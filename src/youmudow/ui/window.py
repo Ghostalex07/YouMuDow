@@ -71,6 +71,7 @@ class MainWindow(MainWindowProtocol):
         debug_mode: bool = True,
         config: Any = None,
         run_startup_checks: bool = True,
+        restored_count: int = 0,
     ) -> None:
         self._config = config
         self._controller_impl: AppControllerProtocol = controller
@@ -85,6 +86,7 @@ class MainWindow(MainWindowProtocol):
         apply_theme(self._tk_root, self._theme_manager.colors)
         self._tk_root.configure(bg=_c("bg"))
 
+        self._restored_count = restored_count
         self._selected_video_impl: Video | None = None
         self._is_searching = False
         self._is_downloading = False
@@ -125,6 +127,8 @@ class MainWindow(MainWindowProtocol):
         except (ImportError, OSError, tk.TclError, ValueError) as e:
             logger.debug("Could not set window icon: %s", e)
         self._tk_root.deiconify()
+        if self._restored_count:
+            self._set_status(f"Restored {self._restored_count} download(s)")
 
     # ------------------------------------------------------------------
     # Protocol surface
