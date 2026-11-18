@@ -517,3 +517,15 @@ class TestApplyThumbnail:
         v = Video(title="t", url="https://soundcloud.com/x/y")
         controller._apply_thumbnail(v)
         assert v.thumbnail == ""
+
+
+def test_search_playlist_uses_the_configured_limit():
+    config = Mock()
+    config.get.side_effect = lambda key, default=None: 120 if key == "playlist_limit" else default
+    search = Mock()
+    search.get_playlist.return_value = []
+    controller = AppController(search_service=search, download_service=Mock(), config=config)
+
+    controller.search_playlist("https://youtube.com/@x")
+
+    search.get_playlist.assert_called_once_with("https://youtube.com/@x", 120)

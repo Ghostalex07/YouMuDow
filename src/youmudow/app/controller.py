@@ -198,9 +198,12 @@ class AppController:
             self._search_epoch += 1
         self._state_manager.set_state(AppState.IDLE)
 
-    def search_playlist(self, url: str, limit: int = 50) -> list[Video]:
+    def search_playlist(self, url: str, limit: int | None = None) -> list[Video]:
         if not url:
             return []
+
+        if limit is None:
+            limit = self._config.get("playlist_limit", 50) if self._config else 50
 
         self._state_manager.set_state(AppState.SEARCHING)
 

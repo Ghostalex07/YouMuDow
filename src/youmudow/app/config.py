@@ -39,6 +39,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "options_panel_open": False,
     "theme": "dark",
     "concurrent_downloads": 1,
+    "playlist_limit": 50,
     "search_history": [],
 }
 
@@ -98,6 +99,21 @@ class AppConfig:
     @output_path.setter
     def output_path(self, value: Path | str) -> None:
         self._data["output_path"] = str(value)
+
+    @property
+    def playlist_limit(self) -> int:
+        """How many entries a playlist or channel search may load, clamped to 1..500."""
+        try:
+            return max(1, min(500, int(self._data.get("playlist_limit", 50))))
+        except (TypeError, ValueError):
+            return 50
+
+    @playlist_limit.setter
+    def playlist_limit(self, value: int) -> None:
+        try:
+            self._data["playlist_limit"] = max(1, min(500, int(value)))
+        except (TypeError, ValueError):
+            self._data["playlist_limit"] = 50
 
     def add_search(self, query: str) -> None:
         history = self.get("search_history", [])
