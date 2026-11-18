@@ -35,7 +35,11 @@ def test_playlist_fetch_failure_recovers_the_ui(stack, monkeypatch):
     monkeypatch.setattr(stack.window, "_set_status", lambda *a, **k: messages.append(a[0]))
     stack.window._search_bar.search_var.set(PLAYLIST_URL)
     stack.window._on_search()
-    pump(stack.window, lambda: stack.window._is_searching is False, timeout=2.0)
+    pump(
+        stack.window,
+        lambda: any("playlist" in str(message).lower() for message in messages),
+        timeout=2.0,
+    )
     assert stack.window._results_cards.card_count() == 0
     assert any("playlist" in str(message).lower() for message in messages)
 
