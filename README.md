@@ -15,7 +15,8 @@ A modern music & video downloader with real-time progress, persistent configurat
 
 - Search by name or paste any URL (YouTube, SoundCloud, Vimeo, Twitter, ...)
 - Playlists and channels: paste a playlist, `@handle` or channel URL and queue
-  every entry (configurable limit, 1-500)
+  every entry, loading them in pages of `playlist_limit` (1-500) with
+  **Load more** for long playlists
 - Download as MP3, M4A, FLAC, WAV, OGG, OPUS, AAC, or MP4
 - Download presets ("Music 320", "Video 1080", "Archive FLAC") plus per-format
   options

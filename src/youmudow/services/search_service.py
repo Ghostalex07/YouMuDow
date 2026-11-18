@@ -17,7 +17,7 @@ class YtdlpAdapterProtocol(Protocol):
 
     def get_metadata(self, url: str) -> Video | None: ...
 
-    def get_playlist_videos(self, url: str, limit: int = 50) -> list[Video]: ...
+    def get_playlist_videos(self, url: str, limit: int = 50, start: int = 1) -> list[Video]: ...
 
     def get_formats(self, url: str, video: Video | None = None) -> list[FormatInfo]: ...
 
@@ -43,5 +43,5 @@ class SearchService:
     def get_formats(self, url: str, video: Video | None = None) -> list[FormatInfo]:
         return self._adapter.get_formats(url, video)
 
-    def get_playlist(self, url: str, limit: int = 50) -> list[Video]:
-        return self._adapter.get_playlist_videos(url, limit)
+    def get_playlist(self, url: str, limit: int = 50, start: int = 1) -> list[Video]:
+        return self._adapter.get_playlist_videos(url, limit, start)

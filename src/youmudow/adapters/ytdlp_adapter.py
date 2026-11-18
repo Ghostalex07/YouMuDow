@@ -236,7 +236,7 @@ class YtdlpAdapter:
 
         return []
 
-    def get_playlist_videos(self, url: str, limit: int = 50) -> list[Video]:
+    def get_playlist_videos(self, url: str, limit: int = 50, start: int = 1) -> list[Video]:
         """Fetch up to ``limit`` videos from a playlist.
 
         Non-YouTube URLs (SoundCloud sets, Bandcamp albums, ...) are passed
@@ -251,7 +251,11 @@ class YtdlpAdapter:
         if limit <= 0:
             return []
         args = build_flat_playlist_args(
-            self._config, normalize_playlist_url(url), playlist_end=limit, log=self._log
+            self._config,
+            normalize_playlist_url(url),
+            playlist_end=limit,
+            log=self._log,
+            playlist_start=start,
         )
 
         self._log(f"[PLAYLIST] Fetching: {url}")

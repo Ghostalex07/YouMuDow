@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.0] - 2026-11-18
+
+### Added
+
+- Playlist pagination: a playlist or channel loads its first page and a
+  **Load more** button in the detail panel fetches the next one, appending
+  without re-fetching what is already on screen. A new search resets the paging
+  state, and no request is made once the playlist is exhausted.
+
+### Changed
+
+- `playlist_limit` now means "entries per page" (1-500) instead of a hard cap
+  on the total number of entries loaded.
+
 ## [1.6.1] - 2026-11-18
 
 ### Fixed
