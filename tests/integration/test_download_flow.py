@@ -1,6 +1,6 @@
-from youmudow.domain.models import Video
-
 from conftest import pump
+
+from youmudow.domain.models import Video
 
 
 def test_queue_drains_and_updates_the_ui(stack):

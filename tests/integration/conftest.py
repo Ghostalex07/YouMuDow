@@ -1,6 +1,7 @@
 import os
 import platform
 import time
+import tkinter as tk
 from types import SimpleNamespace
 
 import pytest
@@ -66,6 +67,14 @@ class FakeDownloadAdapter:
         return video
 
 
+def _teardown(built):
+    try:
+        built.window.destroy()
+    except tk.TclError:
+        pass  # a test already closed the window
+    built.downloads.stop()
+
+
 def pump(window, predicate, timeout=3.0):
     """Run the real Tk main loop until predicate is true.
 
@@ -122,8 +131,7 @@ def stack(tmp_path, monkeypatch):
     try:
         yield built
     finally:
-        built.window.destroy()
-        built.downloads.stop()
+        _teardown(built)
 
 
 @pytest.fixture
@@ -139,5 +147,4 @@ def stack_factory(tmp_path, monkeypatch):
         yield make
     finally:
         for namespace in built:
-            namespace.window.destroy()
-            namespace.downloads.stop()
+            _teardown(namespace)

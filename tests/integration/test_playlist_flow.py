@@ -1,6 +1,6 @@
-from youmudow.domain.models import Video
-
 from conftest import pump
+
+from youmudow.domain.models import Video
 
 PLAYLIST_URL = "https://www.youtube.com/playlist?list=PL123"
 
