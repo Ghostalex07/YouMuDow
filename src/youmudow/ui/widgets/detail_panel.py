@@ -6,6 +6,7 @@ import tkinter as tk
 
 from youmudow.app.state import AppStateData
 from youmudow.domain.models import DownloadOptions, Video
+from youmudow.domain.sizes import format_size
 from youmudow.services.thumbnail_loader import ThumbnailLoader
 from youmudow.ui.protocols import MainWindowProtocol
 from youmudow.ui.styles.constants import FONT, SPACING, _c, add_hover_effect
@@ -29,6 +30,8 @@ class DetailPanel(tk.Frame):
         super().__init__(parent, bg=_c("bg"))
         self._mw = main_window
         self._last_thumb_url: str | None = None
+        self._estimate_bytes: int | None = None
+        self._meta_duration: str = "-"
         self._thumbnail_loader = thumbnail_loader
 
         self.grid(
@@ -107,6 +110,16 @@ class DetailPanel(tk.Frame):
             row_uploader, text="-", bg=_c("surface"), fg=_c("text"), font=FONT["body"], anchor="w"
         )
         self._detail_uploader.pack(side="left")
+
+        self._detail_meta = tk.Label(
+            self,
+            text="-",
+            bg=_c("surface"),
+            fg=_c("text_secondary"),
+            font=FONT["small"],
+            anchor="w",
+        )
+        self._detail_meta.pack(fill="x", pady=(0, SPACING["sm"]))
 
         tk.Frame(self, height=1, bg=_c("border")).pack(
             fill="x", pady=(SPACING["sm"], SPACING["md"])
@@ -227,8 +240,22 @@ class DetailPanel(tk.Frame):
     def update_detail_panel(self, video: Video) -> None:
         self._detail_title.configure(text=video.title or "-")
         self._detail_uploader.configure(text=video.uploader or "-")
+        self._estimate_bytes = None
+        self._meta_duration = video.format_duration()
+        self._render_meta()
         self._load_thumbnail(video)
         self.options.update_for_video(video)
+
+    def set_estimate(self, size_bytes: int | None) -> None:
+        """Show (or hide) the estimated download size for the current video."""
+        self._estimate_bytes = size_bytes
+        self._render_meta()
+
+    def _render_meta(self) -> None:
+        parts = [self._meta_duration or "-"]
+        if self._estimate_bytes:
+            parts.append(f"~{format_size(self._estimate_bytes)}")
+        self._detail_meta.configure(text=" · ".join(parts))
 
     def get_current_options(self) -> DownloadOptions | None:
         return self.options.get_options()

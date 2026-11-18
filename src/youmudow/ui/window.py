@@ -334,8 +334,12 @@ class MainWindow(MainWindowProtocol):
         def on_download_complete(video: Video) -> None:
             self._schedule(self._on_download_complete, video)
 
+        def on_formats_ready(video: Video, size_bytes: int | None) -> None:
+            self._schedule(self._on_formats_ready, video, size_bytes)
+
         self._controller.on_search_complete(on_search_complete)
         self._controller.on_download_complete(on_download_complete)
+        self._controller.on_formats_ready(on_formats_ready)
 
     def _on_search_complete(self, results: list[Video]) -> None:
         try:
@@ -358,6 +362,13 @@ class MainWindow(MainWindowProtocol):
         except Exception as e:
             logger.exception("Search handler failed")
             self._set_status(f"Error: {e}")
+
+    def _on_formats_ready(self, video: Video, size_bytes: int | None) -> None:
+        if video is not self._selected_video:
+            return
+        detail_panel = self._detail_panel_widget
+        if detail_panel is not None:
+            detail_panel.set_estimate(size_bytes)
 
     def _on_download_complete(self, video: Video) -> None:
         if video.status is DownloadStatus.ERROR:
@@ -464,6 +475,7 @@ class MainWindow(MainWindowProtocol):
             detail_panel = self._detail_panel_widget
             if detail_panel is not None:
                 detail_panel.update_detail_panel(selected[0])
+            self._controller.load_formats(selected[0])
             self._set_status(f"{len(selected)} selected")
         else:
             self._selected_video_impl = None
