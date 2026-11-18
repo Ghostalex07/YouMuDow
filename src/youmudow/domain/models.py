@@ -5,6 +5,7 @@ from datetime import datetime as _dt
 from pathlib import Path
 
 from youmudow.domain.enums import DownloadStatus
+from youmudow.domain.sizes import format_size
 
 
 @dataclass
@@ -105,11 +106,4 @@ class HistoryEntry:
             return self.downloaded_at
 
     def format_size(self) -> str:
-        if self.file_size_bytes <= 0:
-            return ""
-        size: float = self.file_size_bytes
-        for unit in ("B", "KB", "MB", "GB"):
-            if size < 1024:
-                return f"{size:.1f} {unit}"
-            size /= 1024
-        return f"{size:.1f} TB"
+        return format_size(self.file_size_bytes)
