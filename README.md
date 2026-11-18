@@ -90,9 +90,41 @@ youmudow-cli download "https://www.youtube.com/watch?v=dQw4w9WgXcQ" --format mp3
 youmudow-cli download "bohemian rhapsody" --format mp3 --quality 320kbps
 youmudow-cli download "https://..." --output ~/Downloads --skip-metadata
 youmudow-cli search "lofi beats" --limit 10
+youmudow-cli download "https://www.youtube.com/playlist?list=..." --limit 25
 ```
 
-Options: `--format`, `--quality`, `--output DIR`, `--skip-metadata`. Run `youmudow-cli --version`.
+Options: `--format`, `--quality`, `--output DIR`, `--skip-metadata`.
+
+For a playlist or channel, `--limit N` sets how many entries to fetch (1-500,
+defaulting to `playlist_limit`); the CLI prints `Found N video(s)` and a
+`[i/N]` line per entry. Run `youmudow-cli --version` for the version.
+
+## Configuration
+
+Settings live in the OS config directory as JSON:
+
+| File | Contents |
+|---|---|
+| `config.json` | format, quality, output folder, `playlist_limit`, `max_retries`, `minimize_to_tray`, theme, cookies, search history |
+| `queue.json` | the pending queue, restored on the next start |
+| `history.json` | download history |
+| `youmudow.log` | application log |
+
+On Linux that is `~/.config/youmudow`, on Windows `%APPDATA%\YouMuDow`, on
+macOS `~/Library/Application Support/youmudow`. Cookie paths and browser
+profiles are never written to `queue.json`.
+
+## Troubleshooting
+
+- **Gatekeeper / SmartScreen warning** — the binaries are not code-signed, so
+  macOS and Windows show a first-run prompt. On macOS, right-click the app and
+  choose Open once; on Windows, "More info" then "Run anyway".
+- **No tray icon on Linux** — the tray needs a status-notifier host (most
+  desktops have one; GNOME needs the AppIndicator extension). Without it the
+  app logs a line and keeps working normally.
+- **Something failed** — `Help > Export Diagnostics...` writes version,
+  platform, yt-dlp, ffmpeg, the YouTube environment, a redacted config and the
+  last 256 KB of the log into one file you can attach to a report.
 
 ## Keyboard Shortcuts
 
@@ -104,6 +136,7 @@ Options: `--format`, `--quality`, `--output DIR`, `--skip-metadata`. Run `youmud
 | `Ctrl+L` | Focus search |
 | `Escape` | Cancel |
 | `Ctrl+T` | Toggle theme |
+| `F1` | Open the user guide |
 
 ## Development
 
@@ -111,6 +144,7 @@ Options: `--format`, `--quality`, `--output DIR`, `--skip-metadata`. Run `youmud
 make install     # pip install -e ".[dev]"
 make run         # launch the desktop app
 make test        # run tests
+make test-ui     # full-stack UI tests (needs a display; uses xvfb-run if present)
 make check       # lint + format + typecheck + tests
 ```
 

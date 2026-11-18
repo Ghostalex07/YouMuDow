@@ -11,6 +11,9 @@ PYTHONPATH=src python3 -m pytest --cov=src/youmudow
 
 # Run specific test file
 PYTHONPATH=src python3 -m pytest tests/unit/test_validators.py -v
+
+# Full-stack UI tests (need a display; xvfb-run also works)
+make test-ui
 ```
 
 ## Running the Application

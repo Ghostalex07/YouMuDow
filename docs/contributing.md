@@ -35,6 +35,18 @@ Or use `make check`, which runs all four.
 PYTHONPATH=src python3 -m pytest            # all tests
 PYTHONPATH=src python3 -m pytest tests/unit/test_validators.py -v   # one file
 PYTHONPATH=src python3 -m pytest --cov=youmudow   # coverage report
+make test-ui                                # full-stack UI tests
+```
+
+`tests/integration/` drives a real `MainWindow` against fake adapters. Those
+tests need a display: `make test-ui` uses `$DISPLAY`, falls back to
+`xvfb-run -a`, and says so when neither is available. In CI the suite runs
+under `xvfb-run`.
+
+After a UI change, also run the boot smoke test:
+
+```bash
+PYTHONPATH=src python3 scripts/smoke_boot.py   # prints BOOT OK (title=..., widgets=...)
 ```
 
 ## Architecture Notes
