@@ -52,6 +52,9 @@ target-version = "py310"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+markers = [
+    "integration: full-stack UI tests, need a display (xvfb-run -a)",
+]
 
 [tool.coverage.run]
 source = ["youmudow"]

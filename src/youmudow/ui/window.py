@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 from youmudow import __version__
 from youmudow.app.events import EventBus, EventType, get_event_bus
 from youmudow.app.state import AppMode, AppState, AppStateData
+from youmudow.domain.enums import DownloadStatus
 from youmudow.domain.models import Video
 from youmudow.domain.validators import is_playlist_url, is_supported_url
 from youmudow.paths import cache_dir
@@ -69,6 +70,7 @@ class MainWindow(MainWindowProtocol):
         controller: "AppController",
         debug_mode: bool = True,
         config: Any = None,
+        run_startup_checks: bool = True,
     ) -> None:
         self._config = config
         self._controller_impl: AppControllerProtocol = controller
@@ -111,8 +113,9 @@ class MainWindow(MainWindowProtocol):
         self._setup_event_listeners()
         self._setup_controller_callbacks()
         self._setup_state_observer()
-        self._tk_root.after(500, self._check_clipboard_on_start)
-        self._tk_root.after(3000, self._check_ytdlp_on_start)
+        if run_startup_checks:
+            self._tk_root.after(500, self._check_clipboard_on_start)
+            self._tk_root.after(3000, self._check_ytdlp_on_start)
         try:
             from youmudow.ui.icon import get_icon_image
 
@@ -357,7 +360,11 @@ class MainWindow(MainWindowProtocol):
             self._set_status(f"Error: {e}")
 
     def _on_download_complete(self, video: Video) -> None:
-        self._set_status(f"Downloaded: {video.title}")
+        if video.status is DownloadStatus.ERROR:
+            reason = video.error_message or "Download failed"
+            self._set_status(f"Error: {video.title} — {reason}")
+        else:
+            self._set_status(f"Downloaded: {video.title}")
         self._update_button_states()
 
     def _setup_state_observer(self) -> None:
@@ -401,8 +408,13 @@ class MainWindow(MainWindowProtocol):
                     status_bar.set_progress_color(_c("primary"))
                 self._set_status("Downloading...")
         elif snapshot.state is AppState.ERROR:
+            search_failed = self._is_searching
             self._is_searching = False
             self._is_downloading = False
+            if search_failed:
+                results_cards = self._results_cards
+                if results_cards is not None:
+                    results_cards.clear_results()
             self._set_status(
                 f"Error: {snapshot.error_message}" if snapshot.error_message else "Error occurred"
             )

@@ -29,6 +29,16 @@ test:
 coverage:
 	$(PYTEST) --cov=src/youmudow --cov-report=term-missing
 
+test-ui:
+	@if [ -n "$$DISPLAY" ]; then \
+		$(PYTEST) tests/integration; \
+	elif command -v xvfb-run >/dev/null 2>&1; then \
+		xvfb-run -a $(PYTEST) tests/integration; \
+	else \
+		echo "test-ui needs a display or xvfb-run"; \
+		exit 1; \
+	fi
+
 lint:
 	ruff check src/ tests/
 
