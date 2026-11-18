@@ -60,6 +60,11 @@ class DownloadService:
     ) -> None:
         self._adapter = adapter or YtdlpAdapter()
         self._max_retries = max(0, max_retries)
+        self._log_callback = None
+        self._sync_adapter_retries()
+        self._persist_dirty = False
+        self._persist_event = threading.Event()
+        self._persist_thread: threading.Thread | None = None
         self._queue_file = queue_file
         self._queue = DownloadQueue()
         self._output_path = default_output_path or Path.home() / "Downloads"
@@ -103,8 +108,20 @@ class DownloadService:
 
     def set_max_retries(self, value: int) -> None:
         self._max_retries = max(0, min(5, value))
+        self._sync_adapter_retries()
+
+    def _sync_adapter_retries(self) -> None:
+        """Let the adapter know whether the service owns the retry backoff.
+
+        yt-dlp retries ten times on its own; stacking our retries on top of
+        those multiplies both the attempts and the wait. When the service
+        retries, yt-dlp is told not to.
+        """
+        if hasattr(self._adapter, "set_retry_override"):
+            self._adapter.set_retry_override(0 if self._max_retries else None)
 
     def set_log_callback(self, callback) -> None:
+        self._log_callback = callback
         if hasattr(self._adapter, "set_log_callback"):
             self._adapter.set_log_callback(callback)
 
@@ -154,15 +171,45 @@ class DownloadService:
         self._queue_event.set()
 
     def _persist_queue(self) -> None:
+        """Mark the queue dirty and let the writer thread save it.
+
+        Writing from the caller would put a file write on the Tk thread for
+        every enqueue, so a playlist of fifty shows fifty writes; the thread
+        coalesces them into one.
+        """
         if self._queue_file is None:
             return
-        # Snapshot and write under one lock: the dispatcher thread and the Tk
-        # thread both persist, and two interleaved snapshots can drop an entry.
+        self._persist_dirty = True
+        if self._persist_thread is None or not self._persist_thread.is_alive():
+            self._persist_thread = threading.Thread(
+                target=self._persist_loop, name="queue-writer", daemon=True
+            )
+            self._persist_thread.start()
+        self._persist_event.set()
+
+    def _persist_loop(self) -> None:
+        while True:
+            if not self._persist_event.wait(timeout=0.5):
+                return  # nothing to do for half a second: the thread retires
+            self._persist_event.clear()
+            self._flush_queue()
+
+    def _flush_queue(self) -> None:
         with self._persist_lock:
-            try:
-                save_queue(self._queue_file, self._queue.peek())
-            except OSError as exc:
-                logger.debug("Could not persist the download queue: %s", exc)
+            if not self._persist_dirty or self._queue_file is None:
+                return
+            # Snapshot under the lock: the dispatcher can drop entries while the
+            # file is being written.
+            videos = list(self._queue.peek())
+            self._persist_dirty = False
+        try:
+            save_queue(self._queue_file, videos)
+        except OSError as exc:
+            logger.debug("Could not persist the queue: %s", exc)
+
+    def flush_queue(self) -> None:
+        """Write a pending queue change now, from the calling thread."""
+        self._flush_queue()
 
     def queued_videos(self) -> list[Video]:
         """A snapshot of the pending queue, oldest first."""
@@ -230,6 +277,7 @@ class DownloadService:
                     output_path_getter=self.get_output_path,
                     progress_callback=self._handle_worker_event,
                     max_retries=self._max_retries,
+                    log_callback=self._log_callback,
                 )
                 self._workers.append(worker)
                 worker.start()
@@ -308,6 +356,8 @@ class DownloadService:
             persisted = True
         if persisted:
             self._persist_queue()
+
+        self.flush_queue()
 
         # Wake the dispatcher so it observes the stop at once.
         self._queue_event.set()

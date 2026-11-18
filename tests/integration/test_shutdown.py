@@ -84,3 +84,25 @@ def test_shutdown_saves_the_settings_before_destroying(stack, monkeypatch):
     monkeypatch.setattr(type(stack.window), "destroy", destroy)
     stack.window._shutdown()
     assert order == ["save", "destroy"]
+
+
+def test_enabling_the_tray_option_starts_the_icon_immediately(stack, monkeypatch):
+    from youmudow.ui import window as window_module
+
+    started: list[str] = []
+
+    class FakeTray:
+        def __init__(self, **kwargs):
+            pass
+
+        def start(self):
+            started.append("start")
+            return True
+
+        def stop(self):
+            pass
+
+    monkeypatch.setattr(window_module, "TrayIcon", FakeTray)
+    stack.window._tray_var.set(True)
+    stack.window._on_toggle_tray()
+    assert started == ["start"]

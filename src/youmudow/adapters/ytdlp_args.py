@@ -179,8 +179,13 @@ def build_download_args(
     video: Video,
     skip_cookies: bool = False,
     log: Callable[[str], None] | None = None,
+    retries: int | None = None,
 ) -> list[str]:
-    """Build the full yt-dlp command line for downloading ``video``."""
+    """Build the full yt-dlp command line for downloading ``video``.
+
+    ``retries`` overrides yt-dlp's own retry count; the worker passes 0 when its
+    retry loop owns the backoff, so attempts are not multiplied.
+    """
     args = build_base_args(config, video, skip_cookies, log)
 
     opts = video.options
@@ -222,6 +227,9 @@ def build_download_args(
 
     if opts.rate_limit:
         args.extend(["--limit-rate", opts.rate_limit])
+
+    if retries is not None:
+        args.extend(["--retries", str(retries)])
 
     if opts.split_chapters:
         args.append("--split-chapters")
