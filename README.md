@@ -14,10 +14,21 @@ A modern music & video downloader with real-time progress, persistent configurat
 ## Features
 
 - Search by name or paste any URL (YouTube, SoundCloud, Vimeo, Twitter, ...)
+- Playlists and channels: paste a playlist, `@handle` or channel URL and queue
+  every entry (configurable limit, 1-500)
 - Download as MP3, M4A, FLAC, WAV, OGG, OPUS, AAC, or MP4
+- Download presets ("Music 320", "Video 1080", "Archive FLAC") plus per-format
+  options
+- Duration and estimated size preview in the detail panel before downloading
 - Real-time progress bar and download log
 - Cookie authentication (Chrome, Firefox, Edge, Brave, Opera, Vivaldi)
 - Rate limiting, chapter splitting, subtitles
+- Failed downloads retry automatically with backoff; the pending queue is
+  restored on the next start
+- Optional system tray: closing the window can keep the queue running (needs a
+  status-notifier host on Linux)
+- `Help > Export Diagnostics...` writes version, ffmpeg, environment and a
+  redacted config into one file for support
 - Light/Dark theme, persistent configuration
 - System notifications on completion
 - Clipboard URL detection on startup
