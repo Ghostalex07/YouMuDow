@@ -90,7 +90,10 @@ Business logic that coordinates adapters and domain objects.
 - `download_queue.py` — `DownloadQueue`, the single owner of queued videos,
   plus the identity-or-URL matchers (`is_same_video`, `find_video_index`,
   `find_entry_index`).
-- `download_worker.py` — `DownloadWorker`: one download from start to finish.
+- `download_worker.py` — `DownloadWorker`: one download from start to finish,
+  including the retry loop with a cancel-aware backoff wait.
+- `queue_store.py` — serialises the pending queue to `queue.json` and back
+  (`Video` <-> JSON), dropping volatile cookie fields.
 - `download_events.py` — `DownloadEventType`, `DownloadProgress`,
   `DownloadEvent`, the progress/event vocabulary shared with `app/state.py`.
 - `history_service.py` — persistent download history stored as JSON.
@@ -98,6 +101,10 @@ Business logic that coordinates adapters and domain objects.
 - `notification_service.py` — cross-platform desktop notifications
   (`notify-send` / `osascript` / `plyer`).
 - `updater_service.py` — checks and self-updates the yt-dlp binary.
+- `environment_service.py` — detects ffmpeg/JS runtimes and repairs the
+  YouTube environment.
+- `diagnostics_service.py` — builds and exports the support report (redacted
+  config, versions, log tail).
 
 ## App Layer (`app/`)
 
@@ -124,9 +131,12 @@ Tkinter interface. No business logic lives here; every action is delegated to
 - `startup_checks.py` — startup checks (clipboard, yt-dlp, YouTube environment).
 - `actions.py` — log export, open download folder, about, yt-dlp update and
   repair.
-- `widgets/` — `search_bar`, `results_table`, `detail_panel` (video details and
-  thumbnail, composed of `options_panel` and `queue_panel`), `history_panel`,
-  `log_terminal`, `status_bar`.
+- `tray.py` — optional `pystray` icon; imports the backend lazily and degrades
+  to a log line when it is missing.
+- `widgets/` — `search_bar`, `results_table`, `detail_panel` (video details,
+  thumbnail and **Load more**, composed of `options_panel` and `queue_panel`),
+  `history_panel`, `log_terminal`, `status_bar`, `guide_panel` (the closable
+  user-guide tab).
 - `styles/` — theme definitions, ttk styling and the repaint rule table
   (`styles.py`, `theme.py`, `theme_apply.py`, `constants.py`).
 
