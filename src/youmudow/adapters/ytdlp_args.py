@@ -126,6 +126,17 @@ def _cookie_args(
     return []
 
 
+def build_formats_args(
+    config: YtdlpConfig,
+    url: str,
+    log: Callable[[str], None] | None = None,
+) -> list[str]:
+    """Build the command that dumps every format of a single video as JSON."""
+    args = build_base_args(config, None, False, log)
+    args.extend(["--dump-single-json", "--no-playlist", "--skip-download", url])
+    return args
+
+
 def build_base_args(
     config: YtdlpConfig,
     video: Video | None = None,

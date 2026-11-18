@@ -25,6 +25,7 @@ from youmudow.adapters.ytdlp_args import (
     build_base_args,
     build_download_args,
     build_flat_playlist_args,
+    build_formats_args,
 )
 from youmudow.adapters.ytdlp_files import existing_files, resolve_destination
 from youmudow.adapters.ytdlp_parsing import (
@@ -39,6 +40,7 @@ from youmudow.adapters.ytdlp_parsing import (
 from youmudow.adapters.ytdlp_process import run_capture, run_process
 from youmudow.domain.enums import DownloadStatus
 from youmudow.domain.exceptions import YtDlpError
+from youmudow.domain.formats import FormatInfo, parse_formats
 from youmudow.domain.models import Video
 from youmudow.domain.validators import sanitize_filename
 
@@ -203,6 +205,27 @@ class YtdlpAdapter:
             logger.warning("Metadata fetch failed for %s: %s", url, e)
 
         return None
+
+    def get_formats(self, url: str) -> list[FormatInfo]:
+        """List the formats available for a single video, without downloading."""
+        args = build_formats_args(self._config, url, self._log)
+        self._log(f"[FORMATS] Fetching: {url}")
+
+        try:
+            result = run_capture(args, timeout=60)
+            if result.returncode == 0 and result.stdout:
+                data = json.loads(result.stdout)
+                if isinstance(data, dict):
+                    formats = parse_formats(data)
+                    self._log(f"[FORMATS] Got {len(formats)} formats")
+                    return formats
+            elif result.returncode != 0:
+                self._log_command_error("FORMATS", result)
+        except (subprocess.SubprocessError, OSError, ValueError) as e:
+            self._log(f"[FORMATS] Error: {e}")
+            logger.warning("Format lookup failed for %s: %s", url, e)
+
+        return []
 
     def get_playlist_videos(self, url: str, limit: int = 50) -> list[Video]:
         """Fetch up to ``limit`` videos from a playlist.

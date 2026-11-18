@@ -1530,3 +1530,45 @@ class TestProcessGroupSignalling:
         assert getpgid.called
         assert fake._terminated
         assert code == 5
+
+
+class TestFormatsLookup:
+    def test_build_formats_args_dumps_a_single_json(self, monkeypatch):
+        from youmudow.adapters import ytdlp_args
+
+        monkeypatch.setattr(ytdlp_args, "_has_explicit_profile", lambda profile: False)
+        args = ytdlp_args.build_formats_args(
+            YtdlpConfig(output_template="{title}"), "https://x.test/v"
+        )
+        assert args[-4:] == [
+            "--dump-single-json",
+            "--no-playlist",
+            "--skip-download",
+            "https://x.test/v",
+        ]
+
+    def test_get_formats_parses_the_payload(self, monkeypatch):
+        adapter = YtdlpAdapter(YtdlpConfig())
+        monkeypatch.setattr(
+            "youmudow.adapters.ytdlp_adapter.run_capture",
+            lambda args, timeout: subprocess.CompletedProcess(
+                args, 0, '{"formats":[{"format_id":"251","abr":160}]}', ""
+            ),
+        )
+        assert [f.format_id for f in adapter.get_formats("https://x.test/v")] == ["251"]
+
+    def test_get_formats_returns_empty_on_bad_json(self, monkeypatch):
+        adapter = YtdlpAdapter(YtdlpConfig())
+        monkeypatch.setattr(
+            "youmudow.adapters.ytdlp_adapter.run_capture",
+            lambda args, timeout: subprocess.CompletedProcess(args, 0, "not json", ""),
+        )
+        assert adapter.get_formats("https://x.test/v") == []
+
+    def test_get_formats_returns_empty_on_failure(self, monkeypatch):
+        adapter = YtdlpAdapter(YtdlpConfig())
+        monkeypatch.setattr(
+            "youmudow.adapters.ytdlp_adapter.run_capture",
+            lambda args, timeout: subprocess.CompletedProcess(args, 1, "", "boom"),
+        )
+        assert adapter.get_formats("https://x.test/v") == []
