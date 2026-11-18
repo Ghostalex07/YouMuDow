@@ -27,6 +27,7 @@ class MenuCallbacks:
     start_queue: Callable[[], None]
     clear_queue: Callable[[], None]
     toggle_debug: Callable[[], None]
+    open_guide: Callable[[], None]
     toggle_theme: Callable[[], None]
     toggle_tray: Callable[[], None]
     update_ytdlp: Callable[[], None]
@@ -74,6 +75,8 @@ def build_menubar(
     view_menu.add_checkbutton(
         label="Keep Running in Tray", variable=tray_var, command=callbacks.toggle_tray
     )
+    view_menu.add_separator()
+    view_menu.add_command(label="User Guide    F1", command=callbacks.open_guide)
     view_menu.add_separator()
     view_menu.add_command(label="Toggle Light/Dark Theme    Ctrl+T", command=callbacks.toggle_theme)
 
