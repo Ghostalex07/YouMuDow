@@ -54,8 +54,10 @@ class DownloadService:
         adapter: YtdlpAdapter | None = None,
         default_output_path: Path | None = None,
         max_concurrent: int = 1,
+        max_retries: int = 0,
     ) -> None:
         self._adapter = adapter or YtdlpAdapter()
+        self._max_retries = max(0, max_retries)
         self._queue = DownloadQueue()
         self._output_path = default_output_path or Path.home() / "Downloads"
         self._max_concurrent = max_concurrent
@@ -90,6 +92,13 @@ class DownloadService:
     def set_max_concurrent(self, value: int) -> None:
         with self._lock:
             self._max_concurrent = max(1, value)
+
+    @property
+    def max_retries(self) -> int:
+        return self._max_retries
+
+    def set_max_retries(self, value: int) -> None:
+        self._max_retries = max(0, min(5, value))
 
     def set_log_callback(self, callback) -> None:
         if hasattr(self._adapter, "set_log_callback"):
@@ -182,6 +191,7 @@ class DownloadService:
                     adapter=self._adapter,
                     output_path_getter=self.get_output_path,
                     progress_callback=self._handle_worker_event,
+                    max_retries=self._max_retries,
                 )
                 self._workers.append(worker)
                 worker.start()

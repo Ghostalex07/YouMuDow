@@ -63,7 +63,15 @@ class AppController:
         self._config = config
         self._search_service = search_service or SearchService()
         concurrent = self._config.get("concurrent_downloads", 1) if self._config else 1
-        self._download_service = download_service or DownloadService(max_concurrent=concurrent)
+        retries = 2
+        if self._config is not None:
+            try:
+                retries = max(0, min(5, int(self._config.get("max_retries", 2))))
+            except (TypeError, ValueError):
+                logger.warning("Ignoring invalid max_retries in config, using 2")
+        self._download_service = download_service or DownloadService(
+            max_concurrent=concurrent, max_retries=retries
+        )
         self._thumbnail_service = thumbnail_service or ThumbnailService()
         self._state_manager = state_manager or StateManager()
         self._history = history_service or HistoryService()

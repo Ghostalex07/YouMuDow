@@ -28,12 +28,16 @@ class DownloadWorker(threading.Thread):
         adapter: YtdlpAdapter,
         output_path_getter: Callable[[], Path],
         progress_callback: Callable[[DownloadEvent], None],
+        max_retries: int = 0,
+        retry_delay: float = 2.0,
     ) -> None:
         super().__init__(daemon=True)
         self._worker_id = worker_id
         self._adapter = adapter
         self._output_path_getter = output_path_getter
         self._progress_callback = progress_callback
+        self._max_retries = max(0, max_retries)
+        self._retry_delay = max(0.0, retry_delay)
         self._current_video: Video | None = None
         self._video_lock = threading.Lock()
         self._cancel_event = threading.Event()
@@ -106,17 +110,49 @@ class DownloadWorker(threading.Thread):
             progress_callback_fn = self._make_progress_callback(video)
             progress_callback_fn(0.0, "")
 
-            try:
-                self._adapter.download(
-                    video,
-                    self._output_path_getter(),
-                    progress_callback_fn,
-                    cancel_event=self._cancel_event,
-                )
-            except Exception as e:
-                video.status = DownloadStatus.ERROR
-                video.error_message = str(e)
-                logger.exception("Download worker failed for %s", video.url)
+            for attempt in range(self._max_retries + 1):
+                video.status = DownloadStatus.DOWNLOADING
+                video.error_message = ""
+                try:
+                    self._adapter.download(
+                        video,
+                        self._output_path_getter(),
+                        progress_callback_fn,
+                        cancel_event=self._cancel_event,
+                    )
+                    break
+                except Exception as e:
+                    video.status = DownloadStatus.ERROR
+                    video.error_message = str(e)
+                    logger.exception("Download worker failed for %s", video.url)
+                    if (
+                        attempt >= self._max_retries
+                        or self._cancel_event.is_set()
+                        or self._shutdown.is_set()
+                    ):
+                        break
+                    logger.warning(
+                        "[RETRY] attempt %s for %s in %.1fs",
+                        attempt + 1,
+                        video.url,
+                        self._retry_delay * (attempt + 1),
+                    )
+                    # The row must look active again while it waits, otherwise the
+                    # UI shows it as failed until the retry finishes.
+                    self._progress_callback(
+                        DownloadEvent(type=DownloadEventType.PROGRESS, video=video)
+                    )
+                    delay = self._retry_delay * (attempt + 1)
+                    waited = 0.0
+                    while waited < delay and not self._shutdown.is_set():
+                        step = min(0.05, delay - waited)
+                        if self._cancel_event.wait(step):
+                            break
+                        waited += step
+                    if self._cancel_event.is_set():
+                        video.status = DownloadStatus.CANCELLED
+                        video.error_message = ""
+                        break
 
             if self._shutdown.is_set():
                 with self._video_lock:
