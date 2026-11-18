@@ -56,13 +56,16 @@ def test_failing_search_leaves_the_busy_state(stack, monkeypatch):
     assert "Error" in stack.window._status_bar._status_var.get()
 
 
-def test_empty_results_show_the_empty_state(stack):
+def test_empty_results_show_the_empty_state(stack, monkeypatch):
+    messages = []
+    monkeypatch.setattr(stack.window, "_set_status", lambda *a, **k: messages.append(a[0]))
     stack.adapter.results = []
     stack.window._search_bar.search_var.set("nothing matches")
     stack.window._on_search()
-    pump(stack.window, lambda: stack.window._is_searching is False)
+    # Wait for the callback's own message, not for _is_searching: the IDLE
+    # snapshot clears that flag before the callback has drawn the empty state.
+    pump(stack.window, lambda: any("No results found" in m for m in messages))
     assert stack.window._results_cards._empty_state is not None
-    assert "No results found" in stack.window._status_bar._status_var.get()
 
 
 def test_selecting_a_card_previews_the_estimated_size(stack):
