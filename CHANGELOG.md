@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.1] - 2026-11-18
+
+### Fixed
+
+- Cancelling a download while an attempt is failing now reports it as
+  cancelled instead of failed
+- A retry is visible in the log panel, and the queue row keeps its progress
+  instead of showing the stale failure
+- yt-dlp's own retries are disabled while the app retries the download, so the
+  attempts are not multiplied
+- `queue.json` is written by a background thread that coalesces bursts, instead
+  of a file write on the UI thread for every enqueue
+- `queue.json` no longer stores cookie file paths or browser profiles
+- Export Diagnostics reads the live configuration instead of re-reading the
+  config file, and reads only the tail of the log
+- Enabling "Keep Running in Tray" shows the icon immediately instead of waiting
+  for the next close
+- `reset()` keeps the queue file and the retry setting
+- The restored queue count is logged once, not twice
+
 ## [1.6.0] - 2026-11-18
 
 ### Added
