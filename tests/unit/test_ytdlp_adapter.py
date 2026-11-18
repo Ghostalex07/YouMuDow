@@ -1572,3 +1572,36 @@ class TestFormatsLookup:
             lambda args, timeout: subprocess.CompletedProcess(args, 1, "", "boom"),
         )
         assert adapter.get_formats("https://x.test/v") == []
+
+
+def test_build_formats_args_carries_the_video_cookie_flags(monkeypatch):
+    from youmudow.adapters import ytdlp_args
+    from youmudow.domain.models import DownloadOptions, Video
+
+    monkeypatch.setattr(ytdlp_args, "_has_explicit_profile", lambda profile: False)
+    video = Video(
+        title="T",
+        url="https://x.test/v",
+        options=DownloadOptions(use_cookies=True, cookies_from_browser="firefox"),
+    )
+    args = ytdlp_args.build_formats_args(YtdlpConfig(), "https://x.test/v", video)
+    assert args[args.index("--cookies-from-browser") + 1] == "firefox"
+
+
+def test_get_formats_passes_the_video_through(monkeypatch):
+    from youmudow.domain.models import DownloadOptions, Video
+
+    seen = {}
+
+    def fake_args(config, url, video=None, log=None):
+        seen["video"] = video
+        return ["yt-dlp", url]
+
+    monkeypatch.setattr("youmudow.adapters.ytdlp_adapter.build_formats_args", fake_args)
+    monkeypatch.setattr(
+        "youmudow.adapters.ytdlp_adapter.run_capture",
+        lambda args, timeout: subprocess.CompletedProcess(args, 0, '{"formats":[]}', ""),
+    )
+    video = Video(title="T", url="https://x.test/v", options=DownloadOptions(use_cookies=True))
+    YtdlpAdapter(YtdlpConfig()).get_formats("https://x.test/v", video)
+    assert seen["video"] is video

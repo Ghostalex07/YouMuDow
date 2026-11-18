@@ -234,3 +234,16 @@ class TestPlaylistDownload:
 
         assert code == 1
         assert "[1/2] V0" in capsys.readouterr().out
+
+
+def test_download_limit_is_capped_at_500(monkeypatch, tmp_path):
+    search = Mock()
+    search.get_playlist.return_value = []
+    monkeypatch.setattr("youmudow.cli.SearchService", lambda: search)
+
+    code = main(
+        ["download", "https://www.youtube.com/@chan", "--limit", "9999", "--output", str(tmp_path)]
+    )
+
+    assert code == 1
+    search.get_playlist.assert_called_once_with("https://www.youtube.com/@chan", 500)

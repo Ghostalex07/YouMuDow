@@ -114,7 +114,7 @@ class AppController:
     def _load_formats_worker(self, video: Video) -> None:
         size: int | None = None
         try:
-            formats = self._search_service.get_formats(video.url)
+            formats = self._search_service.get_formats(video.url, video)
             size = estimate_size(formats, video.options, video.duration)
         except Exception:
             logger.exception("Format lookup failed for %s", video.url)
@@ -233,7 +233,9 @@ class AppController:
             return []
 
         if limit is None:
-            limit = self._config.get("playlist_limit", 50) if self._config else 50
+            # The property clamps to 1..500 and coerces bad JSON values, which
+            # a raw config.get() would hand straight to yt-dlp.
+            limit = self._config.playlist_limit if self._config else 50
 
         self._state_manager.set_state(AppState.SEARCHING)
 

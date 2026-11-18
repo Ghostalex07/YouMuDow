@@ -78,3 +78,34 @@ def test_selecting_a_card_previews_the_estimated_size(stack):
     pump(stack.window, lambda: "~" in stack.window._detail_panel._detail_meta.cget("text"))
 
     assert stack.window._detail_panel._detail_meta.cget("text") == "1:00 · ~1.8 MB"
+
+
+def test_first_result_is_previewed_without_clicking(stack):
+    from youmudow.domain.formats import FormatInfo
+
+    stack.adapter.results = [Video(title="Lofi One", url="https://example.com/1", duration=60)]
+    stack.adapter.formats = [FormatInfo("251", "m4a", 0, 256.0, 0.0, 0)]
+    stack.window._search_bar.search_var.set("lofi")
+    stack.window._on_search()
+
+    pump(stack.window, lambda: "~" in stack.window._detail_panel._detail_meta.cget("text"))
+
+
+def test_rapid_selection_debounces_the_format_lookup(stack):
+    from youmudow.domain.formats import FormatInfo
+
+    stack.adapter.results = [
+        Video(title=f"V{i}", url=f"https://example.com/{i}", duration=60) for i in range(3)
+    ]
+    stack.adapter.formats = [FormatInfo("251", "m4a", 0, 256.0, 0.0, 0)]
+    stack.window._search_bar.search_var.set("lofi")
+    stack.window._on_search()
+    pump(stack.window, lambda: stack.window._results_cards.card_count() == 3)
+    pump(stack.window, lambda: stack.adapter.format_calls >= 1)
+
+    stack.adapter.format_calls = 0
+    for index in range(3):
+        stack.window._results_cards.select(index)
+    pump(stack.window, lambda: stack.adapter.format_calls >= 1)
+
+    assert stack.adapter.format_calls == 1

@@ -522,7 +522,7 @@ class TestApplyThumbnail:
 
 def test_search_playlist_uses_the_configured_limit():
     config = Mock()
-    config.get.side_effect = lambda key, default=None: 120 if key == "playlist_limit" else default
+    config.playlist_limit = 120
     search = Mock()
     search.get_playlist.return_value = []
     controller = AppController(search_service=search, download_service=Mock(), config=config)
@@ -575,3 +575,16 @@ def test_controller_reports_no_estimate_when_the_lookup_raises():
 
     _wait_until(lambda: got)
     assert got == [None]
+
+
+def test_search_playlist_reads_the_clamping_property():
+    config = Mock()
+    config.get.return_value = 5000
+    config.playlist_limit = 500
+    search = Mock()
+    search.get_playlist.return_value = []
+    controller = AppController(search_service=search, download_service=Mock(), config=config)
+
+    controller.search_playlist("https://youtube.com/@x")
+
+    search.get_playlist.assert_called_once_with("https://youtube.com/@x", 500)

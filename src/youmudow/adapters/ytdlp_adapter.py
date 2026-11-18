@@ -206,9 +206,9 @@ class YtdlpAdapter:
 
         return None
 
-    def get_formats(self, url: str) -> list[FormatInfo]:
+    def get_formats(self, url: str, video: Video | None = None) -> list[FormatInfo]:
         """List the formats available for a single video, without downloading."""
-        args = build_formats_args(self._config, url, self._log)
+        args = build_formats_args(self._config, url, video, self._log)
         self._log(f"[FORMATS] Fetching: {url}")
 
         try:

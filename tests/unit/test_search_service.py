@@ -116,4 +116,4 @@ class TestSearchServiceIntegration:
 def test_get_formats_delegates_to_the_adapter(search_service, mock_adapter):
     mock_adapter.get_formats.return_value = ["sentinel"]
     assert search_service.get_formats("https://x.test/v") == ["sentinel"]
-    mock_adapter.get_formats.assert_called_once_with("https://x.test/v")
+    mock_adapter.get_formats.assert_called_once_with("https://x.test/v", None)

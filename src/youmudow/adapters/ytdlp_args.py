@@ -129,10 +129,15 @@ def _cookie_args(
 def build_formats_args(
     config: YtdlpConfig,
     url: str,
+    video: Video | None = None,
     log: Callable[[str], None] | None = None,
 ) -> list[str]:
-    """Build the command that dumps every format of a single video as JSON."""
-    args = build_base_args(config, None, False, log)
+    """Build the command that dumps every format of a single video as JSON.
+
+    ``video`` carries the per-video cookie request, so the probe authenticates
+    exactly like the download it is estimating.
+    """
+    args = build_base_args(config, video, False, log)
     args.extend(["--dump-single-json", "--no-playlist", "--skip-download", url])
     return args
 

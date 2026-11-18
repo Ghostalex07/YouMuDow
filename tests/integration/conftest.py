@@ -25,6 +25,7 @@ class FakeSearchAdapter:
         self.playlist = list(playlist or [])
         self.metadata = metadata
         self.formats = []
+        self.format_calls = 0
         self.queries = []
         self.log_callback = None
 
@@ -38,7 +39,8 @@ class FakeSearchAdapter:
     def get_metadata(self, url):
         return self.metadata
 
-    def get_formats(self, url):
+    def get_formats(self, url, video=None):
+        self.format_calls += 1
         return self.formats
 
     def get_playlist_videos(self, url, limit=50):

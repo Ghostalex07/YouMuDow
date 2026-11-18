@@ -231,6 +231,10 @@ def test_channel_urls_are_playlists(url):
         "https://www.youtube.com/feed/subscriptions",
         "https://www.youtube.com/watch?v=abc",
         "https://example.com/@notyoutube",
+        "https://www.youtube.com/@lofigirl/live",
+        "https://www.youtube.com/@lofigirl/about",
+        "https://www.youtube.com/@lofigirl/playlists",
+        "https://www.youtube.com/channel/UCabc123/featured",
     ],
 )
 def test_non_channel_urls_are_not_playlists(url):

@@ -35,8 +35,14 @@ class OptionsPanel:
     layout of the detail panel unchanged.
     """
 
-    def __init__(self, parent: tk.Widget, main_window: MainWindowProtocol) -> None:
+    def __init__(
+        self,
+        parent: tk.Widget,
+        main_window: MainWindowProtocol,
+        on_change: Callable[[], None] | None = None,
+    ) -> None:
         self._mw = main_window
+        self._on_change = on_change
         self._available_browsers: list[str] | None = None
         self._browser_profiles_cache: dict | None = None
         self._build_header(parent)
@@ -381,9 +387,15 @@ class OptionsPanel:
         self._split_chapters_var.set(False)
         self._on_subtitles_toggle()
         self._preset_var.set(preset.name)
+        self._notify_change()
 
     def _on_manual_option_change(self) -> None:
         self._preset_var.set("Custom")
+        self._notify_change()
+
+    def _notify_change(self) -> None:
+        if self._on_change is not None:
+            self._on_change()
 
     def get_options(self) -> DownloadOptions | None:
         """Options currently selected, or ``None`` when validation fails."""

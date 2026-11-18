@@ -359,3 +359,21 @@ class TestDetailPanelMeta:
         detail_panel.update_detail_panel(Video(title="T", url="u", duration=60))
         detail_panel.set_estimate(None)
         assert detail_panel._detail_meta.cget("text") == "1:00"
+
+
+class TestEstimateInvalidation:
+    def test_changing_the_options_clears_the_estimate(self, detail_panel):
+        from youmudow.domain.models import Video
+
+        detail_panel.update_detail_panel(Video(title="T", url="u", duration=60))
+        detail_panel.set_estimate(5 * 1024**2)
+        detail_panel.options._on_manual_option_change()
+        assert detail_panel._detail_meta.cget("text") == "1:00"
+
+    def test_applying_a_preset_clears_the_estimate(self, detail_panel):
+        from youmudow.domain.models import Video
+
+        detail_panel.update_detail_panel(Video(title="T", url="u", duration=60))
+        detail_panel.set_estimate(5 * 1024**2)
+        detail_panel.options.apply_preset("Music 320")
+        assert detail_panel._detail_meta.cget("text") == "1:00"

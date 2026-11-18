@@ -60,3 +60,45 @@ def test_estimate_is_none_without_duration_or_formats():
 )
 def test_format_size(value, expected):
     assert format_size(value) == expected
+
+
+def test_storyboards_are_not_video_candidates():
+    # Real payloads carry sprite sheets: height 45..90, vcodec "none".
+    payload = {
+        "formats": [
+            {"format_id": "313", "ext": "webm", "height": 2160, "vcodec": "vp9", "filesize": 900},
+            {"format_id": "sb0", "ext": "mhtml", "height": 90, "vcodec": "none", "filesize": 10},
+            {"format_id": "sb1", "ext": "mhtml", "height": 45, "vcodec": "none", "filesize": 5},
+        ]
+    }
+    options = DownloadOptions(file_format="mp4", quality="360p")
+    assert estimate_size(parse_formats(payload), options, 60) is None
+
+
+def test_video_estimate_adds_the_downloaded_audio_stream():
+    options = DownloadOptions(file_format="mp4", quality="720p")
+    formats = [
+        FormatInfo("136", "mp4", 720, 0.0, 0.0, 45_000_000, vcodec="avc1"),
+        FormatInfo("140", "m4a", 0, 128.0, 0.0, 12_000_000, vcodec="none", acodec="mp4a"),
+    ]
+    assert estimate_size(formats, options, 600) == 57_000_000
+
+
+def test_video_estimate_best_uses_the_tallest_available_stream():
+    options = DownloadOptions(file_format="mp4", quality="best")
+    formats = [
+        FormatInfo("313", "webm", 2160, 0.0, 0.0, 900_000_000, vcodec="vp9"),
+        FormatInfo("136", "mp4", 720, 0.0, 0.0, 20_000_000, vcodec="avc1"),
+    ]
+    assert estimate_size(formats, options, 60) == 900_000_000
+
+
+def test_lossless_containers_have_no_bitrate_estimate():
+    options = DownloadOptions(file_format="flac", quality="best")
+    formats = [FormatInfo("251", "webm", 0, 160.0, 0.0, 0, acodec="opus")]
+    assert estimate_size(formats, options, 240) is None
+
+
+def test_none_duration_is_omitted():
+    options = DownloadOptions(file_format="mp3", quality="320kbps")
+    assert estimate_size([], options, None) is None

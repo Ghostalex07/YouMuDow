@@ -147,7 +147,9 @@ def _download_playlist(
     output_dir: Path,
     on_progress: Callable[[float, str], None],
 ) -> int:
-    videos = SearchService().get_playlist(args.url, args.limit)
+    search = SearchService()
+    search.set_log_callback(print)
+    videos = search.get_playlist(args.url, min(args.limit, 500))
     if not videos:
         print(f"No videos found in {args.url}", file=sys.stderr)
         return 1

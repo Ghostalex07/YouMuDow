@@ -44,7 +44,7 @@ class DetailPanel(tk.Frame):
 
         # Builds and packs the "OPTIONS" header first so the layout order of
         # this frame stays identical.
-        self.options = OptionsPanel(self, main_window)
+        self.options = OptionsPanel(self, main_window, on_change=self._on_options_changed)
 
         self._build_thumbnail()
         self._build_info_rows()
@@ -245,6 +245,13 @@ class DetailPanel(tk.Frame):
         self._render_meta()
         self._load_thumbnail(video)
         self.options.update_for_video(video)
+
+    def _on_options_changed(self) -> None:
+        # The old number was computed for the old options; showing it next to a
+        # changed selector would be a lie, so drop it until the next lookup.
+        if self._estimate_bytes is not None:
+            self._estimate_bytes = None
+            self._render_meta()
 
     def set_estimate(self, size_bytes: int | None) -> None:
         """Show (or hide) the estimated download size for the current video."""
