@@ -69,6 +69,7 @@ class MainWindow(MainWindowProtocol):
         controller: "AppController",
         debug_mode: bool = True,
         config: Any = None,
+        run_startup_checks: bool = True,
     ) -> None:
         self._config = config
         self._controller_impl: AppControllerProtocol = controller
@@ -111,8 +112,9 @@ class MainWindow(MainWindowProtocol):
         self._setup_event_listeners()
         self._setup_controller_callbacks()
         self._setup_state_observer()
-        self._tk_root.after(500, self._check_clipboard_on_start)
-        self._tk_root.after(3000, self._check_ytdlp_on_start)
+        if run_startup_checks:
+            self._tk_root.after(500, self._check_clipboard_on_start)
+            self._tk_root.after(3000, self._check_ytdlp_on_start)
         try:
             from youmudow.ui.icon import get_icon_image
 
