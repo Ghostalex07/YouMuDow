@@ -1613,3 +1613,20 @@ def test_build_download_args_passes_the_retry_override():
     args = build_download_args(config, video, retries=0)
     assert args[args.index("--retries") + 1] == "0"
     assert "--retries" not in build_download_args(config, video)
+
+
+def test_playlist_start_offset_is_forwarded(adapter):
+    mock_result = Mock()
+    mock_result.returncode = 0
+    mock_result.stdout = "https://a.com | S | A | 90"
+    mock_result.stderr = ""
+    cmd_args = {}
+
+    def fake_run(args, *a, **kw):
+        cmd_args["args"] = args
+        return mock_result
+
+    with patch("subprocess.run", side_effect=fake_run):
+        adapter.get_playlist_videos("https://youtube.com/playlist?list=abc", limit=3, start=4)
+
+    assert cmd_args["args"][cmd_args["args"].index("--playlist-start") + 1] == "4"

@@ -238,7 +238,7 @@ class AppController:
             self._search_epoch += 1
         self._state_manager.set_state(AppState.IDLE)
 
-    def search_playlist(self, url: str, limit: int | None = None) -> list[Video]:
+    def search_playlist(self, url: str, limit: int | None = None, start: int = 1) -> list[Video]:
         if not url:
             return []
 
@@ -250,7 +250,7 @@ class AppController:
         self._state_manager.set_state(AppState.SEARCHING)
 
         try:
-            videos = self._search_service.get_playlist(url, limit)
+            videos = self._search_service.get_playlist(url, limit, start)
             for video in videos:
                 self._apply_thumbnail(video)
             self._state_manager.set_search_results(videos)

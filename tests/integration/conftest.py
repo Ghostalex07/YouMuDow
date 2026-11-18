@@ -27,6 +27,8 @@ class FakeSearchAdapter:
         self.formats = []
         self.format_calls = 0
         self.queries = []
+        self.playlist = []
+        self.playlist_calls = []
         self.log_callback = None
 
     def set_log_callback(self, callback):
@@ -43,8 +45,9 @@ class FakeSearchAdapter:
         self.format_calls += 1
         return self.formats
 
-    def get_playlist_videos(self, url, limit=50):
-        return self.playlist[:limit]
+    def get_playlist_videos(self, url, limit=50, start=1):
+        self.playlist_calls.append((url, limit, start))
+        return list(self.playlist)[start - 1 : start - 1 + limit]
 
 
 class FakeDownloadAdapter:

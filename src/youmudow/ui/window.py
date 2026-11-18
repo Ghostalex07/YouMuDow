@@ -92,6 +92,10 @@ class MainWindow(MainWindowProtocol):
         self._tray: TrayIcon | None = None
         self._selected_video_impl: Video | None = None
         self._is_searching = False
+        self._playlist_url = ""
+        self._playlist_loaded: list[Video] = []
+        self._playlist_has_more_impl = False
+        self._playlist_page_size = 50
         self._is_downloading = False
         self._debug_mode = debug_mode
         self._debug_panel_visible = False
@@ -540,6 +544,9 @@ class MainWindow(MainWindowProtocol):
         results_cards.is_playlist = False
         results_cards.playlist_videos = []
         results_cards.clear_results()
+        self._playlist_url = ""
+        self._playlist_loaded = []
+        self._playlist_has_more_impl = False
 
         if self._config:
             self._config.add_search(query)
@@ -572,17 +579,48 @@ class MainWindow(MainWindowProtocol):
         self._update_button_states()
 
     def _handle_playlist_input(self, url: str) -> None:
-        self._set_status("Fetching playlist...")
+        self._playlist_url = url
+        self._playlist_loaded = []
+        self._playlist_has_more_impl = False
+        self._playlist_page_size = self._config.playlist_limit if self._config else 50
+        self._request_playlist_page(start=1)
+
+    @property
+    def _playlist_has_more(self) -> bool:
+        return self._playlist_has_more_impl
+
+    def _load_more_playlist(self) -> None:
+        """Fetch the next page of the playlist currently on screen."""
+        if not self._playlist_has_more or self._is_searching:
+            return
+        self._request_playlist_page(start=len(self._playlist_loaded) + 1)
+
+    def _request_playlist_page(self, start: int) -> None:
+        url = self._playlist_url
+        page_size = self._playlist_page_size
+        self._is_searching = True
+        self._set_status("Loading more..." if start > 1 else "Fetching playlist...")
+        self._update_button_states()
 
         def do_fetch() -> None:
             try:
-                videos = self._controller.search_playlist(url)
-                self._schedule(self._on_playlist_complete, videos)
+                videos = self._controller.search_playlist(url, limit=page_size, start=start)
+                self._schedule(self._on_playlist_page, start, videos)
             except (tk.TclError, RuntimeError):
                 logger.debug("Window closed while fetching playlist for %s", url)
 
         thread = threading.Thread(target=do_fetch, daemon=True)
         thread.start()
+
+    def _on_playlist_page(self, start: int, videos: list[Video]) -> None:
+        if start <= 1:
+            self._playlist_loaded = list(videos)
+        else:
+            known = {video.url for video in self._playlist_loaded}
+            self._playlist_loaded.extend(v for v in videos if v.url not in known)
+        # A full page means there may be more; yt-dlp gives no total upfront.
+        self._playlist_has_more_impl = len(videos) == self._playlist_page_size
+        self._on_playlist_complete(self._playlist_loaded)
 
     def _schedule(self, callback: Callable[..., Any], *args: Any) -> None:
         """Schedule a callback on the Tk main loop.

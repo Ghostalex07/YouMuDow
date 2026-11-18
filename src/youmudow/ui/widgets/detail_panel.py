@@ -181,6 +181,34 @@ class DetailPanel(tk.Frame):
         self._open_folder_btn.pack(side="left", fill="x", expand=True, padx=(0, SPACING["xs"]))
         add_hover_effect(self._open_folder_btn, "hover", "surface")
 
+        self._load_more_btn = tk.Button(
+            btn_row,
+            text="Load more",
+            bg=_c("surface"),
+            fg=_c("text"),
+            activebackground=_c("hover"),
+            activeforeground=_c("text"),
+            relief="flat",
+            padx=SPACING["sm"],
+            pady=SPACING["sm"],
+            font=FONT["body"],
+            cursor="hand2",
+            command=self._load_more,
+            state="disabled",
+        )
+        setattr_any(
+            self._load_more_btn,
+            "_theme",
+            {
+                "bg": "surface",
+                "fg": "text",
+                "activebg": "hover",
+                "activefg": "text",
+            },
+        )
+        self._load_more_btn.pack(side="left", padx=(0, SPACING["xs"]))
+        add_hover_effect(self._load_more_btn, "hover", "surface")
+
         self._add_all_btn = tk.Button(
             btn_row,
             text="Add All",
@@ -309,6 +337,10 @@ class DetailPanel(tk.Frame):
         is_playlist = cards.is_playlist if cards is not None else False
         has_playlist = bool(cards.playlist_videos) if cards is not None else False
         self._add_all_btn.configure(state="normal" if is_playlist and has_playlist else "disabled")
+        more_available = self._mw._playlist_has_more
+        self._load_more_btn.configure(
+            state="normal" if is_playlist and more_available and not is_busy else "disabled"
+        )
         self.options.update_button_states(is_searching, is_downloading)
 
     # ------------------------------------------------------------------
@@ -332,6 +364,9 @@ class DetailPanel(tk.Frame):
             return
         self._tk_image = photo
         self._thumbnail_label.configure(image=photo, text="")
+
+    def _load_more(self) -> None:
+        self._mw._load_more_playlist()
 
     def _add_all_to_queue(self) -> None:
         opts = self.get_current_options()

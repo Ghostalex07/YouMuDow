@@ -250,6 +250,7 @@ def build_flat_playlist_args(
     target: str,
     playlist_end: int | None = None,
     log: Callable[[str], None] | None = None,
+    playlist_start: int | None = None,
 ) -> list[str]:
     """Build a ``--flat-playlist --print`` listing command.
 
@@ -259,6 +260,8 @@ def build_flat_playlist_args(
     """
     args = build_base_args(config, None, False, log)
     args.append("--flat-playlist")
+    if playlist_start is not None and playlist_start > 1:
+        args.extend(["--playlist-start", str(playlist_start)])
     if playlist_end is not None:
         args.extend(["--playlist-end", str(playlist_end)])
     args.extend(["--print", FLAT_PRINT_TEMPLATE, target])

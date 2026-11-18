@@ -73,7 +73,9 @@ class TestSearchService:
         expected = [Video(title="Track 1", url="u1")]
         mock_adapter.get_playlist_videos.return_value = expected
         assert search_service.get_playlist("https://example.com/playlist", limit=3) == expected
-        mock_adapter.get_playlist_videos.assert_called_once_with("https://example.com/playlist", 3)
+        mock_adapter.get_playlist_videos.assert_called_once_with(
+            "https://example.com/playlist", 3, 1
+        )
 
     def test_set_log_callback_forwarded_to_adapter(self, search_service, mock_adapter):
         callback = lambda: None
@@ -117,3 +119,11 @@ def test_get_formats_delegates_to_the_adapter(search_service, mock_adapter):
     mock_adapter.get_formats.return_value = ["sentinel"]
     assert search_service.get_formats("https://x.test/v") == ["sentinel"]
     mock_adapter.get_formats.assert_called_once_with("https://x.test/v", None)
+
+
+def test_get_playlist_forwards_the_start_offset():
+    adapter = Mock()
+    adapter.get_playlist_videos.return_value = []
+    service = SearchService(adapter=adapter)
+    service.get_playlist("https://x.test/list", 3, 4)
+    adapter.get_playlist_videos.assert_called_once_with("https://x.test/list", 3, 4)
