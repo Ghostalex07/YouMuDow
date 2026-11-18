@@ -11,6 +11,7 @@ from typing import Any, Protocol
 
 from youmudow.app.events import emit_log
 from youmudow.app.state import AppState, StateManager
+from youmudow.domain.formats import estimate_size
 from youmudow.domain.models import Video
 from youmudow.domain.validators import is_valid_youtube_url, sanitize_filename
 from youmudow.services.download_service import (
@@ -35,6 +36,12 @@ class SearchCompleteCallback(Protocol):
     """Callback for search completion."""
 
     def __call__(self, results: list[Video]) -> None: ...
+
+
+class FormatsReadyCallback(Protocol):
+    """Callback for a finished format lookup: the video and its estimated size."""
+
+    def __call__(self, video: Video, size_bytes: int | None) -> None: ...
 
 
 class AppController:
@@ -67,6 +74,7 @@ class AppController:
         self._search_epoch_lock = threading.Lock()
         self._download_complete_callback: DownloadCompleteCallback | None = None
         self._search_complete_callback: SearchCompleteCallback | None = None
+        self._formats_ready_callback: FormatsReadyCallback | None = None
         self._debug_mode = False
 
         self._setup_download_callbacks()
@@ -95,6 +103,28 @@ class AppController:
 
     def on_search_complete(self, callback: SearchCompleteCallback) -> None:
         self._search_complete_callback = callback
+
+    def on_formats_ready(self, callback: FormatsReadyCallback) -> None:
+        self._formats_ready_callback = callback
+
+    def load_formats(self, video: Video) -> None:
+        """Look up the video's formats and report an estimated size in the background."""
+        threading.Thread(target=self._load_formats_worker, args=(video,), daemon=True).start()
+
+    def _load_formats_worker(self, video: Video) -> None:
+        size: int | None = None
+        try:
+            formats = self._search_service.get_formats(video.url, video)
+            size = estimate_size(formats, video.options, video.duration)
+        except Exception:
+            logger.exception("Format lookup failed for %s", video.url)
+
+        callback = self._formats_ready_callback
+        if callback is not None:
+            try:
+                callback(video, size)
+            except Exception:
+                logger.exception("Formats callback failed for %s", video.url)
 
     def search(self, query: str) -> None:
         if not query or not query.strip():
@@ -198,9 +228,14 @@ class AppController:
             self._search_epoch += 1
         self._state_manager.set_state(AppState.IDLE)
 
-    def search_playlist(self, url: str, limit: int = 50) -> list[Video]:
+    def search_playlist(self, url: str, limit: int | None = None) -> list[Video]:
         if not url:
             return []
+
+        if limit is None:
+            # The property clamps to 1..500 and coerces bad JSON values, which
+            # a raw config.get() would hand straight to yt-dlp.
+            limit = self._config.playlist_limit if self._config else 50
 
         self._state_manager.set_state(AppState.SEARCHING)
 

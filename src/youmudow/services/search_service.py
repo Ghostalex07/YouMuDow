@@ -6,6 +6,7 @@ Handles video search operations using yt-dlp adapter.
 from typing import Protocol
 
 from youmudow.adapters.ytdlp_adapter import YtdlpAdapter
+from youmudow.domain.formats import FormatInfo
 from youmudow.domain.models import Video
 
 
@@ -17,6 +18,8 @@ class YtdlpAdapterProtocol(Protocol):
     def get_metadata(self, url: str) -> Video | None: ...
 
     def get_playlist_videos(self, url: str, limit: int = 50) -> list[Video]: ...
+
+    def get_formats(self, url: str, video: Video | None = None) -> list[FormatInfo]: ...
 
 
 class SearchService:
@@ -36,6 +39,9 @@ class SearchService:
 
     def get_metadata(self, url: str) -> Video | None:
         return self._adapter.get_metadata(url)
+
+    def get_formats(self, url: str, video: Video | None = None) -> list[FormatInfo]:
+        return self._adapter.get_formats(url, video)
 
     def get_playlist(self, url: str, limit: int = 50) -> list[Video]:
         return self._adapter.get_playlist_videos(url, limit)

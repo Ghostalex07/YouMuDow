@@ -14,6 +14,13 @@ YOUTUBE_REGEX = re.compile("|".join(YOUTUBE_PATTERNS), re.IGNORECASE)
 PLAYLIST_PATTERN = r"(?:https?://)?(?:www\.|music\.)?youtube\.com/playlist\?list=[\w-]+"
 PLAYLIST_REGEX = re.compile(PLAYLIST_PATTERN, re.IGNORECASE)
 
+CHANNEL_PATTERN = (
+    r"(?:https?://)?(?:www\.|m\.)?youtube\.com/"
+    r"(?:@[\w.-]+|channel/[\w-]+|c/[\w-]+|user/[\w-]+)"
+    r"(?:/(?:videos|shorts|streams))?/?(?:\?[^#]*)?"
+)
+CHANNEL_REGEX = re.compile(CHANNEL_PATTERN + r"\Z", re.IGNORECASE)
+
 INVALID_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
 MAX_FILENAME_LENGTH = 200
@@ -74,13 +81,7 @@ def is_playlist_url(url: str) -> bool:
     if re.search(r"/playlist(?:/|\?|$)", url, re.IGNORECASE):
         return True
     # YouTube channel / user
-    return bool(
-        re.search(
-            r"(?:https?://)?(?:www\.)?youtube\.com/(?:@[\w-]+|channel/[\w-]+|c/[\w-]+|user/[\w-]+)/videos",
-            url,
-            re.IGNORECASE,
-        )
-    )
+    return bool(CHANNEL_REGEX.match(url))
 
 
 def sanitize_filename(name: str, replacement: str = "_") -> str:

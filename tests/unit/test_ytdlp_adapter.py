@@ -1530,3 +1530,78 @@ class TestProcessGroupSignalling:
         assert getpgid.called
         assert fake._terminated
         assert code == 5
+
+
+class TestFormatsLookup:
+    def test_build_formats_args_dumps_a_single_json(self, monkeypatch):
+        from youmudow.adapters import ytdlp_args
+
+        monkeypatch.setattr(ytdlp_args, "_has_explicit_profile", lambda profile: False)
+        args = ytdlp_args.build_formats_args(
+            YtdlpConfig(output_template="{title}"), "https://x.test/v"
+        )
+        assert args[-4:] == [
+            "--dump-single-json",
+            "--no-playlist",
+            "--skip-download",
+            "https://x.test/v",
+        ]
+
+    def test_get_formats_parses_the_payload(self, monkeypatch):
+        adapter = YtdlpAdapter(YtdlpConfig())
+        monkeypatch.setattr(
+            "youmudow.adapters.ytdlp_adapter.run_capture",
+            lambda args, timeout: subprocess.CompletedProcess(
+                args, 0, '{"formats":[{"format_id":"251","abr":160}]}', ""
+            ),
+        )
+        assert [f.format_id for f in adapter.get_formats("https://x.test/v")] == ["251"]
+
+    def test_get_formats_returns_empty_on_bad_json(self, monkeypatch):
+        adapter = YtdlpAdapter(YtdlpConfig())
+        monkeypatch.setattr(
+            "youmudow.adapters.ytdlp_adapter.run_capture",
+            lambda args, timeout: subprocess.CompletedProcess(args, 0, "not json", ""),
+        )
+        assert adapter.get_formats("https://x.test/v") == []
+
+    def test_get_formats_returns_empty_on_failure(self, monkeypatch):
+        adapter = YtdlpAdapter(YtdlpConfig())
+        monkeypatch.setattr(
+            "youmudow.adapters.ytdlp_adapter.run_capture",
+            lambda args, timeout: subprocess.CompletedProcess(args, 1, "", "boom"),
+        )
+        assert adapter.get_formats("https://x.test/v") == []
+
+
+def test_build_formats_args_carries_the_video_cookie_flags(monkeypatch):
+    from youmudow.adapters import ytdlp_args
+    from youmudow.domain.models import DownloadOptions, Video
+
+    monkeypatch.setattr(ytdlp_args, "_has_explicit_profile", lambda profile: False)
+    video = Video(
+        title="T",
+        url="https://x.test/v",
+        options=DownloadOptions(use_cookies=True, cookies_from_browser="firefox"),
+    )
+    args = ytdlp_args.build_formats_args(YtdlpConfig(), "https://x.test/v", video)
+    assert args[args.index("--cookies-from-browser") + 1] == "firefox"
+
+
+def test_get_formats_passes_the_video_through(monkeypatch):
+    from youmudow.domain.models import DownloadOptions, Video
+
+    seen = {}
+
+    def fake_args(config, url, video=None, log=None):
+        seen["video"] = video
+        return ["yt-dlp", url]
+
+    monkeypatch.setattr("youmudow.adapters.ytdlp_adapter.build_formats_args", fake_args)
+    monkeypatch.setattr(
+        "youmudow.adapters.ytdlp_adapter.run_capture",
+        lambda args, timeout: subprocess.CompletedProcess(args, 0, '{"formats":[]}', ""),
+    )
+    video = Video(title="T", url="https://x.test/v", options=DownloadOptions(use_cookies=True))
+    YtdlpAdapter(YtdlpConfig()).get_formats("https://x.test/v", video)
+    assert seen["video"] is video

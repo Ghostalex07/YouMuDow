@@ -1,5 +1,7 @@
 """Tests for domain validators."""
 
+import pytest
+
 from youmudow.domain.validators import (
     AUDIO_FORMATS,
     SUPPORTED_FORMATS,
@@ -204,3 +206,36 @@ class TestPlaylistURL:
     def test_youtube_channel_videos(self):
         assert is_playlist_url("https://www.youtube.com/@channelname/videos")
         assert is_playlist_url("https://www.youtube.com/channel/UC123/videos")
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://www.youtube.com/@lofigirl",
+        "https://www.youtube.com/@lofigirl/videos",
+        "https://www.youtube.com/@lofigirl/videos/",
+        "https://www.youtube.com/@lofigirl?sub_confirmation=1",
+        "https://youtube.com/channel/UCabc123",
+        "https://www.youtube.com/c/SomeName",
+        "https://www.youtube.com/user/oldname/videos",
+    ],
+)
+def test_channel_urls_are_playlists(url):
+    assert is_playlist_url(url) is True
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://www.youtube.com/",
+        "https://www.youtube.com/feed/subscriptions",
+        "https://www.youtube.com/watch?v=abc",
+        "https://example.com/@notyoutube",
+        "https://www.youtube.com/@lofigirl/live",
+        "https://www.youtube.com/@lofigirl/about",
+        "https://www.youtube.com/@lofigirl/playlists",
+        "https://www.youtube.com/channel/UCabc123/featured",
+    ],
+)
+def test_non_channel_urls_are_not_playlists(url):
+    assert is_playlist_url(url) is False

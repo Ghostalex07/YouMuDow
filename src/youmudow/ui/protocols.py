@@ -17,7 +17,11 @@ from tkinter import ttk
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from youmudow.app.controller import DownloadCompleteCallback, SearchCompleteCallback
+    from youmudow.app.controller import (
+        DownloadCompleteCallback,
+        FormatsReadyCallback,
+        SearchCompleteCallback,
+    )
     from youmudow.app.state import StateManager
     from youmudow.domain.models import DownloadOptions, Video
     from youmudow.services.history_service import HistoryService
@@ -181,7 +185,9 @@ class AppControllerProtocol(Protocol):
 
     def cancel_search(self) -> None: ...
 
-    def search_playlist(self, url: str, limit: int = 50) -> list[Video]: ...
+    def search_playlist(self, url: str, limit: int | None = None) -> list[Video]: ...
+
+    def load_formats(self, video: Video) -> None: ...
 
     def get_output_path(self) -> Path: ...
 
@@ -194,6 +200,8 @@ class AppControllerProtocol(Protocol):
     def on_search_complete(self, callback: SearchCompleteCallback) -> None: ...
 
     def on_download_complete(self, callback: DownloadCompleteCallback) -> None: ...
+
+    def on_formats_ready(self, callback: FormatsReadyCallback) -> None: ...
 
 
 @runtime_checkable

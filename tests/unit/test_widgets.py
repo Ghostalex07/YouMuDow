@@ -327,3 +327,53 @@ class TestDetailPanelActions:
         detail_panel._load_thumbnail(self._video())
 
         assert detail_panel._last_thumb_url == ""
+
+
+class TestDetailPanelMeta:
+    def test_shows_duration_and_size(self, detail_panel):
+        from youmudow.domain.models import Video
+
+        detail_panel.update_detail_panel(Video(title="T", url="u", duration=125))
+        assert detail_panel._detail_meta.cget("text") == "2:05"
+
+        detail_panel.set_estimate(5 * 1024**2)
+        assert detail_panel._detail_meta.cget("text") == "2:05 · ~5.0 MB"
+
+    def test_unknown_duration_renders_a_dash(self, detail_panel):
+        from youmudow.domain.models import Video
+
+        detail_panel.update_detail_panel(Video(title="T", url="u"))
+        assert detail_panel._detail_meta.cget("text") == "-"
+
+    def test_a_new_selection_drops_the_previous_estimate(self, detail_panel):
+        from youmudow.domain.models import Video
+
+        detail_panel.update_detail_panel(Video(title="A", url="a", duration=60))
+        detail_panel.set_estimate(1024)
+        detail_panel.update_detail_panel(Video(title="B", url="b", duration=60))
+        assert detail_panel._detail_meta.cget("text") == "1:00"
+
+    def test_no_estimate_omits_the_size(self, detail_panel):
+        from youmudow.domain.models import Video
+
+        detail_panel.update_detail_panel(Video(title="T", url="u", duration=60))
+        detail_panel.set_estimate(None)
+        assert detail_panel._detail_meta.cget("text") == "1:00"
+
+
+class TestEstimateInvalidation:
+    def test_changing_the_options_clears_the_estimate(self, detail_panel):
+        from youmudow.domain.models import Video
+
+        detail_panel.update_detail_panel(Video(title="T", url="u", duration=60))
+        detail_panel.set_estimate(5 * 1024**2)
+        detail_panel.options._on_manual_option_change()
+        assert detail_panel._detail_meta.cget("text") == "1:00"
+
+    def test_applying_a_preset_clears_the_estimate(self, detail_panel):
+        from youmudow.domain.models import Video
+
+        detail_panel.update_detail_panel(Video(title="T", url="u", duration=60))
+        detail_panel.set_estimate(5 * 1024**2)
+        detail_panel.options.apply_preset("Music 320")
+        assert detail_panel._detail_meta.cget("text") == "1:00"

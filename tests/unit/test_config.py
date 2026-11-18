@@ -225,3 +225,17 @@ class TestAppConfig:
             cfg = AppConfig()
             cfg.set("search_history", [123, 456])
             assert cfg.get_search_history() == ["123", "456"]
+
+
+def test_playlist_limit_defaults_to_50():
+    assert AppConfig().playlist_limit == 50
+
+
+def test_playlist_limit_is_clamped():
+    config = AppConfig()
+    config.playlist_limit = 0
+    assert config.playlist_limit == 1
+    config.playlist_limit = 10_000
+    assert config.playlist_limit == 500
+    config.playlist_limit = 200
+    assert config.playlist_limit == 200

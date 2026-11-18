@@ -1,6 +1,7 @@
 """Tests for AppController."""
 
 import copy
+import time
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -517,3 +518,73 @@ class TestApplyThumbnail:
         v = Video(title="t", url="https://soundcloud.com/x/y")
         controller._apply_thumbnail(v)
         assert v.thumbnail == ""
+
+
+def test_search_playlist_uses_the_configured_limit():
+    config = Mock()
+    config.playlist_limit = 120
+    search = Mock()
+    search.get_playlist.return_value = []
+    controller = AppController(search_service=search, download_service=Mock(), config=config)
+
+    controller.search_playlist("https://youtube.com/@x")
+
+    search.get_playlist.assert_called_once_with("https://youtube.com/@x", 120)
+
+
+def _wait_until(predicate, timeout=3.0):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return
+        time.sleep(0.01)
+    raise AssertionError("timed out waiting for the background lookup")
+
+
+def test_controller_reports_the_estimate_for_the_requested_options():
+    from youmudow.domain.formats import FormatInfo
+    from youmudow.domain.models import DownloadOptions
+
+    service = Mock()
+    service.get_formats.return_value = [FormatInfo("251", "m4a", 0, 256.0, 0.0, 0)]
+    controller = AppController(search_service=service, download_service=Mock())
+
+    got = []
+    controller.on_formats_ready(lambda video, size: got.append((video, size)))
+    video = Video(
+        title="T",
+        url="u",
+        duration=60,
+        options=DownloadOptions(file_format="mp3", quality="best"),
+    )
+    controller.load_formats(video)
+
+    _wait_until(lambda: got)
+    assert got[0][0] is video
+    assert got[0][1] == 60 * 256_000 // 8
+
+
+def test_controller_reports_no_estimate_when_the_lookup_raises():
+    service = Mock()
+    service.get_formats.side_effect = RuntimeError("network down")
+    controller = AppController(search_service=service, download_service=Mock())
+
+    got = []
+    controller.on_formats_ready(lambda video, size: got.append(size))
+    controller.load_formats(Video(title="T", url="u", duration=60))
+
+    _wait_until(lambda: got)
+    assert got == [None]
+
+
+def test_search_playlist_reads_the_clamping_property():
+    config = Mock()
+    config.get.return_value = 5000
+    config.playlist_limit = 500
+    search = Mock()
+    search.get_playlist.return_value = []
+    controller = AppController(search_service=search, download_service=Mock(), config=config)
+
+    controller.search_playlist("https://youtube.com/@x")
+
+    search.get_playlist.assert_called_once_with("https://youtube.com/@x", 500)

@@ -212,6 +212,7 @@ class MainWindow(MainWindowProtocol):
 
         self._search_bar_impl = SearchBar(main_frame, self)
         self._thumbnail_cache = ThumbnailCache(cache_dir())
+        self._formats_after_id: str | None = None
         self._thumbnail_loader = ThumbnailLoader(
             self._tk_root, self._thumbnail_cache, ThumbnailService()
         )
@@ -334,8 +335,12 @@ class MainWindow(MainWindowProtocol):
         def on_download_complete(video: Video) -> None:
             self._schedule(self._on_download_complete, video)
 
+        def on_formats_ready(video: Video, size_bytes: int | None) -> None:
+            self._schedule(self._on_formats_ready, video, size_bytes)
+
         self._controller.on_search_complete(on_search_complete)
         self._controller.on_download_complete(on_download_complete)
+        self._controller.on_formats_ready(on_formats_ready)
 
     def _on_search_complete(self, results: list[Video]) -> None:
         try:
@@ -351,6 +356,7 @@ class MainWindow(MainWindowProtocol):
                     detail_panel.update_detail_panel(results[0])
                 results_cards.select(0, notify=False)
                 results_cards.focus_set()
+                self._load_formats_for(results[0])
                 self._set_status(f"Found: {results[0].title}")
             else:
                 self._set_status("No results found")
@@ -358,6 +364,27 @@ class MainWindow(MainWindowProtocol):
         except Exception as e:
             logger.exception("Search handler failed")
             self._set_status(f"Error: {e}")
+
+    def _schedule_formats(self, video: Video) -> None:
+        """Coalesce rapid selections into one lookup, so arrowing down a list
+        does not spawn a yt-dlp probe per keystroke."""
+        if self._formats_after_id is not None:
+            try:
+                self._tk_root.after_cancel(self._formats_after_id)
+            except tk.TclError:
+                pass
+        self._formats_after_id = self._tk_root.after(200, lambda: self._load_formats_for(video))
+
+    def _load_formats_for(self, video: Video) -> None:
+        self._formats_after_id = None
+        self._controller.load_formats(video)
+
+    def _on_formats_ready(self, video: Video, size_bytes: int | None) -> None:
+        if video is not self._selected_video:
+            return
+        detail_panel = self._detail_panel_widget
+        if detail_panel is not None:
+            detail_panel.set_estimate(size_bytes)
 
     def _on_download_complete(self, video: Video) -> None:
         if video.status is DownloadStatus.ERROR:
@@ -464,6 +491,7 @@ class MainWindow(MainWindowProtocol):
             detail_panel = self._detail_panel_widget
             if detail_panel is not None:
                 detail_panel.update_detail_panel(selected[0])
+            self._schedule_formats(selected[0])
             self._set_status(f"{len(selected)} selected")
         else:
             self._selected_video_impl = None
@@ -564,6 +592,12 @@ class MainWindow(MainWindowProtocol):
             if results_cards is not None:
                 results_cards.update_results(videos)
                 results_cards.playlist_videos = videos
+                results_cards.select(0, notify=False)
+            self._selected_video_impl = videos[0]
+            detail_panel = self._detail_panel_widget
+            if detail_panel is not None:
+                detail_panel.update_detail_panel(videos[0])
+            self._load_formats_for(videos[0])
             self._set_status(f"Playlist: {len(videos)} videos")
         else:
             self._set_status("Failed to fetch playlist")
