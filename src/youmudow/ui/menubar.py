@@ -27,9 +27,11 @@ class MenuCallbacks:
     clear_queue: Callable[[], None]
     toggle_debug: Callable[[], None]
     toggle_theme: Callable[[], None]
+    toggle_tray: Callable[[], None]
     update_ytdlp: Callable[[], None]
     repair_youtube: Callable[[], None]
     show_ytdlp_version: Callable[[], None]
+    export_diagnostics: Callable[[], None]
     about: Callable[[], None]
 
 
@@ -37,8 +39,15 @@ def _submenu(menubar: tk.Menu) -> tk.Menu:
     return tk.Menu(menubar, tearoff=0, bg=_c("surface"), fg=_c("text"), bd=1)
 
 
-def build_menubar(menubar: tk.Menu, callbacks: MenuCallbacks, debug_var: tk.BooleanVar) -> None:
+def build_menubar(
+    menubar: tk.Menu,
+    callbacks: MenuCallbacks,
+    debug_var: tk.BooleanVar,
+    tray_var: tk.BooleanVar | None = None,
+) -> None:
     """Fill ``menubar`` with the File/Queue/View/Help menus."""
+    if tray_var is None:
+        tray_var = tk.BooleanVar(value=False)
     file_menu = _submenu(menubar)
     menubar.add_cascade(label="File", menu=file_menu)
     file_menu.add_command(label="Set Output Folder", command=callbacks.set_output)
@@ -61,6 +70,9 @@ def build_menubar(menubar: tk.Menu, callbacks: MenuCallbacks, debug_var: tk.Bool
     view_menu.add_checkbutton(
         label="Debug Mode", variable=debug_var, command=callbacks.toggle_debug
     )
+    view_menu.add_checkbutton(
+        label="Keep Running in Tray", variable=tray_var, command=callbacks.toggle_tray
+    )
     view_menu.add_separator()
     view_menu.add_command(label="Toggle Light/Dark Theme    Ctrl+T", command=callbacks.toggle_theme)
 
@@ -68,14 +80,20 @@ def build_menubar(menubar: tk.Menu, callbacks: MenuCallbacks, debug_var: tk.Bool
     menubar.add_cascade(label="Help", menu=help_menu)
     help_menu.add_command(label="Update yt-dlp", command=callbacks.update_ytdlp)
     help_menu.add_command(label="Repair YouTube Downloads", command=callbacks.repair_youtube)
+    help_menu.add_command(label="Export Diagnostics...", command=callbacks.export_diagnostics)
     help_menu.add_command(label="yt-dlp version", command=callbacks.show_ytdlp_version)
     help_menu.add_separator()
     help_menu.add_command(label="About", command=callbacks.about)
 
 
-def create_menubar(root: tk.Tk, callbacks: MenuCallbacks, debug_var: tk.BooleanVar) -> tk.Menu:
+def create_menubar(
+    root: tk.Tk,
+    callbacks: MenuCallbacks,
+    debug_var: tk.BooleanVar,
+    tray_var: tk.BooleanVar | None = None,
+) -> tk.Menu:
     """Create the menu bar, attach it to ``root`` and populate it."""
     menubar = tk.Menu(root, bg=_c("bg"), fg=_c("text"), bd=0, relief="flat")
     root.configure(menu=menubar)
-    build_menubar(menubar, callbacks, debug_var)
+    build_menubar(menubar, callbacks, debug_var, tray_var)
     return menubar

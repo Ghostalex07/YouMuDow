@@ -319,3 +319,20 @@ class TestRestoredQueueMessage:
     def test_startup_is_quiet_without_a_restored_queue(self, main_window):
         window, _ = main_window
         assert "Restored" not in window._status_bar._status_var.get()
+
+
+class TestExportDiagnostics:
+    def test_writes_the_report_and_reports_the_path(self, main_window, monkeypatch, tmp_path):
+        window, _ = main_window
+        target = tmp_path / "diag.txt"
+        monkeypatch.setattr("tkinter.filedialog.asksaveasfilename", lambda **kwargs: str(target))
+        window._on_export_diagnostics()
+        assert target.exists()
+        assert "Diagnostics saved" in window._status_bar._status_var.get()
+
+    def test_cancelling_the_dialog_changes_nothing(self, main_window, monkeypatch):
+        window, _ = main_window
+        monkeypatch.setattr("tkinter.filedialog.asksaveasfilename", lambda **kwargs: "")
+        before = window._status_bar._status_var.get()
+        window._on_export_diagnostics()
+        assert window._status_bar._status_var.get() == before
