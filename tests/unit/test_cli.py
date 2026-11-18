@@ -183,3 +183,54 @@ class TestCmdSearch:
         assert "First Song" in out
         assert "Second Song" in out
         assert "2 result(s)" in out
+
+
+def _done(video: Video) -> Video:
+    video.status = DownloadStatus.DONE
+    return video
+
+
+class TestPlaylistDownload:
+    def test_download_expands_playlists(self, monkeypatch, tmp_path, capsys):
+        videos = [Video(title=f"V{i}", url=f"https://example.com/{i}") for i in range(2)]
+        search = Mock()
+        search.get_playlist.return_value = videos
+        service = Mock()
+        service.download_now.side_effect = lambda video, path, progress_callback=None: _done(video)
+        monkeypatch.setattr("youmudow.cli.SearchService", lambda: search)
+        monkeypatch.setattr("youmudow.cli.DownloadService", lambda: service)
+
+        code = main(
+            [
+                "download",
+                "https://www.youtube.com/@chan",
+                "--limit",
+                "2",
+                "--output",
+                str(tmp_path),
+            ]
+        )
+
+        assert code == 0
+        search.get_playlist.assert_called_once_with("https://www.youtube.com/@chan", 2)
+        assert service.download_now.call_count == 2
+        assert "Found 2 video(s)" in capsys.readouterr().out
+
+    def test_playlist_with_one_failure_returns_one(self, monkeypatch, tmp_path, capsys):
+        videos = [Video(title=f"V{i}", url=f"https://example.com/{i}") for i in range(2)]
+        search = Mock()
+        search.get_playlist.return_value = videos
+
+        def download(video, path, progress_callback=None):
+            video.status = DownloadStatus.ERROR if video.title == "V1" else DownloadStatus.DONE
+            return video
+
+        service = Mock()
+        service.download_now.side_effect = download
+        monkeypatch.setattr("youmudow.cli.SearchService", lambda: search)
+        monkeypatch.setattr("youmudow.cli.DownloadService", lambda: service)
+
+        code = main(["download", "https://www.youtube.com/@chan", "--output", str(tmp_path)])
+
+        assert code == 1
+        assert "[1/2] V0" in capsys.readouterr().out

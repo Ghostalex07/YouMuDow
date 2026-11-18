@@ -17,6 +17,7 @@ from youmudow.domain.validators import (
     AUDIO_FORMATS,
     SUPPORTED_FORMATS,
     SUPPORTED_QUALITIES,
+    is_playlist_url,
     is_supported_url,
 )
 from youmudow.services.download_service import DownloadService
@@ -64,6 +65,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="output directory (default: configured output folder)",
     )
     download.add_argument(
+        "--limit",
+        type=_positive_int,
+        default=50,
+        help="maximum playlist or channel entries (default: 50)",
+    )
+    download.add_argument(
         "--skip-metadata",
         action="store_true",
         help="download without resolving the title via metadata",
@@ -104,16 +111,19 @@ def _cmd_download(args: argparse.Namespace, config: AppConfig) -> int:
     service = DownloadService()
     service.set_log_callback(print)
 
+    def on_progress(percent: float, speed: str) -> None:
+        suffix = f" at {speed}" if speed and speed != "Calculating..." else ""
+        print(f"\r[download] {percent:5.1f}%{suffix}", end="", flush=True)
+
+    if is_playlist_url(args.url):
+        return _download_playlist(args, service, options, output_dir, on_progress)
+
     video: Video | None = None
     if not args.skip_metadata:
         video = SearchService().get_metadata(args.url)
     if video is None:
         video = Video(title=args.url, url=args.url)
     video.options = options
-
-    def on_progress(percent: float, speed: str) -> None:
-        suffix = f" at {speed}" if speed and speed != "Calculating..." else ""
-        print(f"\r[download] {percent:5.1f}%{suffix}", end="", flush=True)
 
     try:
         result = service.download_now(video, output_dir, progress_callback=on_progress)
@@ -128,6 +138,33 @@ def _cmd_download(args: argparse.Namespace, config: AppConfig) -> int:
         return 0
     print(f"Download failed: {result.error_message or 'unknown error'}", file=sys.stderr)
     return 1
+
+
+def _download_playlist(
+    args: argparse.Namespace,
+    service: DownloadService,
+    options: DownloadOptions,
+    output_dir: Path,
+    on_progress: Callable[[float, str], None],
+) -> int:
+    videos = SearchService().get_playlist(args.url, args.limit)
+    if not videos:
+        print(f"No videos found in {args.url}", file=sys.stderr)
+        return 1
+
+    print(f"Found {len(videos)} video(s)")
+    failures = 0
+    for index, video in enumerate(videos, start=1):
+        print(f"[{index}/{len(videos)}] {video.title}")
+        video.options = options
+        try:
+            result = service.download_now(video, output_dir, progress_callback=on_progress)
+        except KeyboardInterrupt:
+            print("\nCancelled", file=sys.stderr)
+            return 130
+        if result.status != DownloadStatus.DONE:
+            failures += 1
+    return 0 if failures == 0 else 1
 
 
 def _cmd_search(args: argparse.Namespace, config: AppConfig) -> int:
