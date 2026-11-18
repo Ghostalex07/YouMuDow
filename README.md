@@ -30,6 +30,8 @@ A modern music & video downloader with real-time progress, persistent configurat
   status-notifier host on Linux)
 - `Help > Export Diagnostics...` writes version, ffmpeg, environment and a
   redacted config into one file for support
+- Built-in user guide: `View > User Guide` (or `F1`) opens a closable tab that
+  documents search, playlists, formats, queue, tray and diagnostics
 - Light/Dark theme, persistent configuration
 - System notifications on completion
 - Clipboard URL detection on startup

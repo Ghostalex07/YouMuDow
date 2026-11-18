@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.0] - 2026-11-18
+
+### Added
+
+- In-app user guide: `View > User Guide` (or `F1`) opens a scrollable, closable
+  Guide tab covering search, playlists and paging, formats and presets, the
+  preview, queue/retries/restore, subtitles and chapters, cookies, the tray,
+  diagnostics and the CLI.
+
 ## [1.7.0] - 2026-11-18
 
 ### Added

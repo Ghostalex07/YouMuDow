@@ -53,6 +53,7 @@ from youmudow.ui.styles.theme_apply import apply_theme_colors
 from youmudow.ui.tray import TrayIcon
 from youmudow.ui.typed import readonly_property
 from youmudow.ui.widgets.detail_panel import DetailPanel
+from youmudow.ui.widgets.guide_panel import GuidePanel
 from youmudow.ui.widgets.history_panel import HistoryPanel
 from youmudow.ui.widgets.log_terminal import LogTerminal
 from youmudow.ui.widgets.results_cards import ResultsCards
@@ -96,6 +97,8 @@ class MainWindow(MainWindowProtocol):
         self._playlist_loaded: list[Video] = []
         self._playlist_has_more_impl = False
         self._playlist_page_size = 50
+        self._guide_panel: GuidePanel | None = None
+        self._guide_tab: tk.Frame | None = None
         self._is_downloading = False
         self._debug_mode = debug_mode
         self._debug_panel_visible = False
@@ -205,6 +208,7 @@ class MainWindow(MainWindowProtocol):
         self._history_panel_impl.pack(fill="both", expand=True)
 
         notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
+        self._tk_root.bind("<F1>", lambda _event: self._open_guide_tab())
 
         self._update_debug_visibility()
 
@@ -274,6 +278,7 @@ class MainWindow(MainWindowProtocol):
             start_queue=self._on_start_queue,
             clear_queue=self._on_clear_queue,
             toggle_debug=self._on_toggle_debug,
+            open_guide=self._open_guide_tab,
             toggle_theme=self._on_toggle_theme,
             toggle_tray=self._on_toggle_tray,
             update_ytdlp=self._on_update_ytdlp,
@@ -515,6 +520,31 @@ class MainWindow(MainWindowProtocol):
 
     def _on_open_in_browser(self, url: str) -> None:
         webbrowser.open(url)
+
+    def _open_guide_tab(self) -> None:
+        notebook = self._notebook
+        if self._guide_tab is not None:
+            notebook.select(self._guide_tab)
+            return
+        tab = tk.Frame(notebook, bg=_c("bg"))
+        panel = GuidePanel(tab, on_close=self._close_guide_tab)
+        panel.pack(fill="both", expand=True)
+        notebook.add(tab, text="  Guide  ")
+        notebook.select(tab)
+        self._guide_tab = tab
+        self._guide_panel = panel
+
+    def _close_guide_tab(self) -> None:
+        tab = self._guide_tab
+        if tab is None:
+            return
+        try:
+            self._notebook.forget(tab)
+        except tk.TclError:
+            pass
+        tab.destroy()
+        self._guide_tab = None
+        self._guide_panel = None
 
     def _on_tab_changed(self, event: tk.Event | None = None) -> None:
         notebook = getattr(self, "_notebook", None)
