@@ -25,8 +25,6 @@ def main() -> None:
     output_path.mkdir(parents=True, exist_ok=True)
     controller.set_output_path(output_path)
     restored = controller.restore_queue()
-    if restored:
-        logger.info("Restored %s download(s) from the previous session", restored)
 
     debug_mode = config.get("debug_mode", False)
     window = MainWindow(controller, debug_mode=debug_mode, config=config, restored_count=restored)

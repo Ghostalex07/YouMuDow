@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 import platform
 import subprocess
 import sys
@@ -27,6 +28,7 @@ SENSITIVE_KEYS: frozenset[str] = frozenset(
     }
 )
 REDACTED = "<redacted>"
+LOG_TAIL_BYTES = 256 * 1024
 LOG_TAIL_LINES = 100
 
 
@@ -52,9 +54,18 @@ def _ffmpeg_version() -> str:
 
 
 def _log_tail(limit: int = LOG_TAIL_LINES) -> str:
-    """Last lines of the current log file, or "" when there is none."""
+    """Last lines of the current log file, or "" when there is none.
+
+    Reads only the tail of the file: a long-running install can carry a
+    multi-megabyte log and the report does not need all of it in memory.
+    """
+    path = CONFIG_DIR / LOG_FILE_NAME
     try:
-        text = (CONFIG_DIR / LOG_FILE_NAME).read_text(encoding="utf-8", errors="replace")
+        with open(path, "rb") as handle:
+            handle.seek(0, os.SEEK_END)
+            size = handle.tell()
+            handle.seek(max(0, size - LOG_TAIL_BYTES))
+            text = handle.read().decode("utf-8", errors="replace")
     except OSError:
         return ""
     tail = "\n".join(text.splitlines()[-limit:])
@@ -95,8 +106,12 @@ def build_report(
     return "\n".join(sections) + "\n"
 
 
-def export_diagnostics(destination: Path) -> Path:
-    """Write the report to ``destination``, creating its parent directory."""
+def export_diagnostics(destination: Path, config: Mapping[str, Any] | None = None) -> Path:
+    """Write the report to ``destination``, creating its parent directory.
+
+    ``config`` is the live configuration when the caller has one; without it
+    the report re-reads the file from disk.
+    """
     destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(build_report(log_tail=_log_tail()), encoding="utf-8")
+    destination.write_text(build_report(log_tail=_log_tail(), config=config), encoding="utf-8")
     return destination

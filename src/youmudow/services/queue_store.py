@@ -21,10 +21,19 @@ logger = logging.getLogger(__name__)
 _PERSISTED_FIELDS = ("title", "url", "uploader", "duration", "thumbnail")
 
 
+# Cookie settings are machine state, not queue state: a queue file that keeps
+# a cookies path leaks it to whoever reads the file, and the path may not exist
+# on the next run anyway. The cookie *choice* survives; the paths do not.
+_VOLATILE_OPTION_FIELDS = frozenset({"cookies_file", "cookies_from_browser", "cookies_profile"})
+
+
 def video_to_dict(video: Video) -> dict[str, Any]:
     """Serialise the fields needed to re-queue a video later."""
     data: dict[str, Any] = {name: getattr(video, name) for name in _PERSISTED_FIELDS}
-    data["options"] = asdict(video.options)
+    options = asdict(video.options)
+    for field in _VOLATILE_OPTION_FIELDS:
+        options.pop(field, None)
+    data["options"] = options
     return data
 
 

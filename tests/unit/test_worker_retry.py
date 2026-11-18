@@ -14,7 +14,7 @@ class FlakyAdapter:
         self.calls = 0
         self._failures = failures
 
-    def download(self, video, output_path, progress_callback=None, cancel_event=None):
+    def download(self, video, output_path, progress_callback=None, cancel_event=None, **kwargs):
         self.calls += 1
         if self.calls <= self._failures:
             raise RuntimeError("transient")

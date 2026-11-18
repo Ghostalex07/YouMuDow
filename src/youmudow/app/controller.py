@@ -62,6 +62,7 @@ class AppController:
         queue_file: Path | None = None,
     ) -> None:
         self._config = config
+        self._queue_file = queue_file
         self._search_service = search_service or SearchService()
         concurrent = self._config.get("concurrent_downloads", 1) if self._config else 1
         retries = 2
@@ -338,11 +339,24 @@ class AppController:
         self._search_thread = None
         output_path = self._download_service.get_output_path()
         self._download_service.stop()
-        self._download_service = DownloadService(max_concurrent=self._max_concurrent())
+        self._download_service = DownloadService(
+            max_concurrent=self._max_concurrent(),
+            max_retries=self._max_retries(),
+            queue_file=self._queue_file,
+        )
         self._download_service.set_output_path(output_path)
         self._setup_download_callbacks()
         self._setup_log_callback()
         self._state_manager.reset()
+
+    def _max_retries(self) -> int:
+        config = self._config
+        if not config:
+            return 0
+        try:
+            return max(0, min(5, int(config.get("max_retries", 2))))
+        except (TypeError, ValueError):
+            return 2
 
     def _max_concurrent(self) -> int:
         config = self._config

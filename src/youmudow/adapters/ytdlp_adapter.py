@@ -93,6 +93,7 @@ class YtdlpAdapter:
     def __init__(self, config: YtdlpConfig | None = None) -> None:
         self._config = config or YtdlpConfig()
         self._log_callback: LogCallback | None = None
+        self._retry_override: int | None = None
         self._destination_local = threading.local()
 
     @property
@@ -119,9 +120,17 @@ class YtdlpAdapter:
         if self._log_callback:
             self._log_callback(message)
 
-    def _build_download_args(self, video: Video, skip_cookies: bool = False) -> list[str]:
+    def set_retry_override(self, retries: int | None) -> None:
+        """Override yt-dlp's own retry count (the worker may own the backoff)."""
+        self._retry_override = retries
+
+    def _build_download_args(
+        self, video: Video, skip_cookies: bool = False, retries: int | None = None
+    ) -> list[str]:
         """Build arguments for download including metadata options."""
-        return build_download_args(self._config, video, skip_cookies, self._log)
+        if retries is None:
+            retries = self._retry_override
+        return build_download_args(self._config, video, skip_cookies, self._log, retries)
 
     def _log_command_error(self, label: str, result: subprocess.CompletedProcess[str]) -> None:
         """Log the first stderr line of a failed one-shot yt-dlp command."""
@@ -335,6 +344,7 @@ class YtdlpAdapter:
         output_path: Path,
         progress_callback: ProgressCallback | None = None,
         cancel_event: threading.Event | None = None,
+        retries: int | None = None,
     ) -> Video:
         """Download ``video`` into ``output_path``, with retries and cancel support."""
         output_path.mkdir(parents=True, exist_ok=True)
@@ -345,7 +355,7 @@ class YtdlpAdapter:
         opts = video.options
         fmt = opts.file_format if opts else "mp3"
         safe_title = sanitize_filename(video.title)
-        args = self._build_download_args(video)
+        args = self._build_download_args(video, retries=retries)
 
         self._log_download_start(video, fmt)
 

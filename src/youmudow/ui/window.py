@@ -17,6 +17,7 @@ from tkinter import ttk
 from typing import TYPE_CHECKING, Any
 
 from youmudow import __version__
+from youmudow.app.config import AppConfig
 from youmudow.app.events import EventBus, EventType, get_event_bus
 from youmudow.app.state import AppMode, AppState, AppStateData
 from youmudow.domain.enums import DownloadStatus
@@ -773,7 +774,7 @@ class MainWindow(MainWindowProtocol):
         def write() -> None:
             # The report shells out to yt-dlp and ffmpeg: never on the Tk thread.
             try:
-                saved = export_diagnostics(destination)
+                saved = export_diagnostics(destination, config=self._current_config())
             except OSError as e:
                 logger.exception("Could not export diagnostics")
                 self._schedule(self._set_status, f"Could not save diagnostics: {e}")
@@ -829,8 +830,19 @@ class MainWindow(MainWindowProtocol):
     def _on_toggle_tray(self) -> None:
         if self._config is None:
             return
-        self._config.set("minimize_to_tray", bool(self._tray_var.get()))
+        enabled = bool(self._tray_var.get())
+        self._config.set("minimize_to_tray", enabled)
         self._config.save()
+        if enabled:
+            # Show the icon now: waiting until the first close leaves the user
+            # with no clue the option did anything.
+            self._should_use_tray()
+
+    def _current_config(self) -> dict[str, Any]:
+        config = self._config
+        if not isinstance(config, AppConfig):
+            return {}
+        return dict(config.snapshot())
 
     def run(self) -> None:
         self._tk_root.protocol("WM_DELETE_WINDOW", self._on_close)

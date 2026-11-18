@@ -30,6 +30,7 @@ class DownloadWorker(threading.Thread):
         progress_callback: Callable[[DownloadEvent], None],
         max_retries: int = 0,
         retry_delay: float = 2.0,
+        log_callback: Callable[[str], None] | None = None,
     ) -> None:
         super().__init__(daemon=True)
         self._worker_id = worker_id
@@ -38,6 +39,7 @@ class DownloadWorker(threading.Thread):
         self._progress_callback = progress_callback
         self._max_retries = max(0, max_retries)
         self._retry_delay = max(0.0, retry_delay)
+        self._log_callback = log_callback
         self._current_video: Video | None = None
         self._video_lock = threading.Lock()
         self._cancel_event = threading.Event()
@@ -79,8 +81,12 @@ class DownloadWorker(threading.Thread):
         self._shutdown.set()
         self._ready.set()
 
-    def _make_progress_callback(self, video: Video) -> Callable[[float, str], None]:
+    def _make_progress_callback(
+        self, video: Video, last: dict[str, float] | None = None
+    ) -> Callable[[float, str], None]:
         def callback(progress: float, speed: str) -> None:
+            if last is not None:
+                last["value"] = progress
             evt = DownloadEvent(
                 type=DownloadEventType.PROGRESS,
                 video=video,
@@ -107,7 +113,8 @@ class DownloadWorker(threading.Thread):
             if video is None:
                 continue
 
-            progress_callback_fn = self._make_progress_callback(video)
+            last_progress: dict[str, float] = {"value": 0.0}
+            progress_callback_fn = self._make_progress_callback(video, last_progress)
             progress_callback_fn(0.0, "")
 
             for attempt in range(self._max_retries + 1):
@@ -124,6 +131,10 @@ class DownloadWorker(threading.Thread):
                 except Exception as e:
                     video.status = DownloadStatus.ERROR
                     video.error_message = str(e)
+                    if self._cancel_event.is_set():
+                        video.status = DownloadStatus.CANCELLED
+                        video.error_message = ""
+                        break
                     logger.exception("Download worker failed for %s", video.url)
                     if (
                         attempt >= self._max_retries
@@ -131,18 +142,25 @@ class DownloadWorker(threading.Thread):
                         or self._shutdown.is_set()
                     ):
                         break
-                    logger.warning(
-                        "[RETRY] attempt %s for %s in %.1fs",
-                        attempt + 1,
-                        video.url,
-                        self._retry_delay * (attempt + 1),
-                    )
+                    delay = self._retry_delay * (attempt + 1)
+                    message = f"[RETRY] attempt {attempt + 1} for {video.url} in {delay:.1f}s"
+                    logger.warning(message)
+                    if self._log_callback is not None:
+                        self._log_callback(message)
                     # The row must look active again while it waits, otherwise the
                     # UI shows it as failed until the retry finishes.
                     self._progress_callback(
-                        DownloadEvent(type=DownloadEventType.PROGRESS, video=video)
+                        DownloadEvent(
+                            type=DownloadEventType.PROGRESS,
+                            video=video,
+                            progress=DownloadProgress(
+                                video=video,
+                                progress=last_progress["value"],
+                                speed="Calculating...",
+                                status=DownloadStatus.DOWNLOADING,
+                            ),
+                        )
                     )
-                    delay = self._retry_delay * (attempt + 1)
                     waited = 0.0
                     while waited < delay and not self._shutdown.is_set():
                         step = min(0.05, delay - waited)

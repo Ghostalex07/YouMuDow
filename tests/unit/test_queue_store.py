@@ -72,6 +72,7 @@ def test_service_persists_and_restores_the_pending_queue(tmp_path):
     service = DownloadService(adapter=FakeAdapter(), queue_file=path, default_output_path=tmp_path)
     service.add_to_queue(Video(title="A", url="https://x.test/a"))
     service.add_to_queue(Video(title="B", url="https://x.test/b"))
+    service.flush_queue()
     assert json.loads(path.read_text(encoding="utf-8"))[0]["url"] == "https://x.test/a"
 
     restarted = DownloadService(
@@ -86,6 +87,7 @@ def test_clearing_the_queue_empties_the_file(tmp_path):
     service = DownloadService(adapter=FakeAdapter(), queue_file=path, default_output_path=tmp_path)
     service.add_to_queue(Video(title="A", url="https://x.test/a"))
     service.clear_queue()
+    service.flush_queue()
     assert json.loads(path.read_text(encoding="utf-8")) == []
 
 

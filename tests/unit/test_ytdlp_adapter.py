@@ -1203,7 +1203,7 @@ class TestDownloadFlows:
         skipped = []
         dest_file = tmp_path / "Test.mp3"
 
-        def fake_build(video, skip_cookies=False):
+        def fake_build(video, skip_cookies=False, retries=None):
             skipped.append(skip_cookies)
             return ["--cookies-from-browser"] if not skip_cookies else ["--no-cookies"]
 
@@ -1605,3 +1605,11 @@ def test_get_formats_passes_the_video_through(monkeypatch):
     video = Video(title="T", url="https://x.test/v", options=DownloadOptions(use_cookies=True))
     YtdlpAdapter(YtdlpConfig()).get_formats("https://x.test/v", video)
     assert seen["video"] is video
+
+
+def test_build_download_args_passes_the_retry_override():
+    config = YtdlpConfig()
+    video = make_video()
+    args = build_download_args(config, video, retries=0)
+    assert args[args.index("--retries") + 1] == "0"
+    assert "--retries" not in build_download_args(config, video)

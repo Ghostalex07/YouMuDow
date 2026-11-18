@@ -14,7 +14,7 @@ def test_export_runs_off_the_ui_thread(stack, tmp_path, monkeypatch):
     started = threading.Event()
     release = threading.Event()
 
-    def slow_export(path):
+    def slow_export(path, config=None):
         started.set()
         release.wait(2.0)
         return path

@@ -86,6 +86,10 @@ class AppConfig:
     def set(self, key: str, value: Any) -> None:
         self._data[key] = value
 
+    def snapshot(self) -> dict[str, Any]:
+        """A copy of every stored setting, safe to hand to other services."""
+        return copy.deepcopy(self._data)
+
     @property
     def window_geometry(self) -> str:
         return str(self._data.get("window_geometry", ""))
