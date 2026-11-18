@@ -1,3 +1,4 @@
+import copy
 import json
 import logging
 import platform
@@ -44,7 +45,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
 
 class AppConfig:
     def __init__(self) -> None:
-        self._data: dict[str, Any] = dict(DEFAULT_CONFIG)
+        self._data: dict[str, Any] = copy.deepcopy(DEFAULT_CONFIG)
         self._load()
 
     def _load(self) -> None:
@@ -54,7 +55,7 @@ class AppConfig:
                     stored = json.load(f)
                 if not isinstance(stored, dict):
                     raise ValueError(f"expected a JSON object, got {type(stored).__name__}")
-                self._data = {**DEFAULT_CONFIG, **stored}
+                self._data = {**copy.deepcopy(DEFAULT_CONFIG), **stored}
         except ValueError as e:
             backup = backup_corrupt(CONFIG_FILE)
             logger.warning(

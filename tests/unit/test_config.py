@@ -170,6 +170,18 @@ class TestAppConfig:
     def test_get_str_missing_key_returns_default(self):
         assert AppConfig().get_str("missing", "fallback") == "fallback"
 
+    def test_instances_do_not_share_the_default_search_history(self):
+        with tempfile.TemporaryDirectory() as first_tmp:
+            with patch("youmudow.app.config.CONFIG_FILE", Path(first_tmp) / "config.json"):
+                first = AppConfig()
+                first.add_search("leak")
+
+        with tempfile.TemporaryDirectory() as second_tmp:
+            with patch("youmudow.app.config.CONFIG_FILE", Path(second_tmp) / "config.json"):
+                second = AppConfig()
+
+        assert second.get_search_history() == []
+
     def test_add_search_prepends_and_dedups(self):
         with (
             tempfile.TemporaryDirectory() as tmp,
