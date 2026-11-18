@@ -14,6 +14,7 @@ from typing import Any, Literal
 from youmudow.adapters.browser_profiles import get_all_browser_profiles, get_available_browsers
 from youmudow.domain.enums import DownloadStatus
 from youmudow.domain.models import DownloadOptions, Video
+from youmudow.domain.presets import PRESETS, find_preset
 from youmudow.domain.validators import (
     SUPPORTED_FORMATS,
     SUPPORTED_QUALITIES,
@@ -246,6 +247,7 @@ class OptionsPanel:
 
     def _build_rows(self) -> list[tk.Widget]:
         return [
+            self._build_preset_row(),
             self._build_format_row(),
             self._build_quality_row(),
             self._build_concurrent_row(),
@@ -254,16 +256,28 @@ class OptionsPanel:
             self._build_extra_row(),
         ]
 
+    def _build_preset_row(self) -> tk.Frame:
+        self._preset_values = ["Custom"] + [preset.name for preset in PRESETS]
+        self._preset_var = tk.StringVar(value="Custom")
+        row = self._row("Preset:", pady=(SPACING["sm"], 0))
+        combo = self._combo(row, self._preset_var, self._preset_values, 16)
+        combo.bind("<<ComboboxSelected>>", lambda _event: self.apply_preset(self._preset_var.get()))
+        return row
+
     def _build_format_row(self) -> tk.Frame:
         self._format_var = tk.StringVar(value="mp3")
         row = self._row("Format:", pady=(SPACING["sm"], SPACING["md"]))
-        self._combo(row, self._format_var, sorted(SUPPORTED_FORMATS), 8, padx=(0, SPACING["sm"]))
+        combo = self._combo(
+            row, self._format_var, sorted(SUPPORTED_FORMATS), 8, padx=(0, SPACING["sm"])
+        )
+        combo.bind("<<ComboboxSelected>>", lambda _event: self._on_manual_option_change())
         return row
 
     def _build_quality_row(self) -> tk.Frame:
         self._quality_var = tk.StringVar(value="best")
         row = self._row("Quality:")
-        self._combo(row, self._quality_var, sorted(SUPPORTED_QUALITIES), 10)
+        combo = self._combo(row, self._quality_var, sorted(SUPPORTED_QUALITIES), 10)
+        combo.bind("<<ComboboxSelected>>", lambda _event: self._on_manual_option_change())
         return row
 
     def _build_concurrent_row(self) -> tk.Frame:
@@ -348,6 +362,28 @@ class OptionsPanel:
     # ------------------------------------------------------------------
     # Public surface
     # ------------------------------------------------------------------
+
+    def apply_preset(self, name: str) -> None:
+        """Apply a named preset to format, quality and the chapter/subtitle toggles.
+
+        Cookies, output folder and rate limit are never touched: a preset must
+        not silently change how a download authenticates.
+        """
+        preset = find_preset(name)
+        if preset is None:
+            self._preset_var.set("Custom")
+            return
+
+        self._format_var.set(preset.options.file_format)
+        self._quality_var.set(preset.options.quality)
+        self._subtitles_var.set(False)
+        self._embed_subs_var.set(False)
+        self._split_chapters_var.set(False)
+        self._on_subtitles_toggle()
+        self._preset_var.set(preset.name)
+
+    def _on_manual_option_change(self) -> None:
+        self._preset_var.set("Custom")
 
     def get_options(self) -> DownloadOptions | None:
         """Options currently selected, or ``None`` when validation fails."""
