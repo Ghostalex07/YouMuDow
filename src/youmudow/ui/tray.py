@@ -43,8 +43,14 @@ class TrayIcon:
     def available(self) -> bool:
         return self._icon is not None
 
-    def start(self) -> bool:
-        """Show the icon. Returns False when the tray is unavailable."""
+    def start(self, timeout: float = 2.0) -> bool:
+        """Show the icon, waiting until the backend reports it is live.
+
+        Reporting success before the icon exists strands the app: closing the
+        window withdraws it with no tray entry to bring it back. The backend
+        runs in a thread and only calls ``setup`` once the icon is up, so we
+        wait for that signal (or for the thread to fail) before answering.
+        """
         if self._icon is not None:
             return True
         try:
@@ -52,6 +58,9 @@ class TrayIcon:
         except ImportError:
             logger.info("pystray is not installed; the tray icon is unavailable")
             return False
+
+        ready = threading.Event()
+        failure: list[BaseException] = []
         try:
             menu = pystray.Menu(
                 pystray.MenuItem("Show", lambda: self._on_show(), default=True),
@@ -59,12 +68,33 @@ class TrayIcon:
                 pystray.MenuItem("Quit", lambda: self._on_quit()),
             )
             icon = pystray.Icon("youmudow", self._image_factory(), "YouMuDow", menu)
-            threading.Thread(target=icon.run, daemon=True).start()
         except Exception as exc:  # noqa: BLE001 - a broken tray must never break the app
-            logger.warning("Could not start the tray icon: %s", exc)
+            logger.warning("Could not create the tray icon: %s", exc)
+            return False
+
+        def run_icon() -> None:
+            try:
+                icon.run(setup=lambda _icon: ready.set())
+            except BaseException as exc:  # noqa: BLE001 - log it, never crash the app
+                failure.append(exc)
+                logger.warning("The tray backend stopped: %s", exc)
+            finally:
+                ready.set()
+
+        threading.Thread(target=run_icon, daemon=True).start()
+        ready.wait(timeout)
+        if failure or not getattr(icon, "visible", True):
+            logger.warning("The tray icon did not start; continuing without it")
+            self._stop_icon(icon)
             return False
         self._icon = icon
         return True
+
+    def _stop_icon(self, icon: Any) -> None:
+        try:
+            icon.stop()
+        except Exception as exc:  # noqa: BLE001 - stopping a dead icon is not fatal
+            logger.debug("Could not stop the tray icon: %s", exc)
 
     def stop(self) -> None:
         icon, self._icon = self._icon, None

@@ -184,7 +184,7 @@ class TestMainWindowFlows:
         config.get_search_history.return_value = []
         config.window_geometry = ""
 
-        with patch.object(MainWindow, "_on_close") as close:
+        with patch.object(MainWindow, "_on_quit") as close:
             window = MainWindow(controller=controller, config=config)
             try:
                 file_index = next(
@@ -327,8 +327,11 @@ class TestExportDiagnostics:
         target = tmp_path / "diag.txt"
         monkeypatch.setattr("tkinter.filedialog.asksaveasfilename", lambda **kwargs: str(target))
         window._on_export_diagnostics()
+        assert "Writing diagnostics" in window._status_bar._status_var.get()
+        deadline = time.monotonic() + 3.0
+        while not target.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
         assert target.exists()
-        assert "Diagnostics saved" in window._status_bar._status_var.get()
 
     def test_cancelling_the_dialog_changes_nothing(self, main_window, monkeypatch):
         window, _ = main_window

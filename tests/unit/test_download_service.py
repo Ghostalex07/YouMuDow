@@ -1350,7 +1350,10 @@ class TestCancelRaces:
         assert not any(e.type == DownloadEventType.ERROR for e in events)
         assert service.active_count == 0
         assert service._workers == []
-        assert v.status == DownloadStatus.CANCELLED
+        # A shutdown interrupts the download rather than cancelling the user's
+        # request, so the video goes back to the queue for the next session.
+        assert v.status == DownloadStatus.QUEUED
+        assert service.queue_size == 1
 
 
 class TestLifecycleRace:

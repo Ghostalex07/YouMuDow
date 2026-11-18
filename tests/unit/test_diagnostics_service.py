@@ -47,8 +47,7 @@ def test_redact_config_replaces_every_sensitive_value():
         assert redacted[key] == "<redacted>"
     assert set(SENSITIVE_KEYS) == {
         "cookies_file",
-        "cookies_profile",
-        "cookies_from_browser",
+        "profile",
         "search_history",
         "output_path",
     }

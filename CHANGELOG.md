@@ -16,7 +16,8 @@ All notable changes to this project will be documented in this file.
   field switches back to "Custom"
 - Failed downloads retry with backoff (`max_retries`, default 2)
 - The pending queue is saved to `queue.json` and restored on startup, with a
-  "Restored N download(s)" status message
+  "Restored N download(s)" status message; a download interrupted by quitting
+  is queued again for the next run
 - Optional system tray (`minimize_to_tray`): closing the window keeps the queue
   running, with Show / Start downloads / Quit
 - `Help > Export Diagnostics...` writes version, platform, yt-dlp, ffmpeg,

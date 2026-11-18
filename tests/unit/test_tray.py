@@ -26,9 +26,12 @@ def _install_fake_pystray(monkeypatch):
             self.title = title
             self.menu = menu
             self.stopped = False
+            self.visible = False
 
-        def run(self):
-            pass
+        def run(self, setup=None):
+            self.visible = True
+            if setup is not None:
+                setup(self)
 
         def stop(self):
             self.stopped = True

@@ -21,8 +21,7 @@ logger = logging.getLogger(__name__)
 SENSITIVE_KEYS: frozenset[str] = frozenset(
     {
         "cookies_file",
-        "cookies_profile",
-        "cookies_from_browser",
+        "profile",
         "search_history",
         "output_path",
     }
@@ -58,7 +57,9 @@ def _log_tail(limit: int = LOG_TAIL_LINES) -> str:
         text = (CONFIG_DIR / LOG_FILE_NAME).read_text(encoding="utf-8", errors="replace")
     except OSError:
         return ""
-    return "\n".join(text.splitlines()[-limit:])
+    tail = "\n".join(text.splitlines()[-limit:])
+    # The report gets pasted into public issues: keep the user's home path out.
+    return tail.replace(str(Path.home()), "~")
 
 
 def _current_config() -> dict[str, Any]:
@@ -89,7 +90,7 @@ def build_report(
         json.dumps(redact_config(config), indent=2, sort_keys=True, default=str),
         "",
         "Log tail",
-        log_tail or "(no log entries)",
+        log_tail.replace(str(Path.home()), "~") if log_tail else "(no log entries)",
     ]
     return "\n".join(sections) + "\n"
 

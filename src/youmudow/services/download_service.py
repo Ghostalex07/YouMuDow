@@ -72,6 +72,7 @@ class DownloadService:
         self._callbacks_lock = threading.Lock()
         self._active_downloads: dict[int, Video] = {}
         self._queue_event = threading.Event()
+        self._persist_lock = threading.Lock()
         self._queue_thread: threading.Thread | None = None
 
     @property
@@ -155,10 +156,17 @@ class DownloadService:
     def _persist_queue(self) -> None:
         if self._queue_file is None:
             return
-        try:
-            save_queue(self._queue_file, self._queue.peek())
-        except OSError as exc:
-            logger.debug("Could not persist the download queue: %s", exc)
+        # Snapshot and write under one lock: the dispatcher thread and the Tk
+        # thread both persist, and two interleaved snapshots can drop an entry.
+        with self._persist_lock:
+            try:
+                save_queue(self._queue_file, self._queue.peek())
+            except OSError as exc:
+                logger.debug("Could not persist the download queue: %s", exc)
+
+    def queued_videos(self) -> list[Video]:
+        """A snapshot of the pending queue, oldest first."""
+        return self._queue.peek()
 
     def restore_queue(self) -> int:
         """Re-add the videos left in the queue file by the previous session."""
@@ -172,7 +180,9 @@ class DownloadService:
             restored += 1
         if restored:
             logger.info("Restored %s queued download(s)", restored)
-        self._persist_queue()
+            self._persist_queue()
+        # With nothing restored the file is left alone on purpose: it may be a
+        # corrupt queue kept for inspection, and rewriting it would erase it.
         return restored
 
     def add_to_queue(self, video: Video) -> None:
@@ -278,10 +288,26 @@ class DownloadService:
             still_active = list(self._active_downloads.values())
             self._active_downloads.clear()
 
+        requeue: list[Video] = []
         for video in still_active:
+            if video.status is DownloadStatus.DONE:
+                continue
             if video.status in (DownloadStatus.DOWNLOADING, DownloadStatus.QUEUED):
                 video.status = DownloadStatus.CANCELLED
                 video.error_message = "Cancelled by shutdown"
+            # Interrupted by shutdown, not by the user: keep it for the next run.
+            requeue.append(video)
+
+        persisted = False
+        for video in requeue:
+            if self._queue.has_url(video.url):
+                continue
+            video.status = DownloadStatus.READY
+            video.error_message = ""
+            self._queue.add(video)
+            persisted = True
+        if persisted:
+            self._persist_queue()
 
         # Wake the dispatcher so it observes the stop at once.
         self._queue_event.set()

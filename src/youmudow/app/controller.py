@@ -271,8 +271,16 @@ class AppController:
             self.enqueue(video)
 
     def restore_queue(self) -> int:
-        """Restore the pending downloads left by the previous session."""
-        return self._download_service.restore_queue()
+        """Restore the pending downloads left by the previous session.
+
+        The videos are added to the state manager too: the queue panel and
+        ``start_downloads()`` read from there, so a restored entry would
+        otherwise be invisible and unstoppable.
+        """
+        restored = self._download_service.restore_queue()
+        for video in self._download_service.queued_videos():
+            self._state_manager.add_to_queue(video)
+        return restored
 
     def remove_from_queue(self, video: Video) -> None:
         """Remove a video from the queue, cancelling it if actively downloading.

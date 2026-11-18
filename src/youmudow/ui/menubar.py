@@ -23,6 +23,7 @@ class MenuCallbacks:
     export_logs: Callable[[], None]
     clear_thumbnail_cache: Callable[[], None]
     close: Callable[[], None]
+    quit: Callable[[], None]
     start_queue: Callable[[], None]
     clear_queue: Callable[[], None]
     toggle_debug: Callable[[], None]
@@ -58,7 +59,7 @@ def build_menubar(
     file_menu.add_separator()
     file_menu.add_command(label="Clear Thumbnail Cache", command=callbacks.clear_thumbnail_cache)
     file_menu.add_separator()
-    file_menu.add_command(label="Exit", command=callbacks.close)
+    file_menu.add_command(label="Exit", command=callbacks.quit)
 
     queue_menu = _submenu(menubar)
     menubar.add_cascade(label="Queue", menu=queue_menu)

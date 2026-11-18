@@ -265,6 +265,7 @@ class MainWindow(MainWindowProtocol):
             export_logs=self._on_export_logs,
             clear_thumbnail_cache=self._on_clear_thumbnail_cache,
             close=self._on_close,
+            quit=self._on_quit,
             start_queue=self._on_start_queue,
             clear_queue=self._on_clear_queue,
             toggle_debug=self._on_toggle_debug,
@@ -766,13 +767,20 @@ class MainWindow(MainWindowProtocol):
         )
         if not path:
             return
-        try:
-            saved = export_diagnostics(Path(path))
-        except OSError as e:
-            logger.exception("Could not export diagnostics")
-            self._set_status(f"Could not save diagnostics: {e}")
-            return
-        self._set_status(f"Diagnostics saved to {saved}")
+        destination = Path(path)
+        self._set_status("Writing diagnostics...")
+
+        def write() -> None:
+            # The report shells out to yt-dlp and ffmpeg: never on the Tk thread.
+            try:
+                saved = export_diagnostics(destination)
+            except OSError as e:
+                logger.exception("Could not export diagnostics")
+                self._schedule(self._set_status, f"Could not save diagnostics: {e}")
+                return
+            self._schedule(self._set_status, f"Diagnostics saved to {saved}")
+
+        threading.Thread(target=write, name="diagnostics-export", daemon=True).start()
 
     def _on_close(self) -> None:
         self._save_settings()
@@ -804,8 +812,13 @@ class MainWindow(MainWindowProtocol):
         return self._tray.start()
 
     def _shutdown(self) -> None:
+        self._save_settings()
         self._controller.stop_downloads()
         self.destroy()
+
+    def _on_quit(self) -> None:
+        """File > Exit: always leaves the application, tray or not."""
+        self._shutdown()
 
     def _quit_from_tray(self) -> None:
         self._schedule(self._shutdown)

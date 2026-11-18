@@ -63,3 +63,24 @@ def test_quit_from_tray_uses_the_real_shutdown_path(stack, monkeypatch):
     stack.window._quit_from_tray()
     assert stack.downloads.is_running is False
     assert FakeTray.instances[-1].stopped is True
+
+
+def test_exit_menu_quits_even_when_the_tray_is_enabled(stack, monkeypatch):
+    stack.config.set("minimize_to_tray", True)
+    monkeypatch.setattr(stack.window, "_should_use_tray", lambda: True)
+    stack.window._on_quit()
+    assert stack.downloads.is_running is False
+
+
+def test_shutdown_saves_the_settings_before_destroying(stack, monkeypatch):
+    order = []
+    real_destroy = type(stack.window).destroy
+
+    def destroy(self):
+        order.append("destroy")
+        real_destroy(self)
+
+    monkeypatch.setattr(type(stack.window), "_save_settings", lambda self: order.append("save"))
+    monkeypatch.setattr(type(stack.window), "destroy", destroy)
+    stack.window._shutdown()
+    assert order == ["save", "destroy"]
