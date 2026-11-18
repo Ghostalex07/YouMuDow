@@ -45,13 +45,18 @@ class FakeDownloadAdapter:
     def __init__(self):
         self.downloaded = []
         self.fail_urls = set()
+        self.raise_urls = set()
         self.progress_steps = []
+        self.attempts = []
         self.log_callback = None
 
     def set_log_callback(self, callback):
         self.log_callback = callback
 
     def download(self, video, output_path, progress_callback=None, cancel_event=None):
+        self.attempts.append(video.url)
+        if video.url in self.raise_urls:
+            raise RuntimeError("adapter exploded")
         if video.url in self.fail_urls:
             video.status = DownloadStatus.ERROR
             video.error_message = "boom"
@@ -60,7 +65,7 @@ class FakeDownloadAdapter:
             self.progress_steps.append(50.0)
             progress_callback(50.0, "1.0MiB/s")
         video.status = DownloadStatus.DONE
-        video.path = str(output_path / f"{video.title}.{video.options.file_format}")
+        video.path = output_path / f"{video.title}.{video.options.file_format}"
         with open(video.path, "w", encoding="utf-8") as f:
             f.write("fake")
         self.downloaded.append(video)
@@ -68,11 +73,13 @@ class FakeDownloadAdapter:
 
 
 def _teardown(built):
+    # Same order as MainWindow._on_close: stop workers before the root dies,
+    # otherwise every teardown races a running thread against a dead root.
+    built.downloads.stop()
     try:
         built.window.destroy()
     except tk.TclError:
         pass  # a test already closed the window
-    built.downloads.stop()
 
 
 def pump(window, predicate, timeout=3.0):
@@ -87,14 +94,22 @@ def pump(window, predicate, timeout=3.0):
     state = {"settled": False}
 
     def check():
-        if predicate() or time.monotonic() > deadline:
-            state["settled"] = predicate()
+        try:
+            settled = bool(predicate())
+        except BaseException as exc:  # noqa: BLE001 - a broken predicate must not hang the loop
+            state["error"] = exc
+            root.quit()
+            return
+        if settled or time.monotonic() > deadline:
+            state["settled"] = settled
             root.quit()
         else:
             root.after(10, check)
 
     root.after(10, check)
     root.mainloop()
+    if "error" in state:
+        raise state["error"]
     if not state["settled"]:
         raise AssertionError("timed out waiting for the UI to settle")
 
@@ -102,6 +117,10 @@ def pump(window, predicate, timeout=3.0):
 def build_stack(tmp_path, monkeypatch, run_startup_checks=False):
     monkeypatch.setattr("youmudow.app.config.CONFIG_DIR", tmp_path / "cfg")
     monkeypatch.setattr("youmudow.app.config.CONFIG_FILE", tmp_path / "cfg" / "config.json")
+    monkeypatch.setattr(
+        "youmudow.services.history_service.HISTORY_FILE", tmp_path / "cfg" / "history.json"
+    )
+    monkeypatch.setattr("youmudow.services.notification_service.notify", lambda *a, **k: None)
     config = AppConfig()
 
     search_adapter = FakeSearchAdapter()
@@ -109,11 +128,17 @@ def build_stack(tmp_path, monkeypatch, run_startup_checks=False):
     search = SearchService(adapter=search_adapter)
     downloads = DownloadService(adapter=download_adapter, default_output_path=tmp_path)
     controller = AppController(search_service=search, download_service=downloads, config=config)
-    window = MainWindow(
-        controller=controller,
-        config=config,
-        run_startup_checks=run_startup_checks,
-    )
+    try:
+        window = MainWindow(
+            controller=controller,
+            config=config,
+            run_startup_checks=run_startup_checks,
+        )
+    except Exception:
+        root = getattr(tk, "_default_root", None)
+        if root is not None:
+            root.destroy()
+        raise
     return SimpleNamespace(
         window=window,
         controller=controller,

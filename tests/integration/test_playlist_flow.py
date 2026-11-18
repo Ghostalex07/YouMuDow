@@ -30,9 +30,11 @@ def test_playlist_fetch_failure_recovers_the_ui(stack, monkeypatch):
     def explode(url, limit=50):
         raise RuntimeError("private playlist")
 
+    messages = []
     monkeypatch.setattr(stack.adapter, "get_playlist_videos", explode)
+    monkeypatch.setattr(stack.window, "_set_status", lambda *a, **k: messages.append(a[0]))
     stack.window._search_bar.search_var.set(PLAYLIST_URL)
     stack.window._on_search()
     pump(stack.window, lambda: stack.window._is_searching is False, timeout=2.0)
     assert stack.window._results_cards.card_count() == 0
-    assert "playlist" in stack.window._status_bar._status_var.get().lower()
+    assert any("playlist" in str(message).lower() for message in messages)

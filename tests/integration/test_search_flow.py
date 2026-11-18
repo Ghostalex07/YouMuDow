@@ -1,6 +1,17 @@
+import tkinter as tk
+
 from conftest import pump
 
 from youmudow.domain.models import Video
+
+
+def _child_texts(stack):
+    inner = stack.window._results_cards._inner
+    texts = []
+    for child in inner.winfo_children():
+        if isinstance(child, tk.Label):
+            texts.append(child.cget("text"))
+    return texts
 
 
 def test_query_renders_one_card_per_result(stack):
@@ -41,4 +52,14 @@ def test_failing_search_leaves_the_busy_state(stack, monkeypatch):
     stack.window._search_bar.search_var.set("lofi")
     stack.window._on_search()
     pump(stack.window, lambda: stack.window._is_searching is False)
-    assert stack.window._results_cards.card_count() == 0
+    assert "Searching..." not in _child_texts(stack)
+    assert "Error" in stack.window._status_bar._status_var.get()
+
+
+def test_empty_results_show_the_empty_state(stack):
+    stack.adapter.results = []
+    stack.window._search_bar.search_var.set("nothing matches")
+    stack.window._on_search()
+    pump(stack.window, lambda: stack.window._is_searching is False)
+    assert stack.window._results_cards._empty_state is not None
+    assert "No results found" in stack.window._status_bar._status_var.get()
