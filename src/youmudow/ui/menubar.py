@@ -22,6 +22,7 @@ class MenuCallbacks:
     set_output: Callable[[], None]
     open_output_folder: Callable[[], None]
     export_logs: Callable[[], None]
+    import_urls: Callable[[], None]
     clear_thumbnail_cache: Callable[[], None]
     close: Callable[[], None]
     quit: Callable[[], None]
@@ -69,6 +70,7 @@ def build_menubar(
     file_menu.add_command(
         label=t("Open Output Folder    Ctrl+O"), command=callbacks.open_output_folder
     )
+    file_menu.add_command(label=t("Import URLs..."), command=callbacks.import_urls)
     file_menu.add_command(label=t("Export Logs..."), command=callbacks.export_logs)
     file_menu.add_separator()
     file_menu.add_command(label=t("Clear Thumbnail Cache"), command=callbacks.clear_thumbnail_cache)

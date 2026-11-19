@@ -96,6 +96,17 @@ class DownloadQueue:
             del self._queue[index]
             return item
 
+    def move_entry(self, video: Video, new_index: int) -> bool:
+        """Move a queue entry to ``new_index``. Returns whether it moved."""
+        with self._lock:
+            index = find_entry_index(self._queue, video)
+            if index < 0:
+                return False
+            item = self._queue[index]
+            del self._queue[index]
+            self._queue.insert(max(0, min(new_index, len(self._queue))), item)
+            return True
+
     def remove_entry(self, video: Video) -> bool:
         """Remove the queue entry a video stands for, matching by its queue id.
 

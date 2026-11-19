@@ -21,6 +21,7 @@ from youmudow.app.config import AppConfig
 from youmudow.app.controller import AppController
 from youmudow.domain.enums import DownloadStatus
 from youmudow.services.download_service import DownloadService
+from youmudow.services.library_store import LibraryStore
 from youmudow.services.search_service import SearchService
 from youmudow.ui.window import MainWindow
 
@@ -144,7 +145,13 @@ def build_stack(tmp_path, monkeypatch, run_startup_checks=False):
     download_adapter = FakeDownloadAdapter()
     search = SearchService(adapter=search_adapter)
     downloads = DownloadService(adapter=download_adapter, default_output_path=tmp_path)
-    controller = AppController(search_service=search, download_service=downloads, config=config)
+    library_store = LibraryStore(tmp_path / "youmudow.db")
+    controller = AppController(
+        search_service=search,
+        download_service=downloads,
+        config=config,
+        library_store=library_store,
+    )
     try:
         window = MainWindow(
             controller=controller,
@@ -163,6 +170,7 @@ def build_stack(tmp_path, monkeypatch, run_startup_checks=False):
         adapter=search_adapter,
         download_adapter=download_adapter,
         downloads=downloads,
+        library_store=library_store,
         config=config,
     )
 
