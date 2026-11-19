@@ -28,6 +28,7 @@ from youmudow.services.thumbnail_cache import ThumbnailCache
 from youmudow.services.thumbnail_loader import ThumbnailLoader
 from youmudow.services.thumbnail_service import ThumbnailService
 from youmudow.ui.actions import choose_output_folder, export_logs, open_output_folder
+from youmudow.ui.dnd import create_root, register_drop_target
 from youmudow.ui.menubar import MenuCallbacks, create_menubar
 from youmudow.ui.protocols import (
     AppControllerProtocol,
@@ -78,7 +79,7 @@ class MainWindow(MainWindowProtocol):
     ) -> None:
         self._config = config
         self._controller_impl: AppControllerProtocol = controller
-        self._tk_root = tk.Tk()
+        self._tk_root = create_root()
         self._tk_root.title(f"YouMuDow v{__version__}")
         self._tk_root.withdraw()
         self._tk_root.minsize(800, 600)
@@ -327,6 +328,7 @@ class MainWindow(MainWindowProtocol):
         self._clear_unsubscribe = self._event_bus.subscribe(EventType.LOG_CLEAR, on_clear)
 
         self._bind_shortcuts()
+        self._dnd_enabled = register_drop_target(self._tk_root, self._accept_dropped_urls)
 
     def _bind_shortcuts(self) -> None:
         detail_panel = self._detail_panel_widget
@@ -348,6 +350,7 @@ class MainWindow(MainWindowProtocol):
             lambda _: self._log_terminal.clear() if self._log_terminal else None,
         )
         self._tk_root.bind("<Control-t>", lambda _: self._on_toggle_theme())
+        self._tk_root.bind("<Control-Shift-s>", lambda _: self._on_start_queue())
 
     def _setup_controller_callbacks(self) -> None:
         def on_search_complete(results: list[Video]) -> None:
@@ -517,6 +520,14 @@ class MainWindow(MainWindowProtocol):
         else:
             self._selected_video_impl = None
         self._update_button_states()
+
+    def _accept_dropped_urls(self, urls: list[str]) -> None:
+        search_bar = self._search_bar
+        if not urls or search_bar is None:
+            self._set_status("Drop a supported link to search it")
+            return
+        search_bar.search_var.set(urls[0])
+        self._on_search()
 
     def _on_open_in_browser(self, url: str) -> None:
         webbrowser.open(url)

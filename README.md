@@ -136,7 +136,11 @@ profiles are never written to `queue.json`.
 | `Ctrl+L` | Focus search |
 | `Escape` | Cancel |
 | `Ctrl+T` | Toggle theme |
+| `Ctrl+Shift+S` | Start the queue |
+| `Delete` | Remove the selected row from the queue |
 | `F1` | Open the user guide |
+
+You can also drag a link from your browser onto the window to search it.
 
 ## Development
 

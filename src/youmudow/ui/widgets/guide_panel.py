@@ -12,7 +12,8 @@ GUIDE_SECTIONS: tuple[tuple[str, str], ...] = (
         (
             "Type a name in the search bar and press Enter, or paste a link to a "
             "video, playlist or channel. Results appear as cards on the left; "
-            "clicking one fills the detail panel on the right."
+            "clicking one fills the detail panel on the right. You can also drag "
+            "a link from your browser onto the window to search it."
         ),
     ),
     (
@@ -52,7 +53,8 @@ GUIDE_SECTIONS: tuple[tuple[str, str], ...] = (
             "downloads is configurable; failed downloads are retried with a "
             "growing wait (2 retries by default, 0-5), and cancelling during a "
             "retry stops it at once. The pending queue is saved and restored the "
-            "next time you open the app."
+            "next time you open the app. Ctrl+Shift+S starts the queue and Delete "
+            "removes the row selected in the queue panel."
         ),
     ),
     (

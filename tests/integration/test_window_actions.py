@@ -37,3 +37,21 @@ def test_switching_to_the_history_tab_refreshes_it(stack, monkeypatch):
     stack.window._notebook.select(1)
     stack.window._on_tab_changed()
     assert refreshed
+
+
+def test_dropping_a_link_searches_it(stack):
+    stack.adapter.metadata = Video(
+        title="Dropped", url="https://youtube.com/watch?v=abc", uploader="Chan"
+    )
+    stack.window._accept_dropped_urls(["https://youtube.com/watch?v=abc"])
+    pump(stack.window, lambda: stack.window._detail_panel._detail_title.cget("text") == "Dropped")
+    assert stack.window._search_bar.search_var.get() == "https://youtube.com/watch?v=abc"
+
+
+def test_dropping_nothing_explains_what_is_accepted(stack):
+    stack.window._accept_dropped_urls([])
+    assert "supported link" in stack.window._status_bar._status_var.get()
+
+
+def test_queue_shortcuts_are_bound(stack):
+    assert stack.window._root.bind("<Control-Shift-s>")
