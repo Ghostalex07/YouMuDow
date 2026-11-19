@@ -49,3 +49,13 @@ def test_log_terminal_buffer_is_capped(tk_root):
     lines = terminal.get_logs().split("\n")
     assert len(lines) <= MAX_LINES * 5 + 1
     assert any(l.endswith("msg 4999") for l in lines)
+
+
+def test_set_dark_mode_reconfigures_the_tags(tk_root):
+    from youmudow.ui.widgets.log_terminal import LogTerminal
+
+    terminal = LogTerminal(tk_root)
+    terminal.append("hello", level="info")
+    terminal.set_dark_mode(True)
+    terminal.set_dark_mode(False)
+    assert "hello" in terminal.get_logs()

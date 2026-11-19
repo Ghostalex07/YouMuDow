@@ -47,3 +47,30 @@ def test_backup_corrupt_renames(tmp_path):
     p.write_text("bad")
     b = backup_corrupt(p)
     assert b is not None and b.suffix == ".corrupt"
+
+
+def test_write_atomic_survives_a_directory_that_cannot_be_fsynced(tmp_path, monkeypatch):
+    import os as os_module
+
+    real_open = os_module.open
+
+    def fake_open(path, flags, *a, **kw):
+        if str(path) == str(tmp_path):
+            raise OSError("no directory fsync here")
+        return real_open(path, flags, *a, **kw)
+
+    monkeypatch.setattr(os_module, "open", fake_open)
+    target = tmp_path / "config.json"
+    write_atomic(target, "{}")
+    assert target.read_text(encoding="utf-8") == "{}"
+
+
+def test_backup_corrupt_returns_none_when_the_file_cannot_be_moved(tmp_path, monkeypatch):
+    import os as os_module
+
+    target = tmp_path / "config.json"
+    target.write_text("{bad", encoding="utf-8")
+    monkeypatch.setattr(
+        os_module, "replace", lambda *a, **k: (_ for _ in ()).throw(OSError("locked"))
+    )
+    assert backup_corrupt(target) is None

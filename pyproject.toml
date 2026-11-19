@@ -63,7 +63,7 @@ branch = true
 concurrency = ["thread"]
 
 [tool.coverage.report]
-fail_under = 70
+fail_under = 85
 skip_covered = true
 show_missing = true
 exclude_also = [
