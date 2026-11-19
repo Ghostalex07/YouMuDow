@@ -30,6 +30,7 @@ class FakeSearchAdapter:
         self.results = list(results or [])
         self.playlist = list(playlist or [])
         self.metadata = metadata
+        self.metadata_calls = []
         self.formats = []
         self.format_calls = 0
         self.queries = []
@@ -45,6 +46,7 @@ class FakeSearchAdapter:
         return self.results[:limit]
 
     def get_metadata(self, url):
+        self.metadata_calls.append(url)
         return self.metadata
 
     def get_formats(self, url, video=None):
