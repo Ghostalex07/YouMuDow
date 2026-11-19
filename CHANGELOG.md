@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.0] - 2026-11-19
+
+### Added
+
+- Drag a link from the browser onto the window to search it (needs
+  `tkinterdnd2`; without it the app runs unchanged)
+- `Delete` removes the selected row from the queue panel
+- `Ctrl+Shift+S` starts the queue from anywhere in the window
+
 ## [1.8.0] - 2026-11-18
 
 ### Added

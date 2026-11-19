@@ -83,6 +83,7 @@ class QueuePanel(tk.Frame):
         qscroll.pack(side="right", fill="y", pady=(0, SPACING["sm"]), padx=(0, SPACING["sm"]))
         self._qscroll = qscroll
         self._queue_tree.bind("<Button-3>", self._on_right_click)
+        self._queue_tree.bind("<Delete>", self._on_remove_selected)
 
     @property
     def visible(self) -> bool:
@@ -175,11 +176,10 @@ class QueuePanel(tk.Frame):
                 )
             self._empty_shown = empty
 
-    def _on_right_click(self, event: tk.Event) -> None:
-        item = self._queue_tree.identify_row(event.y)
-        if not item:
-            return
-        self._queue_tree.selection_set(item)
+    def _selected_video(self) -> Video | None:
+        selection = self._queue_tree.selection()
+        if not selection:
+            return None
         snapshot = self._mw._controller.state.get_snapshot()
         all_videos = (
             list(snapshot.queue)
@@ -187,8 +187,21 @@ class QueuePanel(tk.Frame):
             + list(snapshot.completed_downloads)
             + list(snapshot.failed_downloads)
         )
-        entry_id = item[1:].split("-", 1)[0]
-        video = next((v for v in all_videos if str(v.queue_id) == entry_id), None)
+        entry_id = selection[0][1:].split("-", 1)[0]
+        return next((v for v in all_videos if str(v.queue_id) == entry_id), None)
+
+    def _on_remove_selected(self, _event: tk.Event | None = None) -> None:
+        """Delete key: drop the selected row from the queue."""
+        video = self._selected_video()
+        if video is not None:
+            self._mw._controller.remove_from_queue(video)
+
+    def _on_right_click(self, event: tk.Event) -> None:
+        item = self._queue_tree.identify_row(event.y)
+        if not item:
+            return
+        self._queue_tree.selection_set(item)
+        video = self._selected_video()
         if not video:
             return
         menu = tk.Menu(self._mw._root, tearoff=0, bg=_c("surface"), fg=_c("text"))
