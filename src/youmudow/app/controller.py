@@ -60,9 +60,11 @@ class AppController:
         history_service: HistoryService | None = None,
         config: Any | None = None,
         queue_file: Path | None = None,
+        library_store: Any | None = None,
     ) -> None:
         self._config = config
         self._queue_file = queue_file
+        self._library_store = library_store
         self._search_service = search_service or SearchService()
         concurrent = self._config.get("concurrent_downloads", 1) if self._config else 1
         retries = 2
@@ -72,11 +74,14 @@ class AppController:
             except (TypeError, ValueError):
                 logger.warning("Ignoring invalid max_retries in config, using 2")
         self._download_service = download_service or DownloadService(
-            max_concurrent=concurrent, max_retries=retries, queue_file=queue_file
+            max_concurrent=concurrent,
+            max_retries=retries,
+            queue_file=queue_file,
+            library_store=library_store,
         )
         self._thumbnail_service = thumbnail_service or ThumbnailService()
         self._state_manager = state_manager or StateManager()
-        self._history = history_service or HistoryService()
+        self._history = history_service or HistoryService(store=library_store)
 
         self._search_thread: threading.Thread | None = None
         self._url_search_thread: threading.Thread | None = None

@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.11.0] - 2026-11-21
+
+### Added
+
+- SQLite library (`youmudow.db`): download history, the pending queue and
+  subscriptions now live in a real database instead of being rewritten as JSON
+  on every change
+- Existing `history.json` and `queue.json` are imported automatically on the
+  first start; the JSON files are left untouched as a backup
+- If the database cannot be opened, the app keeps working with the JSON files
+  and logs why
+
 ## [1.10.0] - 2026-11-19
 
 ### Added

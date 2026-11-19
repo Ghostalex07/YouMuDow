@@ -610,3 +610,14 @@ def test_search_playlist_forwards_the_start_offset():
     controller = AppController(search_service=service, config=None)
     controller.search_playlist("https://x.test/list", limit=3, start=7)
     assert service.get_playlist.call_args.args[:3] == ("https://x.test/list", 3, 7)
+
+
+def test_controller_uses_the_library_store_for_history(tmp_path):
+    from youmudow.domain.models import Video
+    from youmudow.services.library_store import LibraryStore
+
+    store = LibraryStore(tmp_path / "lib.db")
+    controller = AppController(search_service=Mock(), config=None, library_store=store)
+    controller.history.add(Video(title="Song", url="https://x.test/1"), "/m/a.mp3", "mp3")
+    assert len(store.history()) == 1
+    store.close()

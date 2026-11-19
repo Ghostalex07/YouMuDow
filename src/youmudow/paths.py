@@ -17,6 +17,11 @@ def queue_file() -> Path:
     return config_dir() / "queue.json"
 
 
+def database_file() -> Path:
+    """Return the path of the SQLite library (history and subscriptions)."""
+    return config_dir() / "youmudow.db"
+
+
 def cache_dir() -> Path:
     """Return the platform-specific cache directory.
 
