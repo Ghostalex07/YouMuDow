@@ -58,6 +58,7 @@ from youmudow.ui.typed import readonly_property
 from youmudow.ui.widgets.detail_panel import DetailPanel
 from youmudow.ui.widgets.guide_panel import GuidePanel
 from youmudow.ui.widgets.history_panel import HistoryPanel
+from youmudow.ui.widgets.library_panel import LibraryPanel
 from youmudow.ui.widgets.log_terminal import LogTerminal
 from youmudow.ui.widgets.results_cards import ResultsCards
 from youmudow.ui.widgets.search_bar import SearchBar
@@ -120,6 +121,7 @@ class MainWindow(MainWindowProtocol):
         self._detail_panel_widget: DetailPanel | None = None
         self._status_bar_impl: StatusBar | None = None
         self._history_panel_impl: HistoryPanel | None = None
+        self._library_panel_impl: LibraryPanel | None = None
         self._thumbnail_loader: ThumbnailLoader | None = None
         self._thumbnail_cache: ThumbnailCache | None = None
 
@@ -157,6 +159,9 @@ class MainWindow(MainWindowProtocol):
     _status_bar: readonly_property[StatusBarLike | None] = readonly_property("_status_bar_impl")
     _history_panel: readonly_property[HistoryPanelLike | None] = readonly_property(
         "_history_panel_impl"
+    )
+    _library_panel: readonly_property[LibraryPanel | None] = readonly_property(
+        "_library_panel_impl"
     )
     _main_content_frame: readonly_property[tk.Frame | None] = readonly_property(
         "_main_content_frame_impl"
@@ -198,6 +203,9 @@ class MainWindow(MainWindowProtocol):
         self._history_tab = tk.Frame(notebook, bg=_c("bg"))
         notebook.add(self._history_tab, text="  History  ")
 
+        self._library_tab = tk.Frame(notebook, bg=_c("bg"))
+        notebook.add(self._library_tab, text="  Library  ")
+
         self._main_tab.columnconfigure(0, weight=1)
         self._main_tab.rowconfigure(0, weight=1)
 
@@ -210,6 +218,15 @@ class MainWindow(MainWindowProtocol):
 
         self._history_panel_impl = HistoryPanel(self._history_tab, self)
         self._history_panel_impl.pack(fill="both", expand=True)
+
+        self._library_panel_impl = LibraryPanel(
+            self._library_tab,
+            stats_provider=self._controller.library_stats,
+            on_check=self._on_check_library,
+            on_requeue=self._on_requeue_missing,
+            on_open_folder=self._on_open_folder,
+        )
+        self._library_panel_impl.pack(fill="both", expand=True)
 
         notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
         self._tk_root.bind("<F1>", lambda _event: self._open_guide_tab())
@@ -279,6 +296,7 @@ class MainWindow(MainWindowProtocol):
             set_output=self._on_set_output,
             open_output_folder=self._on_open_folder,
             export_logs=self._on_export_logs,
+            import_urls=self._on_import_urls,
             clear_thumbnail_cache=self._on_clear_thumbnail_cache,
             close=self._on_close,
             quit=self._on_quit,
@@ -573,6 +591,43 @@ class MainWindow(MainWindowProtocol):
         search_bar.search_var.set(urls[0])
         self._on_search()
 
+    def _on_check_library(self) -> list[str]:
+        missing = self._controller.missing_downloads()
+        self._set_status(t("Missing files: {count}", count=len(missing)))
+        return [entry.title for entry in missing]
+
+    def _on_requeue_missing(self) -> int:
+        added = self._controller.requeue_missing()
+        self._set_status(t("Queued {count} missing download(s)", count=added))
+        self._update_button_states()
+        return added
+
+    def _import_urls_text(self, text: str) -> int:
+        from youmudow.domain.url_batch import parse_url_list
+
+        urls = parse_url_list(text)
+        added = self._controller.enqueue_urls(urls)
+        self._set_status(t("Added {count} link(s) to the queue", count=added))
+        self._update_button_states()
+        return added
+
+    def _on_import_urls(self) -> None:
+        from tkinter import filedialog
+
+        path = filedialog.askopenfilename(
+            title=t("Import URLs"),
+            filetypes=[(t("Text files"), "*.txt *.csv"), (t("All files"), "*.*")],
+        )
+        if not path:
+            return
+        try:
+            with open(path, encoding="utf-8") as handle:
+                text = handle.read()
+        except OSError as exc:
+            self._set_status(t("Could not read the list: {message}", message=exc))
+            return
+        self._import_urls_text(text)
+
     def _on_open_in_browser(self, url: str) -> None:
         webbrowser.open(url)
 
@@ -609,6 +664,9 @@ class MainWindow(MainWindowProtocol):
         history_panel = self._history_panel
         if current == 1 and history_panel is not None:
             history_panel.refresh()
+        library_panel = self._library_panel
+        if current == 2 and library_panel is not None:
+            library_panel.refresh()
 
     # ------------------------------------------------------------------
     # Search flow

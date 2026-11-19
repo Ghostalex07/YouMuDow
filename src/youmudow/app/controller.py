@@ -12,7 +12,7 @@ from typing import Any, Protocol
 from youmudow.app.events import emit_log
 from youmudow.app.state import AppState, StateManager
 from youmudow.domain.formats import estimate_size
-from youmudow.domain.models import Video
+from youmudow.domain.models import HistoryEntry, Video
 from youmudow.domain.validators import is_valid_youtube_url, sanitize_filename
 from youmudow.services.download_service import (
     DownloadEventType,
@@ -20,6 +20,7 @@ from youmudow.services.download_service import (
     DownloadService,
 )
 from youmudow.services.history_service import HistoryService
+from youmudow.services.library_store import LibraryStats
 from youmudow.services.search_service import SearchService
 from youmudow.services.thumbnail_service import ThumbnailService
 
@@ -287,6 +288,65 @@ class AppController:
         for video in self._download_service.queued_videos():
             self._state_manager.add_to_queue(video)
         return restored
+
+    def enqueue_urls(self, urls: list[str]) -> int:
+        """Queue one entry per link, skipping ones already waiting."""
+        existing = {video.url for video in self._state_manager.get_queue()}
+        added = 0
+        for url in urls:
+            if url in existing:
+                continue
+            existing.add(url)
+            self.enqueue(Video(title=url, url=url))
+            added += 1
+        return added
+
+    def library_stats(self) -> LibraryStats:
+        if self._library_store is None:
+            return {
+                "count": 0,
+                "total_bytes": 0,
+                "by_month": [],
+                "by_format": [],
+                "by_uploader": [],
+            }
+        stats: LibraryStats = self._library_store.stats()
+        return stats
+
+    def missing_downloads(self) -> list[HistoryEntry]:
+        return self._library_store.missing_downloads() if self._library_store else []
+
+    def requeue_missing(self) -> int:
+        """Queue the history entries whose file is gone. Returns how many."""
+        added = 0
+        for entry in self.missing_downloads():
+            self.enqueue(
+                Video(
+                    title=entry.title,
+                    url=entry.url,
+                    uploader=entry.uploader,
+                    duration=entry.duration,
+                    thumbnail=entry.thumbnail,
+                )
+            )
+            added += 1
+        return added
+
+    def move_in_queue(self, video: Video, new_index: int) -> bool:
+        moved = self._state_manager.move_in_queue(video, new_index)
+        if moved:
+            self._download_service.move_in_queue(video, new_index)
+        return moved
+
+    def pause_downloads(self) -> None:
+        self._download_service.pause()
+
+    def resume_downloads(self) -> None:
+        self._download_service.resume()
+
+    @property
+    def downloads_paused(self) -> bool:
+        return self._download_service.is_paused
 
     def remove_from_queue(self, video: Video) -> None:
         """Remove a video from the queue, cancelling it if actively downloading.

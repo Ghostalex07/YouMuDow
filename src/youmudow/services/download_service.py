@@ -82,6 +82,7 @@ class DownloadService:
         self._callbacks_lock = threading.Lock()
         self._active_downloads: dict[int, Video] = {}
         self._queue_event = threading.Event()
+        self._paused = threading.Event()
         self._persist_lock = threading.Lock()
         self._queue_thread: threading.Thread | None = None
 
@@ -102,6 +103,26 @@ class DownloadService:
     def max_concurrent(self) -> int:
         with self._lock:
             return self._max_concurrent
+
+    @property
+    def is_paused(self) -> bool:
+        return self._paused.is_set()
+
+    def pause(self) -> None:
+        """Hold the dispatcher: running downloads finish, no new one starts."""
+        self._paused.set()
+
+    def resume(self) -> None:
+        self._paused.clear()
+        self._queue_event.set()
+
+    def move_in_queue(self, video: Video, new_index: int) -> bool:
+        """Reorder a pending entry. Returns whether it moved."""
+        moved = self._queue.move_entry(video, new_index)
+        if moved:
+            self._persist_queue()
+            self._queue_event.set()
+        return moved
 
     def set_max_concurrent(self, value: int) -> None:
         with self._lock:
@@ -417,6 +438,10 @@ class DownloadService:
 
     def _process_queue(self) -> None:
         while self._run_event.is_set():
+            if self._paused.is_set() and self._run_event.is_set():
+                self._queue_event.wait(timeout=0.1)
+                self._queue_event.clear()
+                continue
             if self._queue.is_empty():
                 # Woken by add_to_queue/clear_queue/stop; the timeout is a net.
                 self._queue_event.wait(timeout=0.1)

@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.12.0] - 2026-11-21
+
+### Added
+
+- **Library tab** over the SQLite database: totals, breakdown by format,
+  channel and month, plus "Open folder".
+- **Library check**: lists history entries whose file is gone and
+  "Re-download missing" queues them again in one click.
+- **Import URLs...** (File menu): load a `.txt` or `.csv` list, one link per
+  line, ignoring blanks and `#` comments.
+- **Queue controls**: pause/resume dispatching, drag a row to reorder the
+  pending queue, and "Move to top" in the right-click menu.
+
 ## [1.11.0] - 2026-11-21
 
 ### Added

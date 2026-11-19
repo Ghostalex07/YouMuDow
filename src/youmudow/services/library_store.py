@@ -11,10 +11,20 @@ import sqlite3
 import threading
 from datetime import datetime
 from pathlib import Path
+from typing import TypedDict
 
 from youmudow.domain.models import HistoryEntry
 
 logger = logging.getLogger(__name__)
+
+
+class LibraryStats(TypedDict):
+    count: int
+    total_bytes: int
+    by_month: list[tuple[str, int, int]]
+    by_format: list[tuple[str, int, int]]
+    by_uploader: list[tuple[str, int, int]]
+
 
 MAX_HISTORY = 500
 _RECENT_DUPLICATE_WINDOW = 50
@@ -131,6 +141,47 @@ class LibraryStore:
         with self._lock:
             self._conn.execute("DELETE FROM downloads")
             self._conn.commit()
+
+    # -- statistics and integrity ----------------------------------------
+
+    def stats(self) -> LibraryStats:
+        """Totals and breakdowns for the library panel."""
+        with self._lock:
+            totals = self._conn.execute(
+                "SELECT COUNT(*) AS n, COALESCE(SUM(file_size_bytes), 0) AS size FROM downloads"
+            ).fetchone()
+            by_month = self._conn.execute(
+                "SELECT substr(downloaded_at, 1, 7) AS bucket, COUNT(*) AS n, "
+                "COALESCE(SUM(file_size_bytes), 0) AS size FROM downloads "
+                "GROUP BY bucket ORDER BY bucket DESC"
+            ).fetchall()
+            by_format = self._conn.execute(
+                "SELECT file_format, COUNT(*) AS n, COALESCE(SUM(file_size_bytes), 0) AS size "
+                "FROM downloads GROUP BY file_format ORDER BY size DESC"
+            ).fetchall()
+            by_uploader = self._conn.execute(
+                "SELECT uploader, COUNT(*) AS n, COALESCE(SUM(file_size_bytes), 0) AS size "
+                "FROM downloads GROUP BY uploader ORDER BY size DESC"
+            ).fetchall()
+        return {
+            "count": int(totals["n"]),
+            "total_bytes": int(totals["size"]),
+            "by_month": [(row["bucket"], int(row["n"]), int(row["size"])) for row in by_month],
+            "by_format": [
+                (row["file_format"], int(row["n"]), int(row["size"])) for row in by_format
+            ],
+            "by_uploader": [
+                (row["uploader"], int(row["n"]), int(row["size"])) for row in by_uploader
+            ],
+        }
+
+    def missing_downloads(self) -> list[HistoryEntry]:
+        """History rows whose file is gone or was never recorded."""
+        missing: list[HistoryEntry] = []
+        for entry in self.history():
+            if not entry.output_path or not Path(entry.output_path).is_file():
+                missing.append(entry)
+        return missing
 
     # -- pending queue ----------------------------------------------------
 

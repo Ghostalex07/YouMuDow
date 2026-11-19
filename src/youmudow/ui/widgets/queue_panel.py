@@ -63,6 +63,19 @@ class QueuePanel(tk.Frame):
             qheader, text="0 queued", bg=_c("surface"), fg=_c("text_secondary"), font=FONT["small"]
         )
         self._queue_count_label.pack(side="right", padx=SPACING["sm"])
+        self._pause_btn = tk.Button(
+            qheader,
+            text=t("Pause"),
+            bg=_c("surface"),
+            fg=_c("text"),
+            activebackground=_c("hover"),
+            activeforeground=_c("text"),
+            relief="flat",
+            bd=0,
+            font=FONT["label"],
+            command=self._toggle_pause,
+        )
+        self._pause_btn.pack(side="right", padx=SPACING["xs"])
 
     def _build_tree(self) -> None:
         qcols = ("status", "title", "progress")
@@ -85,6 +98,9 @@ class QueuePanel(tk.Frame):
         self._qscroll = qscroll
         self._queue_tree.bind("<Button-3>", self._on_right_click)
         self._queue_tree.bind("<Delete>", self._on_remove_selected)
+        self._queue_tree.bind("<ButtonPress-1>", self._on_drag_start)
+        self._queue_tree.bind("<B1-Motion>", self._on_drag_motion)
+        self._queue_tree.bind("<ButtonRelease-1>", self._on_drag_end)
 
     @property
     def visible(self) -> bool:
@@ -177,10 +193,7 @@ class QueuePanel(tk.Frame):
                 )
             self._empty_shown = empty
 
-    def _selected_video(self) -> Video | None:
-        selection = self._queue_tree.selection()
-        if not selection:
-            return None
+    def _video_for_item(self, item: str) -> Video | None:
         snapshot = self._mw._controller.state.get_snapshot()
         all_videos = (
             list(snapshot.queue)
@@ -188,8 +201,47 @@ class QueuePanel(tk.Frame):
             + list(snapshot.completed_downloads)
             + list(snapshot.failed_downloads)
         )
-        entry_id = selection[0][1:].split("-", 1)[0]
+        entry_id = item[1:].split("-", 1)[0]
         return next((v for v in all_videos if str(v.queue_id) == entry_id), None)
+
+    def _selected_video(self) -> Video | None:
+        selection = self._queue_tree.selection()
+        if not selection:
+            return None
+        return self._video_for_item(selection[0])
+
+    def _toggle_pause(self) -> None:
+        controller = self._mw._controller
+        if controller.downloads_paused:
+            controller.resume_downloads()
+        else:
+            controller.pause_downloads()
+        self._sync_pause_button()
+
+    def _sync_pause_button(self) -> None:
+        paused = self._mw._controller.downloads_paused
+        self._pause_btn.configure(text=t("Resume") if paused else t("Pause"))
+
+    def _on_drag_start(self, event: tk.Event) -> None:
+        self._drag_item = self._queue_tree.identify_row(event.y)
+
+    def _on_drag_motion(self, event: tk.Event) -> None:
+        item = getattr(self, "_drag_item", "")
+        if not item:
+            return
+        target = self._queue_tree.identify_row(event.y)
+        if target:
+            self._queue_tree.move(item, "", self._queue_tree.index(target))
+
+    def _on_drag_end(self, event: tk.Event) -> None:
+        item = getattr(self, "_drag_item", "")
+        self._drag_item = ""
+        if not item:
+            return
+        video = self._video_for_item(item)
+        if video is None or video.status != DownloadStatus.QUEUED:
+            return
+        self._mw._controller.move_in_queue(video, self._queue_tree.index(item))
 
     def _on_remove_selected(self, _event: tk.Event | None = None) -> None:
         """Delete key: drop the selected row from the queue."""

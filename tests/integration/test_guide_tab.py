@@ -1,3 +1,7 @@
+def _base_tabs() -> int:
+    return 3  # Search, History, Library
+
+
 def test_guide_tab_opens_with_the_documented_sections(stack):
     notebook = stack.window._notebook
     before = len(notebook.tabs())
@@ -14,20 +18,20 @@ def test_guide_tab_opens_with_the_documented_sections(stack):
 def test_opening_the_guide_twice_reuses_the_tab(stack):
     stack.window._open_guide_tab()
     stack.window._open_guide_tab()
-    assert len(stack.window._notebook.tabs()) == 3
+    assert len(stack.window._notebook.tabs()) == _base_tabs() + 1
 
 
 def test_guide_tab_can_be_closed(stack):
     stack.window._open_guide_tab()
     stack.window._close_guide_tab()
-    assert len(stack.window._notebook.tabs()) == 2
+    assert len(stack.window._notebook.tabs()) == _base_tabs()
     assert stack.window._guide_panel is None
 
 
 def test_guide_closes_from_its_own_button(stack):
     stack.window._open_guide_tab()
     stack.window._guide_panel._close_btn.invoke()
-    assert len(stack.window._notebook.tabs()) == 2
+    assert len(stack.window._notebook.tabs()) == _base_tabs()
     assert stack.window._guide_panel is None
 
 

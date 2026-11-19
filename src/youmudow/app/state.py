@@ -139,6 +139,11 @@ class StateManager:
             self._queue.add(video)
         self._notify_change()
 
+    def move_in_queue(self, video: Video, new_index: int) -> bool:
+        """Reorder a pending entry. Returns whether it moved."""
+        with self._lock:
+            return self._queue.move_entry(video, new_index)
+
     def remove_from_queue(self, video: Video) -> None:
         """Remove a video from the queue, or from the finished lists.
 
