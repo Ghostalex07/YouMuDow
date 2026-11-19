@@ -6,6 +6,7 @@ import webbrowser
 from tkinter import messagebox, ttk
 
 from youmudow.domain.models import HistoryEntry
+from youmudow.i18n import t
 from youmudow.ui.protocols import MainWindowProtocol
 from youmudow.ui.styles.constants import FONT, SPACING, _c
 from youmudow.ui.widgets.components.empty_state import EmptyState
@@ -42,7 +43,7 @@ class HistoryPanel(tk.Frame):
 
         clear_btn = tk.Button(
             search_frame,
-            text="Clear History",
+            text=t("Clear History"),
             bg=_c("error"),
             fg="#FFFFFF",
             activebackground=_c("warning"),
@@ -67,10 +68,10 @@ class HistoryPanel(tk.Frame):
             selectmode="browse",
             style="Modern.Treeview",
         )
-        self._tree.heading("title", text="TITLE")
+        self._tree.heading("title", text=t("TITLE"))
         self._tree.heading("format", text="FORMAT")
-        self._tree.heading("date", text="DATE")
-        self._tree.heading("size", text="SIZE")
+        self._tree.heading("date", text=t("DATE"))
+        self._tree.heading("size", text=t("SIZE"))
         self._tree.column("title", width=320, minwidth=150)
         self._tree.column("format", width=70, minwidth=50)
         self._tree.column("date", width=140, minwidth=100)

@@ -11,6 +11,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import ttk
 
+from youmudow.i18n import t
 from youmudow.ui.typed import configure_widget
 
 logger = logging.getLogger(__name__)
@@ -117,7 +118,7 @@ class LogTerminal(ttk.Frame):
 
         clear_btn = tk.Button(
             toolbar,
-            text="Clear",
+            text=t("Clear"),
             bg=c["background"],
             fg=c["foreground"],
             activebackground=c["separator"],
@@ -149,7 +150,7 @@ class LogTerminal(ttk.Frame):
         self._auto_scroll_var = tk.BooleanVar(value=True)
         auto_scroll_check = tk.Checkbutton(
             toolbar,
-            text="Auto-scroll",
+            text=t("Auto-scroll"),
             bg=c["background"],
             fg=c["foreground"],
             activebackground=c["background"],

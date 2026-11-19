@@ -4,6 +4,7 @@ import tkinter as tk
 from collections.abc import Callable
 from tkinter import ttk
 
+from youmudow.i18n import get_language, t
 from youmudow.ui.styles.constants import FONT, SPACING, _c
 
 GUIDE_SECTIONS: tuple[tuple[str, str], ...] = (
@@ -102,6 +103,113 @@ GUIDE_SECTIONS: tuple[tuple[str, str], ...] = (
 )
 
 
+GUIDE_SECTIONS_ES: tuple[tuple[str, str], ...] = (
+    (
+        "Buscar",
+        (
+            "Escribe un nombre en la barra de búsqueda y pulsa Enter, o pega el "
+            "enlace de un vídeo, una lista o un canal. Los resultados aparecen "
+            "como tarjetas a la izquierda; al hacer clic en una se rellena el "
+            "panel de detalle de la derecha. También puedes arrastrar un enlace "
+            "desde el navegador hasta la ventana para buscarlo."
+        ),
+    ),
+    (
+        "Listas y canales",
+        (
+            "Pega el enlace de una lista, un @usuario o la URL de un canal (con o "
+            "sin /videos, /shorts o /streams). La primera página carga tantas "
+            "entradas como indique el límite de lista (1-500, 50 por defecto). Usa "
+            "Cargar más para añadir la siguiente página; si la página llega "
+            "incompleta, la lista se ha terminado y el botón se desactiva. Añadir "
+            "todo encola todas las entradas cargadas hasta ese momento."
+        ),
+    ),
+    (
+        "Formatos y perfiles",
+        (
+            "Elige el formato y la calidad de salida, o selecciona un perfil: "
+            "Música 320 (MP3), Vídeo 1080 (MP4) o Archivo FLAC. Si cambias "
+            "cualquier opción a mano, el perfil vuelve a Personalizado. Los "
+            "perfiles no tocan la carpeta de destino, las cookies ni el límite de "
+            "velocidad."
+        ),
+    ),
+    (
+        "Vista previa antes de descargar",
+        (
+            "Al seleccionar un resultado se muestran el canal, la duración y el "
+            "tamaño estimado para el formato elegido. La estimación se recalcula "
+            "al cambiar formato o calidad, y es solo eso, una estimación: el "
+            "tamaño real depende del origen."
+        ),
+    ),
+    (
+        "Cola, descargas simultáneas y reintentos",
+        (
+            "Añade el vídeo seleccionado, o usa Descargar para saltarte la cola. "
+            "El panel de cola muestra las entradas pendientes, activas y "
+            "terminadas. Las descargas simultáneas son configurables; las que "
+            "fallan se reintentan con una espera creciente (2 reintentos por "
+            "defecto, de 0 a 5) y cancelar durante la espera la detiene al "
+            "instante. La cola pendiente se guarda y se restaura la próxima vez "
+            "que abras la app. Ctrl+Shift+S inicia la cola y Supr quita la fila "
+            "seleccionada del panel de cola."
+        ),
+    ),
+    (
+        "Subtítulos y capítulos",
+        (
+            "Activa los subtítulos y elige la lista de idiomas (por ejemplo "
+            "es,en), con la opción de incrustarlos. Dividir por capítulos escribe "
+            "un fichero por capítulo e incrusta las marcas de capítulo cuando el "
+            "formato lo permite."
+        ),
+    ),
+    (
+        "Cookies y límite de velocidad",
+        (
+            "Los vídeos privados o con restricción de edad pueden necesitar "
+            "cookies: léelas desde el perfil de un navegador compatible o desde un "
+            "fichero cookies.txt en formato Netscape. El límite de velocidad "
+            "acepta la sintaxis de yt-dlp, por ejemplo 500K o 2M."
+        ),
+    ),
+    (
+        "Bandeja del sistema",
+        (
+            "Ver > Seguir en la bandeja mantiene la cola viva al cerrar la "
+            "ventana, con Mostrar, Iniciar descargas y Salir. Salir usa el mismo "
+            "cierre que Archivo > Salir, así que los ajustes se guardan. En Linux "
+            "la bandeja necesita un host de notificaciones de estado."
+        ),
+    ),
+    (
+        "Registro y diagnóstico",
+        (
+            "El modo depuración muestra el panel de registro con la salida de "
+            "yt-dlp. Archivo > Exportar registro lo guarda. Ayuda > Exportar "
+            "diagnóstico escribe versión, plataforma, yt-dlp, ffmpeg, entorno de "
+            "YouTube, la configuración redactada y el final del registro en un "
+            "único fichero que puedes adjuntar a un informe de error."
+        ),
+    ),
+    (
+        "Línea de comandos",
+        (
+            "youmudow-cli download <url> --format mp3 --output DIR descarga sin "
+            "abrir la ventana; --limit N decide cuántas entradas de una lista se "
+            "toman. youmudow-cli search <consulta> lista las coincidencias."
+        ),
+    ),
+)
+
+
+def guide_sections() -> tuple[tuple[str, str], ...]:
+    """The guide in the active language."""
+    return GUIDE_SECTIONS_ES if get_language() == "es" else GUIDE_SECTIONS
+
+
 class GuidePanel(tk.Frame):
     """Scrollable, read-only guide with a close button."""
 
@@ -117,7 +225,7 @@ class GuidePanel(tk.Frame):
 
         tk.Label(
             header,
-            text="User Guide",
+            text=t("User Guide"),
             bg=_c("bg"),
             fg=_c("text"),
             font=FONT["h1"],
@@ -125,7 +233,7 @@ class GuidePanel(tk.Frame):
 
         self._close_btn = tk.Button(
             header,
-            text="Close",
+            text=t("Close"),
             command=on_close,
             bg=_c("surface"),
             fg=_c("text"),
@@ -163,7 +271,7 @@ class GuidePanel(tk.Frame):
 
         self._text.tag_configure("title", font=FONT["h1"], spacing3=SPACING["xs"])
         self._text.tag_configure("body", font=FONT["body"], spacing3=SPACING["md"])
-        for title, text in GUIDE_SECTIONS:
+        for title, text in guide_sections():
             self._text.insert("end", f"{title}\n", "title")
             self._text.insert("end", f"{text}\n", "body")
         self._text.configure(state="disabled")

@@ -7,6 +7,7 @@ from tkinter import ttk
 from youmudow.app.state import AppStateData
 from youmudow.domain.enums import DownloadStatus
 from youmudow.domain.models import Video
+from youmudow.i18n import t
 from youmudow.ui.protocols import MainWindowProtocol
 from youmudow.ui.styles.constants import FONT, SPACING, _c
 from youmudow.ui.typed import setattr_any
@@ -56,7 +57,7 @@ class QueuePanel(tk.Frame):
         setattr_any(qheader, "_bg_key", "surface")
         qheader.pack(fill="x", pady=(SPACING["sm"], SPACING["xs"]))
         tk.Label(
-            qheader, text="QUEUE", bg=_c("surface"), fg=_c("text_secondary"), font=FONT["label"]
+            qheader, text=t("QUEUE"), bg=_c("surface"), fg=_c("text_secondary"), font=FONT["label"]
         ).pack(side="left", padx=SPACING["sm"])
         self._queue_count_label = tk.Label(
             qheader, text="0 queued", bg=_c("surface"), fg=_c("text_secondary"), font=FONT["small"]
@@ -68,9 +69,9 @@ class QueuePanel(tk.Frame):
         self._queue_tree = ttk.Treeview(
             self, columns=qcols, show="headings", height=5, style="Modern.Treeview"
         )
-        self._queue_tree.heading("status", text="STATUS")
-        self._queue_tree.heading("title", text="TITLE")
-        self._queue_tree.heading("progress", text="PROGRESS")
+        self._queue_tree.heading("status", text=t("STATUS"))
+        self._queue_tree.heading("title", text=t("TITLE"))
+        self._queue_tree.heading("progress", text=t("PROGRESS"))
         self._queue_tree.column("status", width=100)
         self._queue_tree.column("title", width=300)
         self._queue_tree.column("progress", width=80)
@@ -206,7 +207,8 @@ class QueuePanel(tk.Frame):
             return
         menu = tk.Menu(self._mw._root, tearoff=0, bg=_c("surface"), fg=_c("text"))
         menu.add_command(
-            label="Remove from queue", command=lambda: self._mw._controller.remove_from_queue(video)
+            label=t("Remove from queue"),
+            command=lambda: self._mw._controller.remove_from_queue(video),
         )
-        menu.add_command(label="Open in browser", command=lambda: webbrowser.open(video.url))
+        menu.add_command(label=t("Open in browser"), command=lambda: webbrowser.open(video.url))
         menu.tk_popup(event.x_root, event.y_root)

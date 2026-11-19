@@ -23,7 +23,9 @@ from youmudow.app.state import AppMode, AppState, AppStateData
 from youmudow.domain.enums import DownloadStatus
 from youmudow.domain.models import Video
 from youmudow.domain.validators import is_playlist_url, is_supported_url
+from youmudow.i18n import t
 from youmudow.paths import cache_dir
+from youmudow.services.app_update_service import check_for_update
 from youmudow.services.thumbnail_cache import ThumbnailCache
 from youmudow.services.thumbnail_loader import ThumbnailLoader
 from youmudow.services.thumbnail_service import ThumbnailService
@@ -129,6 +131,7 @@ class MainWindow(MainWindowProtocol):
         if run_startup_checks:
             self._tk_root.after(500, self._check_clipboard_on_start)
             self._tk_root.after(3000, self._check_ytdlp_on_start)
+            self._tk_root.after(4000, self._check_updates_on_start)
         try:
             from youmudow.ui.icon import get_icon_image
 
@@ -139,7 +142,7 @@ class MainWindow(MainWindowProtocol):
             logger.debug("Could not set window icon: %s", e)
         self._tk_root.deiconify()
         if self._restored_count:
-            self._set_status(f"Restored {self._restored_count} download(s)")
+            self._set_status(t("Restored {count} download(s)", count=self._restored_count))
 
     # ------------------------------------------------------------------
     # Protocol surface
@@ -269,6 +272,9 @@ class MainWindow(MainWindowProtocol):
         self._debug_var = tk.BooleanVar(value=self._debug_mode)
         tray_enabled = bool(self._config.get("minimize_to_tray", False)) if self._config else False
         self._tray_var = tk.BooleanVar(value=tray_enabled)
+        language = self._config.get_str("language", "auto") if self._config else "auto"
+        self._language_var = tk.StringVar(value=language)
+        self._update_url: str | None = None
         callbacks = MenuCallbacks(
             set_output=self._on_set_output,
             open_output_folder=self._on_open_folder,
@@ -286,9 +292,40 @@ class MainWindow(MainWindowProtocol):
             repair_youtube=self._on_repair_youtube,
             show_ytdlp_version=self._on_show_ytdlp_version,
             export_diagnostics=self._on_export_diagnostics,
+            download_update=self._on_download_update,
+            set_language=self._on_set_language,
             about=self._on_about,
         )
-        self._menubar = create_menubar(self._tk_root, callbacks, self._debug_var, self._tray_var)
+        self._menubar = create_menubar(
+            self._tk_root, callbacks, self._debug_var, self._tray_var, self._language_var
+        )
+
+    def _on_set_language(self, code: str) -> None:
+        if self._config is None:
+            return
+        self._config.set("language", code)
+        self._config.save()
+        self._set_status(t("Restart to apply"))
+
+    def _on_download_update(self) -> None:
+        if self._update_url:
+            webbrowser.open(self._update_url)
+
+    def _on_update_available(self, info: object) -> None:
+        version = getattr(info, "version", "")
+        self._update_url = getattr(info, "url", None)
+        self._set_status(t("Update {version} available", version=version))
+
+    def _check_updates_on_start(self) -> None:
+        if self._config is None or not self._config.get("check_for_updates", True):
+            return
+
+        def worker() -> None:
+            info = check_for_update(__version__)
+            if info is not None:
+                self._schedule(self._on_update_available, info)
+
+        threading.Thread(target=worker, name="update-check", daemon=True).start()
 
     def _update_debug_visibility(self) -> None:
         paned_window = self._paned_window
@@ -381,13 +418,13 @@ class MainWindow(MainWindowProtocol):
                 results_cards.select(0, notify=False)
                 results_cards.focus_set()
                 self._load_formats_for(results[0])
-                self._set_status(f"Found: {results[0].title}")
+                self._set_status(t("Found: {title}", title=results[0].title))
             else:
-                self._set_status("No results found")
+                self._set_status(t("No results found"))
             self._update_button_states()
         except Exception as e:
             logger.exception("Search handler failed")
-            self._set_status(f"Error: {e}")
+            self._set_status(t("Error: {message}", message=e))
 
     def _schedule_formats(self, video: Video) -> None:
         """Coalesce rapid selections into one lookup, so arrowing down a list
@@ -413,9 +450,9 @@ class MainWindow(MainWindowProtocol):
     def _on_download_complete(self, video: Video) -> None:
         if video.status is DownloadStatus.ERROR:
             reason = video.error_message or "Download failed"
-            self._set_status(f"Error: {video.title} — {reason}")
+            self._set_status(t("Error: {title} — {reason}", title=video.title, reason=reason))
         else:
-            self._set_status(f"Downloaded: {video.title}")
+            self._set_status(t("Downloaded: {title}", title=video.title))
         self._update_button_states()
 
     def _setup_state_observer(self) -> None:
@@ -437,7 +474,7 @@ class MainWindow(MainWindowProtocol):
 
         if snapshot.state is AppState.SEARCHING:
             self._is_searching = True
-            self._set_status("Searching...")
+            self._set_status(t("Searching..."))
         elif snapshot.state is AppState.DOWNLOADING:
             self._is_searching = False
             if snapshot.active_downloads:
@@ -450,14 +487,19 @@ class MainWindow(MainWindowProtocol):
                     else ""
                 )
                 eta_info = f" · ETA {active.eta}" if active.eta and active.eta != "00:00" else ""
-                self._set_status(f"Downloading: {active.progress:.1f}%{speed_info}{eta_info}")
+                self._set_status(
+                    t(
+                        "Downloading: {percent}",
+                        percent=f"{active.progress:.1f}%{speed_info}{eta_info}",
+                    )
+                )
                 if status_bar is not None:
                     status_bar.set_progress_color(_c("primary"))
             else:
                 if status_bar is not None:
                     status_bar.progress_var.set(0)
                     status_bar.set_progress_color(_c("primary"))
-                self._set_status("Downloading...")
+                self._set_status(t("Downloading..."))
         elif snapshot.state is AppState.ERROR:
             search_failed = self._is_searching
             self._is_searching = False
@@ -467,7 +509,9 @@ class MainWindow(MainWindowProtocol):
                 if results_cards is not None:
                     results_cards.clear_results()
             self._set_status(
-                f"Error: {snapshot.error_message}" if snapshot.error_message else "Error occurred"
+                t("Error: {message}", message=snapshot.error_message)
+                if snapshot.error_message
+                else t("Error occurred")
             )
             if status_bar is not None:
                 status_bar.progress_var.set(0)
@@ -475,7 +519,7 @@ class MainWindow(MainWindowProtocol):
         else:
             self._is_searching = False
             self._is_downloading = False
-            self._set_status("Ready" if snapshot.state is AppState.IDLE else snapshot.state.name)
+            self._set_status(t("Ready") if snapshot.state is AppState.IDLE else snapshot.state.name)
             if not snapshot.active_downloads and status_bar is not None:
                 status_bar.progress_var.set(0)
                 status_bar.set_progress_color(_c("border"))
@@ -516,7 +560,7 @@ class MainWindow(MainWindowProtocol):
             if detail_panel is not None:
                 detail_panel.update_detail_panel(selected[0])
             self._schedule_formats(selected[0])
-            self._set_status(f"{len(selected)} selected")
+            self._set_status(t("{count} selected", count=len(selected)))
         else:
             self._selected_video_impl = None
         self._update_button_states()
@@ -524,7 +568,7 @@ class MainWindow(MainWindowProtocol):
     def _accept_dropped_urls(self, urls: list[str]) -> None:
         search_bar = self._search_bar
         if not urls or search_bar is None:
-            self._set_status("Drop a supported link to search it")
+            self._set_status(t("Drop a supported link to search it"))
             return
         search_bar.search_var.set(urls[0])
         self._on_search()
@@ -580,7 +624,7 @@ class MainWindow(MainWindowProtocol):
             return
 
         self._is_searching = True
-        self._set_status("Searching...")
+        self._set_status(t("Searching..."))
         self._update_button_states()
         results_cards.is_playlist = False
         results_cards.playlist_videos = []
@@ -604,19 +648,19 @@ class MainWindow(MainWindowProtocol):
             self._controller.search(query)
 
     def _handle_url_input(self, url: str) -> None:
-        self._set_status("Fetching video info...")
+        self._set_status(t("Fetching video info..."))
         self._controller.search_url(url)
 
     def _on_cancel_download(self) -> None:
         self._controller.stop_downloads()
         self._is_downloading = False
-        self._set_status("Downloads stopped")
+        self._set_status(t("Downloads stopped"))
         self._update_button_states()
 
     def _on_cancel_search(self) -> None:
         self._controller.cancel_search()
         self._is_searching = False
-        self._set_status("Search cancelled")
+        self._set_status(t("Search cancelled"))
         self._update_button_states()
 
     def _handle_playlist_input(self, url: str) -> None:
@@ -689,9 +733,9 @@ class MainWindow(MainWindowProtocol):
             if detail_panel is not None:
                 detail_panel.update_detail_panel(videos[0])
             self._load_formats_for(videos[0])
-            self._set_status(f"Playlist: {len(videos)} videos")
+            self._set_status(t("Playlist: {count} videos", count=len(videos)))
         else:
-            self._set_status("Failed to fetch playlist")
+            self._set_status(t("Failed to fetch playlist"))
         self._is_searching = False
         self._update_button_states()
 
@@ -730,18 +774,18 @@ class MainWindow(MainWindowProtocol):
         if cache is None:
             return
         cache.clear()
-        self._set_status("Thumbnail cache cleared")
+        self._set_status(t("Thumbnail cache cleared"))
 
     def _on_open_folder(self) -> None:
         path = self._controller.get_output_path()
         if not open_output_folder(path):
-            self._set_status(f"Output: {path}")
+            self._set_status(t("Output: {path}", path=path))
 
     def _on_set_output(self) -> None:
         folder = choose_output_folder()
         if folder:
             self._controller.set_output_path(Path(folder))
-            self._set_status(f"Output: {folder}")
+            self._set_status(t("Output: {path}", path=folder))
 
     # ------------------------------------------------------------------
     # Downloads and queue
@@ -763,7 +807,7 @@ class MainWindow(MainWindowProtocol):
                 video.options = copy.copy(opts)
             self._controller.enqueue_multiple(selected)
             self._controller.start_downloads()
-            self._set_status(f"Downloading {len(selected)} videos...")
+            self._set_status(t("Downloading {count} videos...", count=len(selected)))
             return
 
         if results_cards.is_playlist and results_cards.playlist_videos:
@@ -778,7 +822,7 @@ class MainWindow(MainWindowProtocol):
         detail_panel.apply_options_to_video(target_video)
         self._controller.enqueue(target_video)
         self._controller.start_downloads()
-        self._set_status(f"Downloading: {target_video.title}")
+        self._set_status(t("Downloading: {title}", title=target_video.title))
 
     def _on_start_queue(self) -> None:
         if self._is_downloading:
@@ -786,11 +830,11 @@ class MainWindow(MainWindowProtocol):
         self._is_downloading = True
         self._update_button_states()
         self._controller.start_downloads()
-        self._set_status("Starting downloads...")
+        self._set_status(t("Starting downloads..."))
 
     def _on_clear_queue(self) -> None:
         self._controller.clear_queue()
-        self._set_status("Queue cleared")
+        self._set_status(t("Queue cleared"))
 
     # ------------------------------------------------------------------
     # Theme
@@ -848,7 +892,7 @@ class MainWindow(MainWindowProtocol):
         if not path:
             return
         destination = Path(path)
-        self._set_status("Writing diagnostics...")
+        self._set_status(t("Writing diagnostics..."))
 
         def write() -> None:
             # The report shells out to yt-dlp and ffmpeg: never on the Tk thread.
@@ -858,7 +902,7 @@ class MainWindow(MainWindowProtocol):
                 logger.exception("Could not export diagnostics")
                 self._schedule(self._set_status, f"Could not save diagnostics: {e}")
                 return
-            self._schedule(self._set_status, f"Diagnostics saved to {saved}")
+            self._schedule(self._set_status, t("Diagnostics saved to {path}", path=saved))
 
         threading.Thread(target=write, name="diagnostics-export", daemon=True).start()
 

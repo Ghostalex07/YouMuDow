@@ -7,6 +7,7 @@ import tkinter as tk
 from youmudow.app.state import AppStateData
 from youmudow.domain.models import DownloadOptions, Video
 from youmudow.domain.sizes import format_size
+from youmudow.i18n import t
 from youmudow.services.thumbnail_loader import ThumbnailLoader
 from youmudow.ui.protocols import MainWindowProtocol
 from youmudow.ui.styles.constants import FONT, SPACING, _c, add_hover_effect
@@ -76,7 +77,7 @@ class DetailPanel(tk.Frame):
         row_title.pack(fill="x", pady=(0, SPACING["xs"]))
         tk.Label(
             row_title,
-            text="Title:",
+            text=t("Title:"),
             bg=_c("surface"),
             fg=_c("text_secondary"),
             font=FONT["small"],
@@ -99,7 +100,7 @@ class DetailPanel(tk.Frame):
         row_uploader.pack(fill="x", pady=(0, SPACING["sm"]))
         tk.Label(
             row_uploader,
-            text="Uploader:",
+            text=t("Uploader:"),
             bg=_c("surface"),
             fg=_c("text_secondary"),
             font=FONT["small"],
@@ -128,7 +129,7 @@ class DetailPanel(tk.Frame):
     def _build_action_buttons(self) -> None:
         self._download_btn = tk.Button(
             self,
-            text="Download",
+            text=t("Download"),
             bg=_c("primary"),
             fg="#FFFFFF",
             activebackground=_c("secondary"),
@@ -157,7 +158,7 @@ class DetailPanel(tk.Frame):
 
         self._open_folder_btn = tk.Button(
             btn_row,
-            text="Open Folder",
+            text=t("Open Folder"),
             bg=_c("surface"),
             fg=_c("text"),
             activebackground=_c("hover"),
@@ -183,7 +184,7 @@ class DetailPanel(tk.Frame):
 
         self._load_more_btn = tk.Button(
             btn_row,
-            text="Load more",
+            text=t("Load more"),
             bg=_c("surface"),
             fg=_c("text"),
             activebackground=_c("hover"),
@@ -211,7 +212,7 @@ class DetailPanel(tk.Frame):
 
         self._add_all_btn = tk.Button(
             btn_row,
-            text="Add All",
+            text=t("Add All"),
             bg=_c("surface"),
             fg=_c("text"),
             activebackground=_c("hover"),
@@ -237,7 +238,7 @@ class DetailPanel(tk.Frame):
 
         self._queue_toggle_btn = tk.Button(
             btn_row,
-            text="Queue",
+            text=t("Queue"),
             bg=_c("surface"),
             fg=_c("text"),
             activebackground=_c("hover"),
@@ -317,7 +318,7 @@ class DetailPanel(tk.Frame):
             for video in selected:
                 video.options = copy.copy(opts)
             self._mw._controller.enqueue_multiple(selected)
-            self._mw._set_status(f"Added {len(selected)} to queue")
+            self._mw._set_status(t("Added {count} to queue", count=len(selected)))
             return
         if cards.is_playlist and cards.playlist_videos:
             return
@@ -326,7 +327,7 @@ class DetailPanel(tk.Frame):
             return
         self.apply_options_to_video(selected_video)
         self._mw._controller.enqueue(selected_video)
-        self._mw._set_status(f"Added to queue: {selected_video.title}")
+        self._mw._set_status(t("Added to queue: {title}", title=selected_video.title))
 
     def update_button_states(self, is_searching: bool, is_downloading: bool) -> None:
         is_busy = is_searching or is_downloading
@@ -379,8 +380,8 @@ class DetailPanel(tk.Frame):
         for video in videos:
             video.options = copy.copy(opts)
         self._mw._controller.enqueue_multiple(videos)
-        self._mw._set_status(f"Added {len(videos)} videos to queue")
+        self._mw._set_status(t("Added {count} videos to queue", count=len(videos)))
 
     def _toggle_queue_panel(self) -> None:
         self.queue.toggle()
-        self._queue_toggle_btn.configure(text="Queue")
+        self._queue_toggle_btn.configure(text=t("Queue"))
