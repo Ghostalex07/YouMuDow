@@ -1,9 +1,12 @@
 """Download service: worker pool, dispatch loop and lifecycle management."""
 
+import json
 import logging
+import sqlite3
 import threading
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from youmudow.adapters.ytdlp_adapter import ProgressCallback, YtdlpAdapter
 from youmudow.domain.enums import DownloadStatus
@@ -23,7 +26,7 @@ from youmudow.services.download_queue import (
     is_same_video,
 )
 from youmudow.services.download_worker import DownloadWorker, _format_speed
-from youmudow.services.queue_store import load_queue, save_queue
+from youmudow.services.queue_store import load_queue, save_queue, video_from_dict, video_to_dict
 
 __all__ = [
     "DownloadEvent",
@@ -57,8 +60,10 @@ class DownloadService:
         max_concurrent: int = 1,
         max_retries: int = 0,
         queue_file: Path | None = None,
+        library_store: Any | None = None,
     ) -> None:
         self._adapter = adapter or YtdlpAdapter()
+        self._library_store = library_store
         self._max_retries = max(0, max_retries)
         self._log_callback = None
         self._sync_adapter_retries()
@@ -177,7 +182,7 @@ class DownloadService:
         every enqueue, so a playlist of fifty shows fifty writes; the thread
         coalesces them into one.
         """
-        if self._queue_file is None:
+        if self._queue_file is None and self._library_store is None:
             return
         self._persist_dirty = True
         if self._persist_thread is None or not self._persist_thread.is_alive():
@@ -196,15 +201,22 @@ class DownloadService:
 
     def _flush_queue(self) -> None:
         with self._persist_lock:
-            if not self._persist_dirty or self._queue_file is None:
+            if not self._persist_dirty:
+                return
+            if self._queue_file is None and self._library_store is None:
                 return
             # Snapshot under the lock: the dispatcher can drop entries while the
             # file is being written.
             videos = list(self._queue.peek())
             self._persist_dirty = False
         try:
-            save_queue(self._queue_file, videos)
-        except OSError as exc:
+            if self._library_store is not None:
+                self._library_store.replace_queue(
+                    [json.dumps(video_to_dict(video)) for video in videos]
+                )
+            elif self._queue_file is not None:
+                save_queue(self._queue_file, videos)
+        except (OSError, sqlite3.Error) as exc:
             logger.debug("Could not persist the queue: %s", exc)
 
     def flush_queue(self) -> None:
@@ -217,10 +229,18 @@ class DownloadService:
 
     def restore_queue(self) -> int:
         """Re-add the videos left in the queue file by the previous session."""
-        if self._queue_file is None:
+        if self._library_store is not None:
+            videos = []
+            for payload in self._library_store.queue_payloads():
+                parsed = video_from_dict(json.loads(payload))
+                if parsed is not None:
+                    videos.append(parsed)
+        elif self._queue_file is not None:
+            videos = load_queue(self._queue_file)
+        else:
             return 0
         restored = 0
-        for video in load_queue(self._queue_file):
+        for video in videos:
             if self._is_known(video):
                 continue
             self._queue.add(video)

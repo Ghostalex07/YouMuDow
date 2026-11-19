@@ -1473,3 +1473,18 @@ def test_set_max_retries_clamps_to_the_supported_range(tmp_path):
     assert service.max_retries == 5
     service.set_max_retries(-4)
     assert service.max_retries == 0
+
+
+def test_queue_persists_through_the_library_store(tmp_path):
+    from youmudow.services.library_store import LibraryStore
+
+    store = LibraryStore(tmp_path / "lib.db")
+    service = DownloadService(adapter=Mock(), default_output_path=tmp_path, library_store=store)
+    service.add_to_queue(Video(title="A", url="https://x.test/a"))
+    service.flush_queue()
+    assert len(store.queue_payloads()) == 1
+
+    restarted = DownloadService(adapter=Mock(), default_output_path=tmp_path, library_store=store)
+    assert restarted.restore_queue() == 1
+    assert restarted.queued_videos()[0].title == "A"
+    store.close()

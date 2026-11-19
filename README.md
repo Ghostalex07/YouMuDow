@@ -112,6 +112,7 @@ Settings live in the OS config directory as JSON:
 | `config.json` | format, quality, output folder, `playlist_limit`, `max_retries`, `minimize_to_tray`, theme, cookies, search history |
 | `queue.json` | the pending queue, restored on the next start |
 | `history.json` | download history |
+| `youmudow.db` | SQLite library: history, pending queue, subscriptions |
 | `youmudow.log` | application log |
 
 On Linux that is `~/.config/youmudow`, on Windows `%APPDATA%\YouMuDow`, on

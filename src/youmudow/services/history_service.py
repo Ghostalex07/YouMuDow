@@ -8,6 +8,7 @@ from pathlib import Path
 
 from youmudow.domain.models import HistoryEntry, Video
 from youmudow.paths import config_dir
+from youmudow.services.library_store import LibraryStore
 from youmudow.services.persistence import backup_corrupt, write_atomic
 
 logger = logging.getLogger(__name__)
@@ -17,10 +18,14 @@ MAX_HISTORY = 500
 
 
 class HistoryService:
-    def __init__(self) -> None:
+    def __init__(self, store: LibraryStore | None = None) -> None:
         self._lock = threading.Lock()
         self._entries: list[HistoryEntry] = []
-        self._load()
+        self._store = store
+        if store is None:
+            self._load()
+        else:
+            store.import_history_json(HISTORY_FILE)
 
     def _load(self) -> None:
         try:
@@ -65,6 +70,9 @@ class HistoryService:
             thumbnail=video.thumbnail or "",
             file_size_bytes=file_size_bytes,
         )
+        if self._store is not None:
+            self._store.add_history(entry)
+            return
         with self._lock:
             recent_urls = {e.url for e in self._entries[:50]}
             if entry.url not in recent_urls:
@@ -74,10 +82,15 @@ class HistoryService:
                 self._save()
 
     def get_all(self) -> list[HistoryEntry]:
+        if self._store is not None:
+            return self._store.history()
         with self._lock:
             return list(self._entries)
 
     def remove(self, entry: HistoryEntry) -> None:
+        if self._store is not None:
+            self._store.remove_history(entry)
+            return
         with self._lock:
             try:
                 self._entries.remove(entry)
@@ -86,11 +99,18 @@ class HistoryService:
                 pass
 
     def clear(self) -> None:
+        if self._store is not None:
+            self._store.clear_history()
+            return
         with self._lock:
             self._entries = []
             self._save()
 
     def search(self, query: str) -> list[HistoryEntry]:
         q = query.lower()
+        if self._store is not None:
+            return [
+                e for e in self._store.history() if q in e.title.lower() or q in e.uploader.lower()
+            ]
         with self._lock:
             return [e for e in self._entries if q in e.title.lower() or q in e.uploader.lower()]
