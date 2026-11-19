@@ -20,6 +20,7 @@ from youmudow.domain.validators import (
     SUPPORTED_QUALITIES,
     is_valid_rate_limit,
 )
+from youmudow.i18n import t
 from youmudow.ui.protocols import MainWindowProtocol
 from youmudow.ui.styles.constants import FONT, SPACING, _c, add_hover_effect
 from youmudow.ui.typed import setattr_any
@@ -74,7 +75,7 @@ class OptionsPanel:
 
         self._detail_toggle_btn = tk.Button(
             header_frame,
-            text="OPTIONS",
+            text=t("OPTIONS"),
             bg=_c("bg"),
             fg=_c("text_secondary"),
             font=FONT["label"],
@@ -93,7 +94,7 @@ class OptionsPanel:
     def _build_retry_button(self, parent: tk.Widget) -> None:
         self._retry_btn = tk.Button(
             parent,
-            text="Retry",
+            text=t("Retry"),
             bg=_c("warning"),
             fg="#000000",
             activebackground=_c("warning"),
@@ -401,7 +402,7 @@ class OptionsPanel:
         """Options currently selected, or ``None`` when validation fails."""
         rate = self._rate_limit_var.get().strip()
         if rate and not is_valid_rate_limit(rate):
-            self._mw._set_status("Invalid rate limit. Use format: 1M, 500K, 2G")
+            self._mw._set_status(t("Invalid rate limit. Use format: 1M, 500K, 2G"))
             return None
         opts = DownloadOptions(
             file_format=self._format_var.get(),
@@ -563,12 +564,12 @@ class OptionsPanel:
         """Expand or collapse the options body."""
         if self._options_frame.winfo_ismapped():
             self._options_frame.pack_forget()
-            self._detail_toggle_btn.configure(text="OPTIONS")
+            self._detail_toggle_btn.configure(text=t("OPTIONS"))
         else:
             self._options_frame.pack(
                 fill="both", expand=True, padx=SPACING["md"], pady=(0, SPACING["md"])
             )
-            self._detail_toggle_btn.configure(text="OPTIONS")
+            self._detail_toggle_btn.configure(text=t("OPTIONS"))
 
     # ------------------------------------------------------------------
     # Callbacks

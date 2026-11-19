@@ -30,6 +30,10 @@ A modern music & video downloader with real-time progress, persistent configurat
   status-notifier host on Linux)
 - `Help > Export Diagnostics...` writes version, ffmpeg, environment and a
   redacted config into one file for support
+- English and Spanish interface, switchable in `View > Language` (automatic by
+  default, following your system language); the in-app guide is translated too
+- Checks GitHub for a newer release on startup and points you at it
+  (`Help > Download Update...`); switch it off with `"check_for_updates": false`
 - Built-in user guide: `View > User Guide` (or `F1`) opens a closable tab that
   documents search, playlists, formats, queue, tray and diagnostics
 - Light/Dark theme, persistent configuration

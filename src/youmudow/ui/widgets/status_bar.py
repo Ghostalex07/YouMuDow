@@ -2,6 +2,7 @@
 
 import tkinter as tk
 
+from youmudow.i18n import t
 from youmudow.ui.protocols import MainWindowProtocol
 from youmudow.ui.styles.constants import FONT, SPACING, _c
 from youmudow.ui.typed import setattr_any
@@ -15,7 +16,7 @@ class StatusBar(tk.Frame):
         self.grid(row=1, column=0, sticky="ew", padx=SPACING["xl"], pady=(0, SPACING["sm"]))
         self.columnconfigure(0, weight=1)
 
-        self._status_var = tk.StringVar(value="Ready")
+        self._status_var = tk.StringVar(value=t("Ready"))
         self._status_label = tk.Label(
             self,
             textvariable=self._status_var,

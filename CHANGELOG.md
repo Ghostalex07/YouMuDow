@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.10.0] - 2026-11-19
+
+### Added
+
+- Spanish interface: menus, buttons, status messages and the in-app guide.
+  `View > Language` offers English, Español and Automatic (the default, which
+  follows the system locale); changing it asks for a restart
+- Startup check for a newer release on GitHub, with `Help > Download Update...`
+  opening the release page. It never downloads or replaces anything by itself,
+  and `"check_for_updates": false` turns it off
+
 ## [1.9.0] - 2026-11-19
 
 ### Added

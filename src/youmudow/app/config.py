@@ -41,6 +41,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "minimize_to_tray": False,
     "concurrent_downloads": 1,
     "max_retries": 2,
+    "language": "auto",
+    "check_for_updates": True,
     "playlist_limit": 50,
     "search_history": [],
 }
