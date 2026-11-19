@@ -97,7 +97,13 @@ youmudow-cli download "bohemian rhapsody" --format mp3 --quality 320kbps
 youmudow-cli download "https://..." --output ~/Downloads --skip-metadata
 youmudow-cli search "lofi beats" --limit 10
 youmudow-cli download "https://www.youtube.com/playlist?list=..." --limit 25
+youmudow-cli download --from-file urls.txt --format mp3 --json
 ```
+
+`--from-file` takes one URL per line (`#` comments and CSV columns work too)
+and skips anything already in the download history, so a half-finished list
+can be re-run safely. `--json` prints a machine-readable summary instead of
+progress lines: `{"requested", "downloaded", "skipped", "failed", "results"}`.
 
 Options: `--format`, `--quality`, `--output DIR`, `--skip-metadata`.
 
@@ -122,6 +128,7 @@ curl -s -H "Authorization: Bearer SECRET" -H "Content-Type: application/json" \
 | Route | What it does |
 |-------|--------------|
 | `POST /api/downloads` | Queue `{"url", "format"?, "quality"?}` |
+| `POST /api/downloads/batch` | Queue `{"urls": [...]}`, skipping duplicates; answers `{queued, skipped, rejected}` |
 | `GET /api/downloads` | Queue, active downloads, paused flag |
 | `POST /api/queue/pause` / `resume` | Pause or resume the queue |
 | `DELETE /api/queue/{id}` | Drop a queued entry |

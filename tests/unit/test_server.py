@@ -125,3 +125,32 @@ def test_non_loopback_binds_require_a_token(tmp_path):
     service = DownloadService(adapter=FakeAdapter(), default_output_path=tmp_path)
     with pytest.raises(ValueError):
         make_server("0.0.0.0", 0, service, token=None)
+
+
+def test_batch_endpoint_queues_and_skips(server):
+    base, service = server
+    status, payload = call(
+        base,
+        "POST",
+        "/api/downloads/batch",
+        {
+            "urls": [
+                "https://x.test/a",
+                "https://x.test/b",
+                "https://x.test/a",
+                "not a url",
+            ]
+        },
+    )
+    assert status == 202
+    assert payload["queued"] == 2
+    assert payload["skipped"] == 1
+    assert payload["rejected"] == ["not a url"]
+    assert [v.url for v in service.queued_videos()] == ["https://x.test/a", "https://x.test/b"]
+
+
+def test_batch_endpoint_rejects_a_missing_list(server):
+    base, _ = server
+    status, payload = call(base, "POST", "/api/downloads/batch", {"urls": "nope"})
+    assert status == 400
+    assert "urls" in payload["error"]

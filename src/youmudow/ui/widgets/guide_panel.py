@@ -99,7 +99,9 @@ GUIDE_SECTIONS: tuple[tuple[str, str], ...] = (
             "without opening the window; --limit N sets how many playlist entries "
             "to take. youmudow-cli search <query> lists matches. youmudow-cli serve runs "
             "a headless HTTP server (youmudow-cli serve --token SECRET) so a "
-            "phone or another machine can queue downloads into the same library."
+            "phone or another machine can queue downloads into the same library. "
+            "Download --from-file urls.txt takes a whole list and skips what is "
+            "already in the history."
         ),
     ),
 )

@@ -88,6 +88,14 @@ class LibraryStore:
 
     # -- history ---------------------------------------------------------
 
+    def has_url(self, url: str) -> bool:
+        """True when this URL already has a row in the download history."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT 1 FROM downloads WHERE url = ? LIMIT 1", (url,)
+            ).fetchone()
+        return row is not None
+
     def add_history(self, entry: HistoryEntry) -> None:
         with self._lock:
             recent = self._conn.execute(

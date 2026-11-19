@@ -117,6 +117,10 @@ class _Handler(BaseHTTPRequestHandler):
             )
             return
 
+        if method == "POST" and path == "/api/downloads/batch":
+            self._enqueue_batch()
+            return
+
         if method == "POST" and path == "/api/downloads":
             self._enqueue()
             return
@@ -163,6 +167,37 @@ class _Handler(BaseHTTPRequestHandler):
         self._respond(
             HTTPStatus.ACCEPTED,
             {"id": str(video.queue_id), "queued": self.server.service.queue_size},
+        )
+
+    def _enqueue_batch(self) -> None:
+        body = self._read_body()
+        if body is None or not isinstance(body.get("urls"), list):
+            self._respond(
+                HTTPStatus.BAD_REQUEST,
+                {"error": "expected a JSON object with a urls list"},
+            )
+            return
+
+        service = self.server.service
+        known = {v.url for v in service.queued_videos()} | {v.url for v in service.active_videos()}
+        queued = skipped = 0
+        rejected: list[str] = []
+        urls = body["urls"]
+        assert isinstance(urls, list)
+        for raw in urls:
+            url = str(raw or "").strip()
+            if not is_supported_url(url):
+                rejected.append(url)
+                continue
+            if url in known:
+                skipped += 1
+                continue
+            known.add(url)
+            service.add_to_queue(Video(title=url, url=url, options=DownloadOptions()))
+            queued += 1
+        self._respond(
+            HTTPStatus.ACCEPTED,
+            {"queued": queued, "skipped": skipped, "rejected": rejected},
         )
 
     def _delete(self, entry_id: str) -> None:

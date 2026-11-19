@@ -5,6 +5,7 @@ adds no duplicate download or search logic.
 """
 
 import argparse
+import json
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -13,6 +14,7 @@ from youmudow import __version__
 from youmudow.app.config import AppConfig
 from youmudow.domain.enums import DownloadStatus
 from youmudow.domain.models import DownloadOptions, Video
+from youmudow.domain.url_batch import parse_url_list
 from youmudow.domain.validators import (
     AUDIO_FORMATS,
     SUPPORTED_FORMATS,
@@ -50,8 +52,19 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    download = subparsers.add_parser("download", help="download a single URL")
-    download.add_argument("url", help="video or audio URL")
+    download = subparsers.add_parser("download", help="download a URL or a list of URLs")
+    download.add_argument("url", nargs="?", help="video or audio URL")
+    download.add_argument(
+        "--from-file",
+        type=Path,
+        help="download every URL listed in this file (one per line, # comments allowed)",
+    )
+    download.add_argument(
+        "--json",
+        action="store_true",
+        dest="as_json",
+        help="print a JSON summary instead of progress lines",
+    )
     download.add_argument(
         "--format",
         dest="file_format",
@@ -122,7 +135,76 @@ def _resolve_options(args: argparse.Namespace, config: AppConfig) -> DownloadOpt
     return options
 
 
+def _open_cli_store():
+    """Open the shared library database, or None when it is unavailable."""
+    try:
+        from youmudow.paths import database_file
+        from youmudow.services.library_store import LibraryStore
+
+        return LibraryStore(database_file())
+    except Exception:  # noqa: BLE001 - the CLI must work without the database
+        print("(continuing without the download history)", file=sys.stderr)
+        return None
+
+
+def _cmd_download_batch(args: argparse.Namespace, config: AppConfig) -> int:
+    try:
+        text = Path(args.from_file).read_text(encoding="utf-8")
+    except OSError as exc:
+        print(f"Could not read {args.from_file}: {exc}", file=sys.stderr)
+        return 1
+
+    urls = parse_url_list(text)
+    if not urls:
+        print("No usable URLs in the file", file=sys.stderr)
+        return 1
+
+    options = _resolve_options(args, config)
+    output_dir = args.output or config.output_path
+    output_dir.mkdir(parents=True, exist_ok=True)
+    store = _open_cli_store()
+
+    service = DownloadService()
+    service.set_log_callback(lambda line: None if args.as_json else print(line))
+
+    results: list[dict[str, str]] = []
+    downloaded = skipped = failed = 0
+    for index, url in enumerate(urls, start=1):
+        if store is not None and store.has_url(url):
+            skipped += 1
+            results.append({"url": url, "status": "skipped"})
+            continue
+        video = Video(title=url, url=url, options=options)
+        if not args.as_json:
+            print(f"[{index}/{len(urls)}] {url}")
+        try:
+            service.download_now(video, output_dir)
+            downloaded += 1
+            results.append({"url": url, "status": "downloaded"})
+        except Exception as exc:  # noqa: BLE001 - one bad URL must not stop the batch
+            failed += 1
+            results.append({"url": url, "status": "failed", "reason": str(exc)})
+
+    summary = {
+        "requested": len(urls),
+        "downloaded": downloaded,
+        "skipped": skipped,
+        "failed": failed,
+        "results": results,
+    }
+    if args.as_json:
+        print(json.dumps(summary))
+    else:
+        print(f"Downloaded {downloaded}, skipped {skipped}, failed {failed} of {len(urls)}")
+    return 0 if failed == 0 else 1
+
+
 def _cmd_download(args: argparse.Namespace, config: AppConfig) -> int:
+    if args.from_file:
+        return _cmd_download_batch(args, config)
+    if not args.url:
+        print("Either a URL or --from-file is required", file=sys.stderr)
+        return 2
     options = _resolve_options(args, config)
     output_dir = args.output or config.output_path
     output_dir.mkdir(parents=True, exist_ok=True)
