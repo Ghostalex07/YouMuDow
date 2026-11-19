@@ -239,3 +239,12 @@ def test_channel_urls_are_playlists(url):
 )
 def test_non_channel_urls_are_not_playlists(url):
     assert is_playlist_url(url) is False
+
+
+def test_normalize_subtitle_langs_strips_spaces():
+    from youmudow.domain.validators import normalize_subtitle_langs
+
+    assert normalize_subtitle_langs(" es , en ") == "es,en"
+    assert normalize_subtitle_langs("es,,en,") == "es,en"
+    assert normalize_subtitle_langs("") == "en"
+    assert normalize_subtitle_langs(None) == "en"

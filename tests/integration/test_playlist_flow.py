@@ -55,3 +55,24 @@ def test_playlist_previews_the_first_entry(stack):
     stack.window._on_search()
 
     pump(stack.window, lambda: "~" in stack.window._detail_panel._detail_meta.cget("text"))
+
+
+def test_exporting_a_playlist_writes_an_m3u(stack, tmp_path, monkeypatch):
+    stack.adapter.playlist = [
+        Video(title="P1", url="https://example.com/p1", duration=90),
+        Video(title="P2", url="https://example.com/p2"),
+    ]
+    stack.window._search_bar.search_var.set(PLAYLIST_URL)
+    stack.window._on_search()
+    pump(stack.window, lambda: len(stack.window._results_cards.playlist_videos) == 2)
+
+    target = tmp_path / "list.m3u"
+    monkeypatch.setattr(
+        "youmudow.ui.window.filedialog.asksaveasfilename", lambda **_kw: str(target)
+    )
+    stack.window._export_playlist()
+
+    text = target.read_text(encoding="utf-8")
+    assert text.startswith("#EXTM3U")
+    assert "#EXTINF:90,P1" in text
+    assert "https://example.com/p2" in text

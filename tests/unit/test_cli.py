@@ -294,3 +294,23 @@ def test_playlist_progress_line_is_closed_on_interrupt(monkeypatch, tmp_path, ca
     out = capsys.readouterr().out
     assert "42.0%" in out
     assert out.endswith("\n")
+
+
+def test_serve_command_forwards_its_options(monkeypatch):
+    from youmudow import cli, server
+
+    seen = {}
+
+    def fake_serve(**kwargs):
+        seen.update(kwargs)
+        return 0
+
+    monkeypatch.setattr(server, "serve", fake_serve)
+    args = cli._build_parser().parse_args(
+        ["serve", "--port", "9100", "--token", "tok", "--output", "/tmp/out"]
+    )
+    assert cli.main(["serve", "--port", "9100", "--token", "tok", "--output", "/tmp/out"]) == 0
+    assert seen["port"] == 9100
+    assert seen["token"] == "tok"
+    assert str(seen["output"]) == "/tmp/out"
+    assert args.func is cli._cmd_serve

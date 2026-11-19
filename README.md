@@ -21,6 +21,8 @@ A modern music & video downloader with real-time progress, persistent configurat
 - Download presets ("Music 320", "Video 1080", "Archive FLAC") plus per-format
   options
 - Duration and estimated size preview in the detail panel before downloading
+- Sort results by relevance or duration, export a loaded playlist as `.m3u`,
+  and pick several subtitle languages at once (`es,en`)
 - Real-time progress bar and download log
 - Cookie authentication (Chrome, Firefox, Edge, Brave, Opera, Vivaldi)
 - Rate limiting, chapter splitting, subtitles
@@ -102,6 +104,32 @@ Options: `--format`, `--quality`, `--output DIR`, `--skip-metadata`.
 For a playlist or channel, `--limit N` sets how many entries to fetch (1-500,
 defaulting to `playlist_limit`); the CLI prints `Found N video(s)` and a
 `[i/N]` line per entry. Run `youmudow-cli --version` for the version.
+
+### Headless server
+
+`youmudow-cli serve` runs the queue with no window, using the same SQLite
+library as the app, so downloads started from another device appear in the
+desktop window:
+
+```bash
+youmudow-cli serve --port 8765 --token SECRET --output ~/Music
+
+curl -s -H "Authorization: Bearer SECRET" -H "Content-Type: application/json" \
+     -d '{"url":"https://youtu.be/xxxx","format":"mp3","quality":"320kbps"}' \
+     http://127.0.0.1:8765/api/downloads
+```
+
+| Route | What it does |
+|-------|--------------|
+| `POST /api/downloads` | Queue `{"url", "format"?, "quality"?}` |
+| `GET /api/downloads` | Queue, active downloads, paused flag |
+| `POST /api/queue/pause` / `resume` | Pause or resume the queue |
+| `DELETE /api/queue/{id}` | Drop a queued entry |
+| `GET /api/health` | Version, queue size, active count |
+
+It listens on `127.0.0.1` by default. Listening beyond localhost requires
+`--token`, otherwise it refuses to start. Ctrl-C cancels the download in
+flight and leaves it queued for the next run.
 
 ## Configuration
 

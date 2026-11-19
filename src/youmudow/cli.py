@@ -87,6 +87,29 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     search.set_defaults(func=_cmd_search)
 
+    serve = subparsers.add_parser("serve", help="run a headless HTTP download server")
+    serve.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="interface to listen on (default: 127.0.0.1)",
+    )
+    serve.add_argument(
+        "--port",
+        type=_positive_int,
+        default=8765,
+        help="TCP port (default: 8765)",
+    )
+    serve.add_argument(
+        "--token",
+        help="bearer token; required when listening beyond localhost",
+    )
+    serve.add_argument(
+        "--output",
+        type=Path,
+        help="download folder (default: the configured one)",
+    )
+    serve.set_defaults(func=_cmd_serve)
+
     return parser
 
 
@@ -182,6 +205,18 @@ def _cmd_search(args: argparse.Namespace, config: AppConfig) -> int:
         print(f"    {video.url}")
     print(f"\n{len(results)} result(s) for {args.query!r}")
     return 0
+
+
+def _cmd_serve(args: argparse.Namespace, config: AppConfig) -> int:
+    from youmudow.server import serve
+
+    return serve(
+        host=args.host,
+        port=args.port,
+        token=args.token,
+        output=args.output,
+        config=config,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

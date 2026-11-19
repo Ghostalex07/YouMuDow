@@ -13,7 +13,7 @@ import tkinter as tk
 import webbrowser
 from collections.abc import Callable
 from pathlib import Path
-from tkinter import ttk
+from tkinter import filedialog, ttk
 from typing import TYPE_CHECKING, Any
 
 from youmudow import __version__
@@ -22,6 +22,7 @@ from youmudow.app.events import EventBus, EventType, get_event_bus
 from youmudow.app.state import AppMode, AppState, AppStateData
 from youmudow.domain.enums import DownloadStatus
 from youmudow.domain.models import Video
+from youmudow.domain.playlist_export import playlist_to_m3u
 from youmudow.domain.validators import is_playlist_url, is_supported_url
 from youmudow.i18n import t
 from youmudow.paths import cache_dir
@@ -582,6 +583,26 @@ class MainWindow(MainWindowProtocol):
         else:
             self._selected_video_impl = None
         self._update_button_states()
+
+    def _export_playlist(self) -> None:
+        cards = self._results_cards
+        videos = list(cards.playlist_videos) if cards is not None else []
+        if not videos:
+            return
+        path = filedialog.asksaveasfilename(
+            title=t("Export list..."),
+            defaultextension=".m3u",
+            initialfile="playlist.m3u",
+            filetypes=[(t("M3U playlist"), "*.m3u"), ("*.*", "*.*")],
+        )
+        if not path:
+            return
+        try:
+            Path(path).write_text(playlist_to_m3u(videos), encoding="utf-8")
+        except OSError as exc:
+            self._set_status(t("Could not save the file: {error}", error=exc))
+            return
+        self._set_status(t("Playlist saved to {path}", path=path))
 
     def _accept_dropped_urls(self, urls: list[str]) -> None:
         search_bar = self._search_bar

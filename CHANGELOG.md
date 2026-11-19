@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.13.0] - 2026-11-21
+
+### Added
+
+- Headless server: `youmudow-cli serve` exposes a small JSON API over the
+  shared queue (enqueue, list, pause/resume, delete, health), bound to
+  localhost unless `--token` protects a wider bind
+- Sort search results by relevance, shortest or longest
+- Export the loaded playlist as an `.m3u` file
+- Several subtitle languages at once (`es,en`), with the value normalised
+  before reaching yt-dlp
+
 ## [1.12.0] - 2026-11-21
 
 ### Added
