@@ -5,9 +5,12 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from youmudow.app.config import AppConfig
 from youmudow.cli import _build_parser, _cmd_download, _cmd_search, main
 from youmudow.domain.enums import DownloadStatus
 from youmudow.domain.models import DownloadOptions, Video
+from youmudow.services.download_service import DownloadService
+from youmudow.services.search_service import SearchService
 
 
 @pytest.fixture
@@ -247,3 +250,47 @@ def test_download_limit_is_capped_at_500(monkeypatch, tmp_path):
 
     assert code == 1
     search.get_playlist.assert_called_once_with("https://www.youtube.com/@chan", 500)
+
+
+def _playlist_args(tmp_path, limit):
+    return _build_parser().parse_args(
+        [
+            "download",
+            "https://youtube.com/playlist?list=abc",
+            "--skip-metadata",
+            "--output",
+            str(tmp_path),
+            "--limit",
+            str(limit),
+        ]
+    )
+
+
+def test_playlist_notice_says_when_the_limit_was_hit(monkeypatch, tmp_path, capsys):
+    videos = [Video(title=f"V{i}", url=f"https://x.test/{i}") for i in range(3)]
+    monkeypatch.setattr(SearchService, "get_playlist", lambda self, url, limit, start=1: videos)
+
+    def done(self, video, out=None, **kw):
+        return Video(title=video.title, url=video.url, status=DownloadStatus.DONE)
+
+    monkeypatch.setattr(DownloadService, "download_now", done)
+
+    _cmd_download(_playlist_args(tmp_path, 3), AppConfig())
+
+    assert "limited to 3" in capsys.readouterr().out
+
+
+def test_playlist_progress_line_is_closed_on_interrupt(monkeypatch, tmp_path, capsys):
+    videos = [Video(title=f"V{i}", url=f"https://x.test/{i}") for i in range(2)]
+
+    def boom(self, video, out=None, **kw):
+        kw["progress_callback"](42.0, "")
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(SearchService, "get_playlist", lambda self, url, limit, start=1: videos)
+    monkeypatch.setattr(DownloadService, "download_now", boom)
+
+    assert _cmd_download(_playlist_args(tmp_path, 50), AppConfig()) == 130
+    out = capsys.readouterr().out
+    assert "42.0%" in out
+    assert out.endswith("\n")
