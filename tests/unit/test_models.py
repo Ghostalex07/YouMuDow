@@ -72,3 +72,11 @@ class TestHistoryEntryFormatSize:
             file_size_bytes=500,
         )
         assert "B" in e.format_size()
+
+
+def test_format_duration_tolerates_missing_duration():
+    assert Video(title="T", url="u", duration=None).format_duration() == "-"
+
+
+def test_format_duration_tolerates_junk_duration():
+    assert Video(title="T", url="u", duration="oops").format_duration() == "-"

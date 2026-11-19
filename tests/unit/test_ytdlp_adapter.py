@@ -1630,3 +1630,9 @@ def test_playlist_start_offset_is_forwarded(adapter):
         adapter.get_playlist_videos("https://youtube.com/playlist?list=abc", limit=3, start=4)
 
     assert cmd_args["args"][cmd_args["args"].index("--playlist-start") + 1] == "4"
+
+
+def test_get_formats_survives_unparseable_output(adapter):
+    result = Mock(returncode=0, stdout="{not json", stderr="")
+    with patch("youmudow.adapters.ytdlp_adapter.run_capture", return_value=result):
+        assert adapter.get_formats("https://x.test/v") == []

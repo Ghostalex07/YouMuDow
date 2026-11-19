@@ -2,6 +2,7 @@ import os
 import platform
 import time
 import tkinter as tk
+import warnings
 from types import SimpleNamespace
 
 import pytest
@@ -10,6 +11,11 @@ pytest.importorskip("tkinter")
 
 if platform.system() == "Linux" and not os.environ.get("DISPLAY"):
     collect_ignore_glob = ["*.py"]
+    warnings.warn(
+        "Skipping the full-stack UI tests: no DISPLAY. Run them with "
+        "`make test-ui` or `xvfb-run -a pytest tests/integration`.",
+        stacklevel=1,
+    )
 
 from youmudow.app.config import AppConfig
 from youmudow.app.controller import AppController
@@ -157,6 +163,13 @@ def build_stack(tmp_path, monkeypatch, run_startup_checks=False):
         downloads=downloads,
         config=config,
     )
+
+
+def pytest_collection_modifyitems(config, items):
+    """Tag every test in this directory so `-m integration` selects them."""
+    for item in items:
+        if "tests/integration" in str(item.fspath):
+            item.add_marker(pytest.mark.integration)
 
 
 @pytest.fixture

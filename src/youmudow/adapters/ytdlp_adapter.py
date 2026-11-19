@@ -223,7 +223,11 @@ class YtdlpAdapter:
         try:
             result = run_capture(args, timeout=60)
             if result.returncode == 0 and result.stdout:
-                data = json.loads(result.stdout)
+                try:
+                    data = json.loads(result.stdout)
+                except ValueError:
+                    self._log("[FORMATS] Could not parse the format list")
+                    return []
                 if isinstance(data, dict):
                     formats = parse_formats(data)
                     self._log(f"[FORMATS] Got {len(formats)} formats")

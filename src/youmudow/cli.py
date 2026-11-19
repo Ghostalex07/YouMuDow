@@ -155,6 +155,8 @@ def _download_playlist(
         return 1
 
     print(f"Found {len(videos)} video(s)")
+    if len(videos) >= min(args.limit, 500):
+        print(f"(limited to {min(args.limit, 500)}; use --limit to change)")
     failures = 0
     for index, video in enumerate(videos, start=1):
         print(f"[{index}/{len(videos)}] {video.title}")
@@ -162,7 +164,8 @@ def _download_playlist(
         try:
             result = service.download_now(video, output_dir, progress_callback=on_progress)
         except KeyboardInterrupt:
-            print("\nCancelled", file=sys.stderr)
+            print()  # close the in-place progress line
+            print("Cancelled", file=sys.stderr)
             return 130
         if result.status != DownloadStatus.DONE:
             failures += 1

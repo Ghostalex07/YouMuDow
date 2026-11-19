@@ -44,9 +44,13 @@ class Video:
     queue_id: int = 0
 
     def format_duration(self) -> str:
-        if self.duration == 0:
+        try:
+            total = int(self.duration or 0)
+        except (TypeError, ValueError):
             return "-"
-        minutes, secs = divmod(self.duration, 60)
+        if total <= 0:
+            return "-"
+        minutes, secs = divmod(total, 60)
         hours, minutes = divmod(minutes, 60)
         if hours > 0:
             return f"{hours}:{minutes:02d}:{secs:02d}"
