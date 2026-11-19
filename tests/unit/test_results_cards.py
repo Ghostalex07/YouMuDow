@@ -181,3 +181,24 @@ class TestCardPlaceholders:
         w = ResultsCards(root, state, loader)
         assert w._meta_text(Video(title="T", url="https://example.com/x")) == "Metadata unavailable"
         w.destroy()
+
+
+def test_sorting_by_duration_reorders_the_cards(root, state, loader):
+    from youmudow.ui.widgets.results_cards import ResultsCards
+
+    cards = ResultsCards(root, state, loader)
+    cards.update_results(
+        [
+            Video(title="Long", url="https://x.test/1", duration=300),
+            Video(title="Short", url="https://x.test/2", duration=30),
+            Video(title="Unknown", url="https://x.test/3"),
+        ]
+    )
+    cards.set_sort_mode("Shortest")
+    assert [v.title for v in cards._videos] == ["Short", "Long", "Unknown"]
+
+    cards.set_sort_mode("Longest")
+    assert [v.title for v in cards._videos] == ["Long", "Short", "Unknown"]
+
+    cards.set_sort_mode("Relevance")
+    assert [v.title for v in cards._videos] == ["Long", "Short", "Unknown"]

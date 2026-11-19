@@ -210,6 +210,32 @@ class DetailPanel(tk.Frame):
         self._load_more_btn.pack(side="left", padx=(0, SPACING["xs"]))
         add_hover_effect(self._load_more_btn, "hover", "surface")
 
+        self._export_btn = tk.Button(
+            btn_row,
+            text=t("Export list..."),
+            bg=_c("surface"),
+            fg=_c("text"),
+            activebackground=_c("hover"),
+            activeforeground=_c("text"),
+            relief="flat",
+            bd=0,
+            font=FONT["body"],
+            pady=4,
+            command=lambda: self._mw._export_playlist(),
+        )
+        setattr_any(
+            self._export_btn,
+            "_theme",
+            {
+                "bg": "surface",
+                "fg": "text",
+                "activebg": "hover",
+                "activefg": "text",
+            },
+        )
+        self._export_btn.pack(side="left", padx=(0, SPACING["xs"]))
+        add_hover_effect(self._export_btn, "hover", "surface")
+
         self._add_all_btn = tk.Button(
             btn_row,
             text=t("Add All"),
@@ -338,6 +364,7 @@ class DetailPanel(tk.Frame):
         is_playlist = cards.is_playlist if cards is not None else False
         has_playlist = bool(cards.playlist_videos) if cards is not None else False
         self._add_all_btn.configure(state="normal" if is_playlist and has_playlist else "disabled")
+        self._export_btn.configure(state="normal" if is_playlist and has_playlist else "disabled")
         more_available = self._mw._playlist_has_more
         self._load_more_btn.configure(
             state="normal" if is_playlist and more_available and not is_busy else "disabled"

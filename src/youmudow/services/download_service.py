@@ -244,6 +244,11 @@ class DownloadService:
         """Write a pending queue change now, from the calling thread."""
         self._flush_queue()
 
+    def active_videos(self) -> list[Video]:
+        """Snapshot of the videos a worker is processing right now."""
+        with self._lock:
+            return list(self._active_downloads.values())
+
     def queued_videos(self) -> list[Video]:
         """A snapshot of the pending queue, oldest first."""
         return self._queue.peek()

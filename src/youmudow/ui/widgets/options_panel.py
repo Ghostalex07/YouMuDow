@@ -19,6 +19,7 @@ from youmudow.domain.validators import (
     SUPPORTED_FORMATS,
     SUPPORTED_QUALITIES,
     is_valid_rate_limit,
+    normalize_subtitle_langs,
 )
 from youmudow.i18n import t
 from youmudow.ui.protocols import MainWindowProtocol
@@ -408,7 +409,7 @@ class OptionsPanel:
             file_format=self._format_var.get(),
             quality=self._quality_var.get(),
             subtitles=self._subtitles_var.get(),
-            subtitle_lang=self._subtitle_lang_var.get(),
+            subtitle_lang=normalize_subtitle_langs(self._subtitle_lang_var.get()),
             embed_subtitles=self._embed_subs_var.get(),
             use_cookies=self._use_cookies_var.get(),
             rate_limit=rate or None,

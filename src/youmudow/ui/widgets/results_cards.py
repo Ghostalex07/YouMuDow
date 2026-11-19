@@ -6,6 +6,7 @@ from collections.abc import Callable
 from tkinter import ttk
 
 from youmudow.domain.models import Video
+from youmudow.i18n import t
 from youmudow.services.thumbnail_loader import ThumbnailLoader
 from youmudow.ui.styles.constants import FONT, SPACING, _c
 from youmudow.ui.typed import setattr_any
@@ -65,6 +66,8 @@ class ResultsCards(tk.Frame):
         self._thumb_batch = 0
         self._photo_refs: dict[int, object] = {}
         self._empty_state: EmptyState | None = None
+        self._source_videos: list[Video] = []
+        self._sort_mode = "Relevance"
 
         self.grid(
             row=1,
@@ -74,7 +77,31 @@ class ResultsCards(tk.Frame):
             pady=(0, SPACING["lg"]),
         )
 
-        self._canvas = tk.Canvas(self, bg=_c("bg"), highlightthickness=0, bd=0)
+        self._header = tk.Frame(self, bg=_c("bg"))
+        self._header.pack(side="top", fill="x", padx=SPACING["xl"], pady=(SPACING["sm"], 0))
+        tk.Label(
+            self._header,
+            text=t("Sort:"),
+            bg=_c("bg"),
+            fg=_c("text_secondary"),
+            font=FONT["small"],
+        ).pack(side="left")
+        self._sort_var = tk.StringVar(value=self._sort_mode)
+        self._sort_combo = ttk.Combobox(
+            self._header,
+            textvariable=self._sort_var,
+            values=[t("Relevance"), t("Shortest"), t("Longest")],
+            state="readonly",
+            width=12,
+            font=FONT["small"],
+        )
+        self._sort_combo.pack(side="left", padx=(SPACING["sm"], 0))
+        self._sort_combo.bind("<<ComboboxSelected>>", lambda _e: self._on_sort_selected())
+
+        self._body = tk.Frame(self, bg=_c("bg"))
+        self._body.pack(side="top", fill="both", expand=True)
+
+        self._canvas = tk.Canvas(self._body, bg=_c("bg"), highlightthickness=0, bd=0)
         self._scrollbar = ttk.Scrollbar(self, orient="vertical", command=self._canvas.yview)
         self._inner = tk.Frame(self._canvas, bg=_c("bg"))
         self._window_id = self._canvas.create_window((0, 0), window=self._inner, anchor="nw")
@@ -96,9 +123,35 @@ class ResultsCards(tk.Frame):
     # ------------------------------------------------------------------
 
     def update_results(self, videos: list[Video]) -> None:
-        self._videos = list(videos)
+        self._source_videos = list(videos)
+        self._render()
+
+    def set_sort_mode(self, mode: str) -> None:
+        known = {"Relevance", "Shortest", "Longest"}
+        self._sort_mode = mode if mode in known else "Relevance"
+        self._sort_var.set(t(self._sort_mode))
+        self._render()
+
+    def _on_sort_selected(self) -> None:
+        selected = self._sort_var.get()
+        for key in ("Relevance", "Shortest", "Longest"):
+            if selected == t(key):
+                self.set_sort_mode(key)
+                return
+
+    def _sorted_videos(self) -> list[Video]:
+        if self._sort_mode == "Shortest":
+            return sorted(self._source_videos, key=lambda v: (not v.duration, v.duration or 0))
+        if self._sort_mode == "Longest":
+            return sorted(self._source_videos, key=lambda v: (not v.duration, -(v.duration or 0)))
+        return list(self._source_videos)
+
+    def _render(self) -> None:
+        self._videos = self._sorted_videos()
+        self._selected = set()
+        self._anchor = None
         self._clear_children()
-        if not videos:
+        if not self._videos:
             self._show_empty_state()
             return
         self._build_cards()

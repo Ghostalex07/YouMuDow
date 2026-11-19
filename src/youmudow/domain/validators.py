@@ -106,3 +106,14 @@ def is_valid_rate_limit(rate: str) -> bool:
         return True  # Empty is valid (no limit)
     pattern = r"^\d+[KMG]?$"
     return bool(re.match(pattern, rate, re.IGNORECASE))
+
+
+def normalize_subtitle_langs(value: str | None) -> str:
+    """Normalise a comma-separated subtitle language list.
+
+    yt-dlp accepts ``--sub-langs es,en``; the field is free text, so stray
+    spaces and empty entries are cleaned here instead of reaching the command.
+    """
+    parts = [part.strip() for part in str(value or "").split(",")]
+    cleaned = [part for part in parts if part]
+    return ",".join(cleaned) if cleaned else "en"
