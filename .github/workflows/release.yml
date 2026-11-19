@@ -57,7 +57,7 @@ jobs:
           pip install -e ".[dev]"
 
       - name: Install tkinter
-        run: sudo apt-get update && sudo apt-get install -y python3-tk
+        run: bash scripts/install_tk.sh
 
       - name: Package
         run: python scripts/package.py --version ${{ github.ref_name }}
