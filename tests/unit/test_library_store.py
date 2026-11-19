@@ -146,3 +146,11 @@ def test_import_queue_json_is_one_shot(tmp_path):
     assert len(store.queue_payloads()) == 2
     assert store.import_queue_json(legacy) == 0
     store.close()
+
+
+def test_has_url_reports_recorded_downloads(tmp_path):
+    store = LibraryStore(tmp_path / "lib.db")
+    assert store.has_url("https://x.test/a") is False
+    store.add_history(_entry(url="https://x.test/a"))
+    assert store.has_url("https://x.test/a") is True
+    store.close()

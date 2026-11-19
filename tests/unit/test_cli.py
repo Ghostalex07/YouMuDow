@@ -1,5 +1,6 @@
 """Tests for the youmudow-cli entry point."""
 
+import json
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -314,3 +315,58 @@ def test_serve_command_forwards_its_options(monkeypatch):
     assert seen["token"] == "tok"
     assert str(seen["output"]) == "/tmp/out"
     assert args.func is cli._cmd_serve
+
+
+class _FakeDownloadService:
+    def __init__(self, *args, **kwargs):
+        self.downloaded = []
+
+    def set_log_callback(self, callback):
+        pass
+
+    def download_now(self, video, output_dir, progress_callback=None):
+        self.downloaded.append(video.url)
+        return video
+
+
+def test_download_from_file_skips_known_urls(tmp_path, monkeypatch, capsys):
+    from youmudow import cli
+
+    listing = tmp_path / "urls.txt"
+    listing.write_text(
+        "# comment\nhttps://x.test/a\nhttps://x.test/b\nhttps://x.test/b\nhttps://x.test/c\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(cli, "DownloadService", _FakeDownloadService)
+    monkeypatch.setattr(cli, "_open_cli_store", lambda: _KnownStore({"https://x.test/b"}))
+
+    code = cli.main(["download", "--from-file", str(listing), "--json", "--output", str(tmp_path)])
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert payload["requested"] == 3
+    assert payload["downloaded"] == 2
+    assert payload["skipped"] == 1
+    assert payload["failed"] == 0
+
+
+class _KnownStore:
+    def __init__(self, known):
+        self._known = known
+
+    def has_url(self, url):
+        return url in self._known
+
+
+def test_download_from_file_without_json_prints_a_summary(tmp_path, monkeypatch, capsys):
+    from youmudow import cli
+
+    listing = tmp_path / "urls.txt"
+    listing.write_text("https://x.test/a\n", encoding="utf-8")
+    monkeypatch.setattr(cli, "DownloadService", _FakeDownloadService)
+    monkeypatch.setattr(cli, "_open_cli_store", lambda: None)
+
+    code = cli.main(["download", "--from-file", str(listing), "--output", str(tmp_path)])
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "Downloaded 1" in out
