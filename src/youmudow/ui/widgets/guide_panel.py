@@ -26,7 +26,8 @@ GUIDE_SECTIONS: tuple[tuple[str, str], ...] = (
             "entries equal to the playlist limit (1-500, 50 by default). Use "
             "Load more to append the next page; a short page means the playlist "
             "is finished and the button disables. Add all queues every entry that "
-            "is currently loaded."
+            "is currently loaded; Add New queues only the entries the library "
+            "has not downloaded yet."
         ),
     ),
     (

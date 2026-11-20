@@ -80,3 +80,45 @@ def test_dragging_a_queue_row_reorders_it(stack):
     assert stack.controller.move_in_queue(first, 1) is True
     assert [video.url for video in stack.controller.state.get_queue()][1].endswith("a")
     assert len(rows) == 2
+
+
+def test_scanning_the_folder_finds_and_imports_stray_files(stack):
+    output = stack.downloads.get_output_path()
+    output.mkdir(parents=True, exist_ok=True)
+    (output / "Stray Song.mp3").write_bytes(b"12345")
+    panel = stack.window._library_panel
+
+    panel._scan()
+    assert [item.path.name for item in panel._scanned] == ["Stray Song.mp3"]
+
+    panel._import_files()
+    assert stack.controller.library_stats()["count"] == 1
+    assert panel._scanned == []
+
+
+def test_add_new_only_skips_what_is_already_downloaded(stack):
+    from conftest import pump
+
+    from youmudow.domain.models import Video
+
+    stack.library_store.add_history(
+        HistoryEntry(
+            title="Old",
+            url="https://example.com/old",
+            uploader="",
+            file_format="mp3",
+            output_path="",
+            downloaded_at=datetime.now().astimezone().isoformat(),
+        )
+    )
+    stack.adapter.playlist = [
+        Video(title="Old", url="https://example.com/old"),
+        Video(title="New", url="https://example.com/new"),
+    ]
+    stack.window._search_bar.search_var.set("https://www.youtube.com/playlist?list=PL1")
+    stack.window._on_search()
+    pump(stack.window, lambda: len(stack.window._results_cards.playlist_videos) == 2)
+
+    stack.window._detail_panel._add_new_to_queue()
+
+    assert [v.url for v in stack.controller.state.get_queue()] == ["https://example.com/new"]

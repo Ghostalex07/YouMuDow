@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.17.0] - 2026-11-21
+
+### Added
+
+- **Add New**: queue only the playlist entries that are not in the library yet,
+  with a status line saying how many were queued and skipped
+- Library folder scan: finds media files the library does not know about and
+  imports them into the history
+- Disk-space guard: `Download` refuses to start when the estimated size plus a
+  64 MB margin does not fit on the output volume
+
 ## [1.16.0] - 2026-11-21
 
 ### Changed

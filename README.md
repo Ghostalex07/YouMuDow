@@ -25,6 +25,11 @@ A modern music & video downloader with real-time progress, persistent configurat
   button
 - Sort results by relevance or duration, export a loaded playlist as `.m3u`,
   and pick several subtitle languages at once (`es,en`)
+- **Add New** queues only the playlist entries the library has not downloaded
+  yet, and the Library tab can scan the output folder to import files it does
+  not know about
+- Downloads stop with a clear message when the estimate does not fit in the
+  free space left on the output volume
 - Real-time progress bar and download log
 - Cookie authentication (Chrome, Firefox, Edge, Brave, Opera, Vivaldi)
 - Rate limiting, chapter splitting, subtitles

@@ -152,6 +152,14 @@ class LibraryStore:
 
     # -- statistics and integrity ----------------------------------------
 
+    def history_paths(self) -> set[str]:
+        """Absolute paths the library already knows about."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT output_path FROM downloads WHERE output_path <> ''"
+            ).fetchall()
+        return {str(Path(row["output_path"]).resolve()) for row in rows}
+
     def stats(self) -> LibraryStats:
         """Totals and breakdowns for the library panel."""
         with self._lock:

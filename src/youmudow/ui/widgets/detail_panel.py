@@ -3,6 +3,7 @@
 import copy
 import logging
 import tkinter as tk
+from typing import Literal
 
 from youmudow.app.state import AppStateData
 from youmudow.domain.models import DownloadOptions, Video
@@ -262,6 +263,32 @@ class DetailPanel(tk.Frame):
         self._add_all_btn.pack(side="left", fill="x", expand=True, padx=(SPACING["xs"], 0))
         add_hover_effect(self._add_all_btn, "hover", "surface")
 
+        self._add_new_btn = tk.Button(
+            btn_row,
+            text=t("Add New"),
+            bg=_c("surface"),
+            fg=_c("text"),
+            activebackground=_c("hover"),
+            activeforeground=_c("text"),
+            relief="flat",
+            bd=0,
+            font=FONT["body"],
+            pady=4,
+            command=self._add_new_to_queue,
+        )
+        setattr_any(
+            self._add_new_btn,
+            "_theme",
+            {
+                "bg": "surface",
+                "fg": "text",
+                "activebg": "hover",
+                "activefg": "text",
+            },
+        )
+        self._add_new_btn.pack(side="left", fill="x", expand=True, padx=(SPACING["xs"], 0))
+        add_hover_effect(self._add_new_btn, "hover", "surface")
+
         self._queue_toggle_btn = tk.Button(
             btn_row,
             text=t("Queue"),
@@ -308,6 +335,9 @@ class DetailPanel(tk.Frame):
         if self._estimate_bytes is not None:
             self._estimate_bytes = None
             self._render_meta()
+
+    def estimated_bytes(self) -> int | None:
+        return self._estimate_bytes
 
     def set_estimate(self, size_bytes: int | None) -> None:
         """Show (or hide) the estimated download size for the current video."""
@@ -364,7 +394,11 @@ class DetailPanel(tk.Frame):
         cards = self._mw._results_cards
         is_playlist = cards.is_playlist if cards is not None else False
         has_playlist = bool(cards.playlist_videos) if cards is not None else False
-        self._add_all_btn.configure(state="normal" if is_playlist and has_playlist else "disabled")
+        playlist_state: Literal["normal", "disabled"] = (
+            "normal" if is_playlist and has_playlist else "disabled"
+        )
+        self._add_all_btn.configure(state=playlist_state)
+        self._add_new_btn.configure(state=playlist_state)
         self._export_btn.configure(state="normal" if is_playlist and has_playlist else "disabled")
         more_available = self._mw._playlist_has_more
         self._load_more_btn.configure(
@@ -409,6 +443,25 @@ class DetailPanel(tk.Frame):
             video.options = copy.copy(opts)
         self._mw._controller.enqueue_multiple(videos)
         self._mw._set_status(t("Added {count} videos to queue", count=len(videos)))
+
+    def _add_new_to_queue(self) -> None:
+        opts = self.get_current_options()
+        if opts is None:
+            return
+        cards = self._mw._results_cards
+        if cards is None:
+            return
+        videos = cards.playlist_videos
+        for video in videos:
+            video.options = copy.copy(opts)
+        queued, skipped = self._mw._controller.enqueue_new(videos)
+        self._mw._set_status(
+            t(
+                "Queued {queued}, skipped {skipped} already downloaded",
+                queued=queued,
+                skipped=skipped,
+            )
+        )
 
     def _toggle_queue_panel(self) -> None:
         self.queue.toggle()

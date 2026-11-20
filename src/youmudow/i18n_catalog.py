@@ -46,6 +46,10 @@ _ES: dict[str, str] = {
     "Title:": "Título:",
     "Uploader:": "Canal:",
     "Download": "Descargar",
+    "Add New": "Añadir nuevos",
+    "Queued {queued}, skipped {skipped} already downloaded": (
+        "Encolados {queued}, saltados {skipped} ya descargados"
+    ),
     "Add All": "Añadir todo",
     "Queue": "Cola",
     "Load more": "Cargar más",
@@ -121,6 +125,15 @@ _ES: dict[str, str] = {
     "Nothing downloaded yet.": "Todavía no has descargado nada.",
     "{count} downloads · {size}": "{count} descargas · {size}",
     "Queued {count} missing download(s)": "{count} descarga(s) perdida(s) añadida(s) a la cola",
+    "Not enough disk space: needs {size}, {free} free": (
+        "No hay espacio suficiente: necesita {size} y quedan {free}"
+    ),
+    "Scan folder": "Escanear carpeta",
+    "Import files": "Importar ficheros",
+    "{count} files in the folder are not in the library": (
+        "{count} ficheros de la carpeta no están en la biblioteca"
+    ),
+    "Imported {count} files": "Importados {count} ficheros",
     "Import URLs...": "Importar URLs...",
     "Import URLs": "Importar URLs",
     "Text files": "Archivos de texto",

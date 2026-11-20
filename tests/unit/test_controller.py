@@ -640,3 +640,25 @@ def test_requeue_failed_moves_every_failure_back_to_the_queue():
     assert state.remove_from_queue.call_count == 2
     assert [call.args[0] for call in state.add_to_queue.call_args_list] == failures
     assert all(video.status is DownloadStatus.READY for video in failures)
+
+
+def test_enqueue_new_skips_urls_already_in_the_library():
+    store = Mock()
+    store.has_url.side_effect = lambda url: url.endswith("/old")
+    controller = AppController(search_service=Mock(), library_store=store)
+
+    queued, skipped = controller.enqueue_new(
+        [
+            Video(title="Old", url="https://x.test/old"),
+            Video(title="New", url="https://x.test/new"),
+        ]
+    )
+
+    assert (queued, skipped) == (1, 1)
+    assert [v.url for v in controller.state.get_queue()] == ["https://x.test/new"]
+
+
+def test_enqueue_new_without_a_library_queues_everything():
+    controller = AppController(search_service=Mock())
+    queued, skipped = controller.enqueue_new([Video(title="A", url="https://x.test/a")])
+    assert (queued, skipped) == (1, 0)
