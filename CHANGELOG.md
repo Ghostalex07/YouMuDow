@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.15.1] - 2026-11-21
+
+### Changed
+
+- Search results render in batches: the first screenful appears at once and
+  the rest fills in without freezing the window. A 500-entry channel now opens
+  in under a second of main-thread work instead of several seconds; the first
+  batch costs ~100 ms, down from ~410 ms for 50 results.
+
 ## [1.15.0] - 2026-11-21
 
 ### Added
