@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.15.0] - 2026-11-21
+
+### Added
+
+- The queue panel summarizes failures by cause (private, cookies, geo,
+  network, disk, unsupported, other) and offers **Retry failed** to re-queue
+  every failed entry at once
+
 ## [1.14.0] - 2026-11-21
 
 ### Added

@@ -11,6 +11,7 @@ from typing import Any, Protocol
 
 from youmudow.app.events import emit_log
 from youmudow.app.state import AppState, StateManager
+from youmudow.domain.enums import DownloadStatus
 from youmudow.domain.formats import estimate_size
 from youmudow.domain.models import HistoryEntry, Video
 from youmudow.domain.validators import is_valid_youtube_url, sanitize_filename
@@ -347,6 +348,17 @@ class AppController:
     @property
     def downloads_paused(self) -> bool:
         return self._download_service.is_paused
+
+    def requeue_failed(self) -> int:
+        """Send every failed download back to the queue, fresh and unmarked."""
+        failed = self._state_manager.get_failed_downloads()
+        for video in failed:
+            self._state_manager.remove_from_queue(video)
+            video.status = DownloadStatus.READY
+            video.error_message = ""
+            video.progress = 0.0
+            self.enqueue(video)
+        return len(failed)
 
     def remove_from_queue(self, video: Video) -> None:
         """Remove a video from the queue, cancelling it if actively downloading.
