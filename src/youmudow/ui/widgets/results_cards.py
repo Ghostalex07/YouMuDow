@@ -129,6 +129,12 @@ class ResultsCards(tk.Frame):
         self._source_videos = list(videos)
         self._render()
 
+    def _sync_sort_state(self) -> None:
+        combo = getattr(self, "_sort_combo", None)
+        if combo is None:
+            return
+        combo.configure(state="readonly" if self._source_videos else "disabled")
+
     def set_sort_mode(self, mode: str) -> None:
         known = {"Relevance", "Shortest", "Longest"}
         self._sort_mode = mode if mode in known else "Relevance"
@@ -150,6 +156,7 @@ class ResultsCards(tk.Frame):
         return list(self._source_videos)
 
     def _render(self) -> None:
+        self._sync_sort_state()
         self._videos = self._sorted_videos()
         self._selected = set()
         self._anchor = None
@@ -159,10 +166,47 @@ class ResultsCards(tk.Frame):
             return
         self._build_cards()
 
-    def clear_results(self) -> None:
+    def show_welcome(self, on_paste: Callable[[], None] | None = None) -> None:
+        """First-run state: explain what the window is for, with one action."""
         self._videos = []
         self._clear_children()
+        frame = tk.Frame(self._inner, bg=_c("bg"))
+        frame.pack(fill="x", pady=(SPACING["xl"], 0))
+        tk.Label(
+            frame,
+            text=t("Paste a link or search by name"),
+            bg=_c("bg"),
+            fg=_c("text"),
+            font=FONT["h2"],
+            anchor="w",
+            justify="left",
+        ).pack(fill="x", padx=SPACING["sm"], pady=(0, SPACING["sm"]))
+        for hint in (
+            t("Paste a video, playlist or channel link"),
+            t("Or type a name and press Enter"),
+            t("You can also drag a link onto this window"),
+        ):
+            tk.Label(
+                frame,
+                text=f"•  {hint}",
+                bg=_c("bg"),
+                fg=_c("text_secondary"),
+                font=FONT["body"],
+                anchor="w",
+                justify="left",
+            ).pack(fill="x", padx=SPACING["sm"], pady=(0, SPACING["xs"]))
+        if on_paste is not None:
+            ttk.Button(frame, text=t("Paste from clipboard"), command=on_paste).pack(
+                anchor="w", padx=SPACING["sm"], pady=(SPACING["md"], 0)
+            )
+        self._sync_sort_state()
+
+    def clear_results(self) -> None:
+        self._videos = []
+        self._source_videos = []
+        self._clear_children()
         self._show_empty_state()
+        self._sync_sort_state()
 
     def show_loading(self, message: str = "Searching...") -> None:
         self._videos = []

@@ -12,6 +12,7 @@ widget or application code at runtime.
 from __future__ import annotations
 
 import tkinter as tk
+from collections.abc import Callable
 from pathlib import Path
 from tkinter import ttk
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
@@ -76,6 +77,8 @@ class ResultsCardsWriter(ResultsCardsLike, Protocol):
 
     @playlist_videos.setter
     def playlist_videos(self, value: list[Video]) -> None: ...
+
+    def show_welcome(self, on_paste: Callable[[], None] | None = None) -> None: ...
 
 
 class DetailPanelLike(Protocol):
