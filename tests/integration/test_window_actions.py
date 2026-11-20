@@ -55,3 +55,20 @@ def test_dropping_nothing_explains_what_is_accepted(stack):
 
 def test_queue_shortcuts_are_bound(stack):
     assert stack.window._root.bind("<Control-Shift-s>")
+
+
+def test_download_now_stops_when_the_disk_is_full(stack, monkeypatch):
+    from youmudow.domain.models import Video
+
+    stack.adapter.results = [Video(title="Big", url="https://example.com/big")]
+    stack.window._search_bar.search_var.set("big")
+    stack.window._on_search()
+    pump(stack.window, lambda: stack.window._results_cards.card_count() == 1)
+    stack.window._detail_panel.set_estimate(10**12)
+    monkeypatch.setattr("youmudow.ui.window.has_room_for", lambda path, needed: False)
+    monkeypatch.setattr("youmudow.ui.window.free_bytes", lambda path: 1024)
+
+    stack.window._on_download_now()
+
+    assert "space" in stack.window._status_bar._status_var.get().lower()
+    assert stack.controller.state.get_queue() == []

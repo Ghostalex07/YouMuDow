@@ -19,12 +19,17 @@ class LibraryPanel(tk.Frame):
         on_check: Callable[[], list[str]],
         on_requeue: Callable[[], int],
         on_open_folder: Callable[[], None],
+        on_scan: Callable[[], list] | None = None,
+        on_import: Callable[[list], int] | None = None,
     ) -> None:
         super().__init__(parent, bg=_c("bg"))
         self._stats_provider = stats_provider
         self._on_check = on_check
         self._on_requeue = on_requeue
         self._missing: list[str] = []
+        self._on_scan = on_scan
+        self._on_import = on_import
+        self._scanned: list = []
         self._build(on_open_folder)
 
     def _build(self, on_open_folder: Callable[[], None]) -> None:
@@ -54,6 +59,8 @@ class LibraryPanel(tk.Frame):
             (t("Check library"), self._check),
             (t("Re-download missing"), self._requeue),
             (t("Open folder"), on_open_folder),
+            (t("Scan folder"), self._scan),
+            (t("Import files"), self._import_files),
         ):
             tk.Button(
                 buttons,
@@ -85,6 +92,17 @@ class LibraryPanel(tk.Frame):
         self._body.pack(fill="both", expand=True, padx=SPACING["md"], pady=(0, SPACING["md"]))
         self._body.configure(state="disabled")
 
+    def _scan(self) -> None:
+        self._scanned = list(self._on_scan()) if self._on_scan is not None else []
+        self.refresh()
+
+    def _import_files(self) -> None:
+        if not self._scanned or self._on_import is None:
+            return
+        self._on_import(self._scanned)
+        self._scanned = []
+        self.refresh()
+
     # -- rendering -------------------------------------------------------
 
     def refresh(self) -> None:
@@ -100,6 +118,12 @@ class LibraryPanel(tk.Frame):
         lines.extend(self._section(t("By format"), stats.get("by_format", [])))
         lines.extend(self._section(t("By channel"), stats.get("by_uploader", [])))
         lines.extend(self._section(t("By month"), stats.get("by_month", [])))
+        if self._scanned:
+            lines.append("")
+            lines.append(
+                t("{count} files in the folder are not in the library", count=len(self._scanned))
+            )
+            lines.extend(f"  · {item.path.name}" for item in self._scanned[:10])
         if self._missing:
             lines.append("")
             lines.append(t("Missing files: {count}", count=len(self._missing)))

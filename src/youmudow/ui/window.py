@@ -23,10 +23,13 @@ from youmudow.app.state import AppMode, AppState, AppStateData
 from youmudow.domain.enums import DownloadStatus
 from youmudow.domain.models import Video
 from youmudow.domain.playlist_export import playlist_to_m3u
+from youmudow.domain.sizes import format_size
+from youmudow.domain.storage import free_bytes, has_room_for
 from youmudow.domain.validators import is_playlist_url, is_supported_url
 from youmudow.i18n import t
 from youmudow.paths import cache_dir
 from youmudow.services.app_update_service import check_for_update
+from youmudow.services.folder_scan import ScannedFile
 from youmudow.services.thumbnail_cache import ThumbnailCache
 from youmudow.services.thumbnail_loader import ThumbnailLoader
 from youmudow.services.thumbnail_service import ThumbnailService
@@ -226,6 +229,8 @@ class MainWindow(MainWindowProtocol):
             on_check=self._on_check_library,
             on_requeue=self._on_requeue_missing,
             on_open_folder=self._on_open_folder,
+            on_scan=self._on_scan_folder,
+            on_import=self._on_import_files,
         )
         self._library_panel_impl.pack(fill="both", expand=True)
 
@@ -637,6 +642,14 @@ class MainWindow(MainWindowProtocol):
         search_bar.search_var.set(urls[0])
         self._on_search()
 
+    def _on_scan_folder(self) -> list[ScannedFile]:
+        return self._controller.scan_library_folder()
+
+    def _on_import_files(self, files: list[ScannedFile]) -> int:
+        imported = self._controller.import_scanned_files(files)
+        self._set_status(t("Imported {count} files", count=imported))
+        return imported
+
     def _on_check_library(self) -> list[str]:
         missing = self._controller.missing_downloads()
         self._set_status(t("Missing files: {count}", count=len(missing)))
@@ -895,6 +908,24 @@ class MainWindow(MainWindowProtocol):
     # Downloads and queue
     # ------------------------------------------------------------------
 
+    def _blocked_by_disk_space(self, detail_panel: DetailPanelLike) -> bool:
+        """True (and reports why) when the estimate cannot fit on the output volume."""
+        estimate = detail_panel.estimated_bytes()
+        if not estimate:
+            return False
+        output = self._controller.get_output_path()
+        if has_room_for(output, estimate):
+            return False
+        free = free_bytes(output) or 0
+        self._set_status(
+            t(
+                "Not enough disk space: needs {size}, {free} free",
+                size=format_size(estimate),
+                free=format_size(free),
+            )
+        )
+        return True
+
     def _on_download_now(self) -> None:
         results_cards = self._results_cards
         detail_panel = self._detail_panel_widget
@@ -902,6 +933,8 @@ class MainWindow(MainWindowProtocol):
             return
         selected = results_cards.get_selected_videos()
         if selected:
+            if len(selected) == 1 and self._blocked_by_disk_space(detail_panel):
+                return
             opts = detail_panel.get_current_options()
             if opts is None:
                 return
@@ -919,6 +952,9 @@ class MainWindow(MainWindowProtocol):
 
         target_video = self._selected_video
         if target_video is None:
+            return
+
+        if self._blocked_by_disk_space(detail_panel):
             return
 
         self._is_downloading = True

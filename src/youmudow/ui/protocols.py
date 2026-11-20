@@ -12,7 +12,7 @@ widget or application code at runtime.
 from __future__ import annotations
 
 import tkinter as tk
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from tkinter import ttk
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     )
     from youmudow.app.state import StateManager
     from youmudow.domain.models import DownloadOptions, HistoryEntry, Video
+    from youmudow.services.folder_scan import ScannedFile
     from youmudow.services.history_service import HistoryService
     from youmudow.services.library_store import LibraryStats
 
@@ -97,6 +98,10 @@ class DetailPanelLike(Protocol):
     def enqueue_selected(self) -> None: ...
 
     def apply_options_to_video(self, video: Video) -> None: ...
+
+    def estimated_bytes(self) -> int | None: ...
+
+    def set_estimate(self, size_bytes: int | None) -> None: ...
 
     def get_current_options(self) -> DownloadOptions | None: ...
 
@@ -174,6 +179,12 @@ class AppControllerProtocol(Protocol):
     def enqueue(self, video: Video) -> None: ...
 
     def enqueue_multiple(self, videos: list[Video]) -> None: ...
+
+    def enqueue_new(self, videos: list[Video]) -> tuple[int, int]: ...
+
+    def scan_library_folder(self) -> list[ScannedFile]: ...
+
+    def import_scanned_files(self, files: Sequence[ScannedFile]) -> int: ...
 
     def enqueue_urls(self, urls: list[str]) -> int: ...
 

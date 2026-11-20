@@ -6,6 +6,8 @@ Handles user actions and state management.
 
 import logging
 import threading
+from collections.abc import Sequence
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -20,6 +22,7 @@ from youmudow.services.download_service import (
     DownloadProgress,
     DownloadService,
 )
+from youmudow.services.folder_scan import ScannedFile, find_orphans, media_files
 from youmudow.services.history_service import HistoryService
 from youmudow.services.library_store import LibraryStats
 from youmudow.services.search_service import SearchService
@@ -278,6 +281,26 @@ class AppController:
         for video in videos:
             self.enqueue(video)
 
+    def enqueue_new(self, videos: list[Video]) -> tuple[int, int]:
+        """Queue only the videos the library has not downloaded yet.
+
+        Returns ``(queued, skipped)`` so the UI can say how much was actually
+        added instead of repeating a whole playlist on every run.
+        """
+        queued = 0
+        skipped = 0
+        for video in videos:
+            if self._library_store is not None and self._library_store.has_url(video.url):
+                skipped += 1
+                continue
+            before = len(self._state_manager.get_queue())
+            self.enqueue(video)
+            if len(self._state_manager.get_queue()) > before:
+                queued += 1
+            else:
+                skipped += 1
+        return queued, skipped
+
     def restore_queue(self) -> int:
         """Restore the pending downloads left by the previous session.
 
@@ -301,6 +324,39 @@ class AppController:
             self.enqueue(Video(title=url, url=url))
             added += 1
         return added
+
+    def scan_library_folder(self) -> list[ScannedFile]:
+        """Media files in the output folder that the library does not know about."""
+        if self._library_store is None:
+            return []
+        files = media_files(self._download_service.get_output_path())
+        return find_orphans(files, self._library_store.history_paths())
+
+    def import_scanned_files(self, files: Sequence[ScannedFile]) -> int:
+        """Record files found on disk so the library reflects the folder."""
+        if self._library_store is None:
+            return 0
+        imported = 0
+        for item in files:
+            try:
+                stat = item.path.stat()
+            except OSError:
+                continue
+            self._library_store.add_history(
+                HistoryEntry(
+                    title=item.path.stem,
+                    url=f"file://{item.path.resolve()}",
+                    uploader="",
+                    file_format=item.path.suffix.lstrip(".").lower(),
+                    output_path=str(item.path),
+                    downloaded_at=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(
+                        timespec="seconds"
+                    ),
+                    file_size_bytes=item.size,
+                )
+            )
+            imported += 1
+        return imported
 
     def library_stats(self) -> LibraryStats:
         if self._library_store is None:
