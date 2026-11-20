@@ -62,12 +62,12 @@ class DetailPanel(tk.Frame):
     def _build_thumbnail(self) -> None:
         self._thumbnail_label = tk.Label(
             self,
-            text="[No thumbnail]",
+            text=t("Select a result to see its details"),
             bg=_c("surface"),
             fg=_c("text_secondary"),
             font=FONT["small"],
             anchor="center",
-            height=8,
+            height=3,
         )
         self._thumbnail_label.pack(fill="x", pady=(0, SPACING["sm"]))
 
@@ -86,7 +86,7 @@ class DetailPanel(tk.Frame):
         ).pack(side="left")
         self._detail_title = tk.Label(
             row_title,
-            text="-",
+            text=t("No video selected"),
             bg=_c("surface"),
             fg=_c("text"),
             font=FONT["body"],
@@ -114,7 +114,7 @@ class DetailPanel(tk.Frame):
 
         self._detail_meta = tk.Label(
             self,
-            text="-",
+            text="",
             bg=_c("surface"),
             fg=_c("text_secondary"),
             font=FONT["small"],
@@ -293,6 +293,7 @@ class DetailPanel(tk.Frame):
     # ------------------------------------------------------------------
 
     def update_detail_panel(self, video: Video) -> None:
+        self._thumbnail_label.configure(height=8)
         self._detail_title.configure(text=video.title or "-")
         self._detail_uploader.configure(text=video.uploader or "-")
         self._estimate_bytes = None

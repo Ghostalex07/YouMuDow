@@ -21,6 +21,8 @@ A modern music & video downloader with real-time progress, persistent configurat
 - Download presets ("Music 320", "Video 1080", "Archive FLAC") plus per-format
   options
 - Duration and estimated size preview in the detail panel before downloading
+- A first-run panel that explains what to do, with a "Paste from clipboard"
+  button
 - Sort results by relevance or duration, export a loaded playlist as `.m3u`,
   and pick several subtitle languages at once (`es,en`)
 - Real-time progress bar and download log

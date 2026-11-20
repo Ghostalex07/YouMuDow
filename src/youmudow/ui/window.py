@@ -264,6 +264,10 @@ class MainWindow(MainWindowProtocol):
         self._detail_panel_widget = DetailPanel(
             main_frame, self, thumbnail_loader=self._thumbnail_loader
         )
+        results_cards = self._results_cards
+        if results_cards is not None:
+            results_cards.show_welcome(self._paste_from_clipboard)
+        self._update_button_states()
         self._status_bar_impl = StatusBar(self._main_tab, self)
 
         history = self._config.get_search_history() if self._config else []
@@ -544,7 +548,10 @@ class MainWindow(MainWindowProtocol):
                 status_bar.set_progress_color(_c("border"))
 
         self._update_button_states()
-        if detail_panel is not None and detail_panel.queue_panel_visible:
+        if detail_panel is not None:
+            # Always feed the panel: it decides by itself whether it has enough
+            # work to appear, which keeps the first-run window free of an empty
+            # table.
             detail_panel.update_queue(snapshot)
         if status_bar is not None:
             self._tk_root.after(50, status_bar.update_progress_bar)
@@ -603,6 +610,24 @@ class MainWindow(MainWindowProtocol):
             self._set_status(t("Could not save the file: {error}", error=exc))
             return
         self._set_status(t("Playlist saved to {path}", path=path))
+
+    def _paste_from_clipboard(self) -> None:
+        try:
+            text = self._tk_root.clipboard_get()
+        except tk.TclError:
+            text = ""
+        text = (text or "").strip()
+        search_bar = self._search_bar
+        if not text or search_bar is None:
+            self._set_status(t("Nothing to paste"))
+            return
+        search_bar.search_var.set(text)
+        self._on_search()
+
+    def _refresh_queue(self) -> None:
+        detail_panel = self._detail_panel_widget
+        if detail_panel is not None:
+            detail_panel.update_queue(self._controller.state.get_snapshot())
 
     def _accept_dropped_urls(self, urls: list[str]) -> None:
         search_bar = self._search_bar

@@ -63,6 +63,11 @@ class QueuePanel(tk.Frame):
         )
         self._build_header()
         self._build_tree()
+        self._user_hidden = False
+        # A first-time window should not give a quarter of the screen to an
+        # empty table; the panel appears by itself when there is work.
+        self.grid_remove()
+        self._visible = False
         self._build_problems()
 
     def _build_header(self) -> None:
@@ -137,8 +142,10 @@ class QueuePanel(tk.Frame):
     def toggle(self) -> None:
         """Show or hide the panel, refreshing its rows when it appears."""
         if self._visible:
+            self._user_hidden = True
             self.hide()
         else:
+            self._user_hidden = False
             self.show()
             self.update_display()
 
@@ -186,6 +193,17 @@ class QueuePanel(tk.Frame):
             snapshot = self._mw._controller.state.get_snapshot()
 
         self._update_problems(snapshot)
+        self._sync_pause_button(snapshot)
+        has_entries = any(
+            (
+                snapshot.queue,
+                snapshot.active_downloads,
+                snapshot.completed_downloads,
+                snapshot.failed_downloads,
+            )
+        )
+        if has_entries and not self._visible and not self._user_hidden:
+            self.show()
         buckets = (
             snapshot.queue,
             snapshot.active_downloads,
@@ -271,9 +289,13 @@ class QueuePanel(tk.Frame):
             controller.pause_downloads()
         self._sync_pause_button()
 
-    def _sync_pause_button(self) -> None:
+    def _sync_pause_button(self, snapshot: AppStateData | None = None) -> None:
         paused = self._mw._controller.downloads_paused
         self._pause_btn.configure(text=t("Resume") if paused else t("Pause"))
+        has_work = True
+        if snapshot is not None:
+            has_work = bool(snapshot.queue or snapshot.active_downloads)
+        self._pause_btn.configure(state="normal" if has_work else "disabled")
 
     def _on_drag_start(self, event: tk.Event) -> None:
         self._drag_item = self._queue_tree.identify_row(event.y)

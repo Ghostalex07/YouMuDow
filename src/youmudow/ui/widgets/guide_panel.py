@@ -14,7 +14,8 @@ GUIDE_SECTIONS: tuple[tuple[str, str], ...] = (
             "Type a name in the search bar and press Enter, or paste a link to a "
             "video, playlist or channel. Results appear as cards on the left; "
             "clicking one fills the detail panel on the right. You can also drag "
-            "a link from your browser onto the window to search it."
+            "a link from your browser onto the window to search it, or press "
+            "Paste from clipboard on the empty results pane."
         ),
     ),
     (

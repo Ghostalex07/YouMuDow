@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.16.0] - 2026-11-21
+
+### Changed
+
+- The first window now explains itself: the results pane shows what to do
+  (paste a link, search by name, drag a link) with a "Paste from clipboard"
+  button, instead of an empty rectangle
+- The queue panel stays hidden until there is work, the detail panel says "No
+  video selected" instead of showing a dash and an empty thumbnail, and
+  Download / Add All / Export list / Load more / Pause start disabled
+
 ## [1.15.1] - 2026-11-21
 
 ### Changed
