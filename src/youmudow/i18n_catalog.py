@@ -130,6 +130,15 @@ _ES: dict[str, str] = {
     "Pause": "Pausar",
     "Resume": "Reanudar",
     "Move to top": "Mover arriba",
+    "Retry failed": "Reintentar fallidos",
+    "Re-queued {count} download(s)": "Reencoladas {count} descarga(s)",
+    "private": "privados",
+    "needs cookies": "necesitan cookies",
+    "geo-blocked": "geobloqueados",
+    "network error": "error de red",
+    "disk error": "error de disco",
+    "unsupported": "no soportado",
+    "other error": "otro error",
 }
 
 MESSAGES: dict[str, dict[str, str]] = {"es": _ES}

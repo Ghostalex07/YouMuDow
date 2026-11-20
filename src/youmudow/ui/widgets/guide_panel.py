@@ -54,7 +54,8 @@ GUIDE_SECTIONS: tuple[tuple[str, str], ...] = (
             "downloads is configurable; failed downloads are retried with a "
             "growing wait (2 retries by default, 0-5), and cancelling during a "
             "retry stops it at once. The pending queue is saved and restored the "
-            "next time you open the app. Ctrl+Shift+S starts the queue and Delete "
+            "next time you open the app. Failures are grouped by cause under the queue "
+            "with a Retry failed button. Ctrl+Shift+S starts the queue and Delete "
             "removes the row selected in the queue panel."
         ),
     ),

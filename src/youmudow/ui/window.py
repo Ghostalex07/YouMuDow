@@ -903,6 +903,11 @@ class MainWindow(MainWindowProtocol):
         self._controller.start_downloads()
         self._set_status(t("Downloading: {title}", title=target_video.title))
 
+    def _on_retry_failed(self) -> None:
+        count = self._controller.requeue_failed()
+        self._set_status(t("Re-queued {count} download(s)", count=count))
+        self._update_button_states()
+
     def _on_start_queue(self) -> None:
         if self._is_downloading:
             return

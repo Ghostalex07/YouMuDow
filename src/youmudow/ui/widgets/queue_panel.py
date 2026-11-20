@@ -6,6 +6,7 @@ from tkinter import ttk
 
 from youmudow.app.state import AppStateData
 from youmudow.domain.enums import DownloadStatus
+from youmudow.domain.error_causes import ErrorCause, summarize_failures
 from youmudow.domain.models import Video
 from youmudow.i18n import t
 from youmudow.ui.protocols import MainWindowProtocol
@@ -36,6 +37,17 @@ def _queue_iid(video: Video) -> str:
     return f"q{video.queue_id}"
 
 
+_CAUSE_LABELS: dict[ErrorCause, str] = {
+    ErrorCause.PRIVATE: "private",
+    ErrorCause.COOKIES: "needs cookies",
+    ErrorCause.GEO: "geo-blocked",
+    ErrorCause.NETWORK: "network error",
+    ErrorCause.DISK: "disk error",
+    ErrorCause.UNSUPPORTED: "unsupported",
+    ErrorCause.OTHER: "other error",
+}
+
+
 class QueuePanel(tk.Frame):
     """The queue tree, its count label and its context menu."""
 
@@ -51,6 +63,7 @@ class QueuePanel(tk.Frame):
         )
         self._build_header()
         self._build_tree()
+        self._build_problems()
 
     def _build_header(self) -> None:
         qheader = tk.Frame(self, bg=_c("surface"))
@@ -129,10 +142,50 @@ class QueuePanel(tk.Frame):
             self.show()
             self.update_display()
 
+    def _build_problems(self) -> None:
+        self._problems = tk.Frame(self, bg=_c("surface"))
+        setattr_any(self, "_bg_key", "surface")
+        self._problems_label = tk.Label(
+            self._problems,
+            text="",
+            bg=_c("surface"),
+            fg=_c("text_secondary"),
+            font=FONT["small"],
+        )
+        self._problems_label.pack(side="left")
+        self._retry_failed_btn = tk.Button(
+            self._problems,
+            text=t("Retry failed"),
+            command=self._on_retry_failed,
+            bg=_c("surface"),
+            fg=_c("text"),
+            activebackground=_c("hover"),
+            activeforeground=_c("text"),
+            relief="flat",
+            font=FONT["small"],
+            cursor="hand2",
+        )
+        self._retry_failed_btn.pack(side="right")
+
+    def _on_retry_failed(self) -> None:
+        self._mw._on_retry_failed()
+
+    def _update_problems(self, snapshot: AppStateData) -> None:
+        counts = summarize_failures(snapshot.failed_downloads)
+        if not counts:
+            self._problems.pack_forget()
+            return
+        self._problems_label.configure(
+            text=" · ".join(f"{count} {t(_CAUSE_LABELS[cause])}" for cause, count in counts)
+        )
+        if not self._problems.winfo_manager():
+            self._problems.pack(fill="x", pady=(SPACING["xs"], 0))
+
     def update_display(self, snapshot: AppStateData | None = None) -> None:
         if snapshot is None:
             snapshot = self._mw._controller.state.get_snapshot()
 
+        self._update_problems(snapshot)
         buckets = (
             snapshot.queue,
             snapshot.active_downloads,

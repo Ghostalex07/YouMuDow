@@ -28,6 +28,8 @@ A modern music & video downloader with real-time progress, persistent configurat
 - Rate limiting, chapter splitting, subtitles
 - Failed downloads retry automatically with backoff; the pending queue is
   restored on the next start
+- Failures are grouped by cause ("2 private, 1 needs cookies, 1 network
+  error") with a one-click **Retry failed**
 - Optional system tray: closing the window can keep the queue running (needs a
   status-notifier host on Linux)
 - `Help > Export Diagnostics...` writes version, ffmpeg, environment and a

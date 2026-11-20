@@ -10,6 +10,7 @@ import pytest
 from youmudow.app.config import AppConfig
 from youmudow.app.controller import AppController
 from youmudow.app.state import AppMode, AppState
+from youmudow.domain.enums import DownloadStatus
 from youmudow.domain.models import Video
 from youmudow.services.thumbnail_service import ThumbnailService
 
@@ -621,3 +622,21 @@ def test_controller_uses_the_library_store_for_history(tmp_path):
     controller.history.add(Video(title="Song", url="https://x.test/1"), "/m/a.mp3", "mp3")
     assert len(store.history()) == 1
     store.close()
+
+
+def test_requeue_failed_moves_every_failure_back_to_the_queue():
+    failures = [
+        Video(title="a", url="https://x.test/a"),
+        Video(title="b", url="https://x.test/b"),
+    ]
+    for video in failures:
+        video.status = DownloadStatus.ERROR
+        video.error_message = "Private video"
+    state = Mock()
+    state.get_failed_downloads.return_value = failures
+    controller = AppController(search_service=Mock(), state_manager=state, config=None)
+
+    assert controller.requeue_failed() == 2
+    assert state.remove_from_queue.call_count == 2
+    assert [call.args[0] for call in state.add_to_queue.call_args_list] == failures
+    assert all(video.status is DownloadStatus.READY for video in failures)
