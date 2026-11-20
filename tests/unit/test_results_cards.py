@@ -1,5 +1,6 @@
 """Tests for the ResultsCards widget."""
 
+import time
 import tkinter as tk
 from unittest.mock import Mock
 
@@ -202,3 +203,35 @@ def test_sorting_by_duration_reorders_the_cards(root, state, loader):
 
     cards.set_sort_mode("Relevance")
     assert [v.title for v in cards._videos] == ["Long", "Short", "Unknown"]
+
+
+def test_large_result_sets_render_in_batches(root, state, loader):
+    cards = ResultsCards(root, state, loader)
+    videos = [Video(title=f"V{i}", url=f"https://e.com/{i}", duration=60 + i) for i in range(30)]
+
+    cards.update_results(videos)
+
+    # The first screenful is ready immediately; the rest is scheduled so the
+    # window can repaint instead of freezing for seconds.
+    assert cards.card_count() == 12
+    deadline = time.monotonic() + 5
+    while cards.card_count() < 30 and time.monotonic() < deadline:
+        cards.update()
+        time.sleep(0.005)
+    assert cards.card_count() == 30
+    cards.destroy()
+
+
+def test_selection_survives_a_batched_render(root, state, loader):
+    cards = ResultsCards(root, state, loader)
+    videos = [Video(title=f"V{i}", url=f"https://e.com/{i}", duration=60 + i) for i in range(30)]
+    cards.update_results(videos)
+    deadline = time.monotonic() + 5
+    while cards.card_count() < 30 and time.monotonic() < deadline:
+        cards.update()
+        time.sleep(0.005)
+
+    cards.select(20, notify=False)
+
+    assert cards.get_selected() == [20]
+    cards.destroy()

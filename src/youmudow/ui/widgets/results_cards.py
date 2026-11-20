@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 _THUMB_WIDTH = 120
 _THUMB_HEIGHT = 68
 _INITIAL_BATCH = 12
+_RENDER_BATCH = 12
 _RETRY_DELAY_MS = 1500
 
 # tkinter event.state modifier masks (same values across platforms).
@@ -66,6 +67,8 @@ class ResultsCards(tk.Frame):
         self._thumb_batch = 0
         self._photo_refs: dict[int, object] = {}
         self._empty_state: EmptyState | None = None
+        self._render_after_id: str | None = None
+        self._render_generation = 0
         self._source_videos: list[Video] = []
         self._sort_mode = "Relevance"
 
@@ -155,7 +158,6 @@ class ResultsCards(tk.Frame):
             self._show_empty_state()
             return
         self._build_cards()
-        self._request_thumbnails()
 
     def clear_results(self) -> None:
         self._videos = []
@@ -215,7 +217,19 @@ class ResultsCards(tk.Frame):
     # Card construction
     # ------------------------------------------------------------------
 
+    def _cancel_pending_render(self) -> None:
+        """Drop the tail of a chunked render that has not run yet."""
+        self._render_generation += 1
+        if self._render_after_id is None:
+            return
+        try:
+            self.after_cancel(self._render_after_id)
+        except tk.TclError:
+            pass
+        self._render_after_id = None
+
     def _clear_children(self) -> None:
+        self._cancel_pending_render()
         for widget in self._inner.winfo_children():
             widget.destroy()
         self._cards = []
@@ -233,10 +247,24 @@ class ResultsCards(tk.Frame):
         self._empty_state.pack(fill="x", expand=True, pady=SPACING["xl"])
 
     def _build_cards(self) -> None:
-        for i, video in enumerate(self._videos):
-            card, thumb = self._make_card(i, video)
+        # Building 500 cards takes seconds and freezes the window, so the first
+        # screenful is built now and the rest in small batches that give Tk a
+        # chance to repaint and handle input between them.
+        self._render_from(0, self._render_generation)
+
+    def _render_from(self, start: int, generation: int) -> None:
+        if generation != self._render_generation:
+            return
+        end = min(start + _RENDER_BATCH, len(self._videos))
+        for i in range(start, end):
+            card, thumb = self._make_card(i, self._videos[i])
             self._cards.append(card)
             self._thumb_labels.append(thumb)
+        if end < len(self._videos):
+            self._render_after_id = self.after(1, self._render_from, end, generation)
+        else:
+            self._render_after_id = None
+            self._request_thumbnails()
 
     def _make_card(self, index: int, video: Video) -> tuple[Card, tk.Label]:
         card = Card(self._inner, padding=SPACING["sm"])
