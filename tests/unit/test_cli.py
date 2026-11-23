@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from youmudow import cli
 from youmudow.app.config import AppConfig
 from youmudow.cli import _build_parser, _cmd_download, _cmd_search, main
 from youmudow.domain.enums import DownloadStatus
@@ -470,3 +471,62 @@ def test_queue_lists_and_clears_the_saved_queue(tmp_path, monkeypatch, capsys):
 
     assert cli.main(["queue", "--json"]) == 0
     assert json.loads(capsys.readouterr().out) == {"queue": []}
+
+
+def test_cookies_flag_switches_the_options_to_a_cookie_file(tmp_path):
+    args = cli._build_parser().parse_args(
+        ["download", "https://x.test/a", "--cookies", "/tmp/c.txt"]
+    )
+    options = cli._resolve_options(args, AppConfig())
+    assert options.cookies_file == "/tmp/c.txt"
+    assert options.use_cookies is True
+
+
+def test_polite_mode_sets_a_rate_limit_and_a_sleep():
+    args = cli._build_parser().parse_args(["download", "https://x.test/a", "--polite"])
+    options = cli._resolve_options(args, AppConfig())
+    assert options.rate_limit
+    assert options.sleep_requests >= 1.0
+
+
+def test_explicit_rate_limit_wins_over_polite_mode():
+    args = cli._build_parser().parse_args(
+        ["download", "https://x.test/a", "--polite", "--rate-limit", "5M"]
+    )
+    assert cli._resolve_options(args, AppConfig()).rate_limit == "5M"
+
+
+def test_build_download_args_emits_the_sleep_option():
+    from youmudow.adapters.ytdlp_adapter import YtdlpConfig
+    from youmudow.adapters.ytdlp_args import build_download_args
+
+    video = Video(
+        title="A",
+        url="https://x.test/a",
+        options=DownloadOptions(sleep_requests=2.0),
+    )
+    args = build_download_args(YtdlpConfig(), video)
+    assert args[args.index("--sleep-requests") + 1] == "2.0"
+
+
+def test_batch_flags_a_bot_check_failure(tmp_path, monkeypatch, capsys):
+    class _BotBlocked:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def set_log_callback(self, callback):
+            pass
+
+        def download_now(self, video, output_dir, progress_callback=None):
+            raise RuntimeError("Sign in to confirm you're not a bot")
+
+    listing = tmp_path / "urls.txt"
+    listing.write_text("https://x.test/a\n", encoding="utf-8")
+    monkeypatch.setattr(cli, "DownloadService", _BotBlocked)
+    monkeypatch.setattr(cli, "_open_cli_store", lambda: None)
+
+    code = cli.main(["download", "--from-file", str(listing), "--json", "--output", str(tmp_path)])
+    payload = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert code == 1
+    assert payload["failed"] == 1
+    assert "cookies" in payload["hint"].lower()

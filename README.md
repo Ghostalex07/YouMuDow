@@ -118,7 +118,24 @@ and skips anything already in the download history, so a half-finished list
 can be re-run safely. `--json` prints a machine-readable summary instead of
 progress lines: `{"requested", "downloaded", "skipped", "failed", "results"}`.
 
-Options: `--format`, `--quality`, `--output DIR`, `--skip-metadata`.
+Options: `--format`, `--quality`, `--output DIR`, `--skip-metadata`, `--limit`.
+
+### Cookies and throttling
+
+YouTube asks for a sign-in ("confirm you're not a bot") when a batch is too
+large or the IP looks unusual. The CLI reads the cookie settings from the app
+configuration and can override them per run:
+
+```bash
+youmudow-cli download URL --cookies cookies.txt      # Netscape cookie file
+youmudow-cli download URL --browser firefox          # read from the browser
+youmudow-cli download URL --rate-limit 1M            # cap the speed
+youmudow-cli download URL --sleep 2                  # wait between requests
+youmudow-cli download --from-file urls.txt --polite  # 1M + 2s per request
+```
+
+With `--json`, a batch blocked by the bot check adds a `hint` field telling the
+caller to pass cookies.
 
 For a playlist or channel, `--limit N` sets how many entries to fetch (1-500,
 defaulting to `playlist_limit`); the CLI prints `Found N video(s)` and a
