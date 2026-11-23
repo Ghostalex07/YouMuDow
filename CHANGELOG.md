@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.21.0] - 2026-11-23
+
+### Added
+
+- CLI: `search --json`, plus `history` (text or `--json`) and `queue`
+  (`--json`, `--clear`) reading the same SQLite library as the app
+- Headless server: `GET /api/events` streams download events as
+  server-sent events, so a client can follow progress without polling
+- Performance guards in CI: repainting a 500-row queue and the first result
+  batch are now measured on every run
+
 ## [1.20.0] - 2026-11-23
 
 ### Added

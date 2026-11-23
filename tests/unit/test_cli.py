@@ -392,3 +392,81 @@ def test_doctor_exits_one_when_a_check_fails(monkeypatch, capsys):
     )
     assert cli.main(["doctor"]) == 1
     assert "FAIL A: broken" in capsys.readouterr().out
+
+
+def _seeded_store(tmp_path, monkeypatch):
+    from youmudow import paths
+    from youmudow.domain.models import HistoryEntry
+    from youmudow.services.library_store import LibraryStore
+
+    db = tmp_path / "lib.db"
+    monkeypatch.setattr(paths, "database_file", lambda: db)
+    store = LibraryStore(db)
+    store.add_history(
+        HistoryEntry(
+            title="Song One",
+            url="https://x.test/1",
+            uploader="Chan",
+            file_format="mp3",
+            output_path=str(tmp_path / "one.mp3"),
+            downloaded_at="2026-11-23T10:00:00+00:00",
+            file_size_bytes=2048,
+        )
+    )
+    return store
+
+
+def test_history_prints_the_recent_downloads(tmp_path, monkeypatch, capsys):
+    from youmudow import cli
+
+    _seeded_store(tmp_path, monkeypatch).close()
+    assert cli.main(["history"]) == 0
+    out = capsys.readouterr().out
+    assert "Song One" in out
+    assert "2026-11-23" in out
+
+
+def test_history_can_print_json(tmp_path, monkeypatch, capsys):
+    from youmudow import cli
+
+    _seeded_store(tmp_path, monkeypatch).close()
+    assert cli.main(["history", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["entries"][0]["title"] == "Song One"
+    assert payload["entries"][0]["format"] == "mp3"
+
+
+def test_search_can_print_json(monkeypatch, capsys):
+    from youmudow import cli
+    from youmudow.domain.models import Video
+
+    monkeypatch.setattr(
+        cli.SearchService,
+        "search",
+        lambda self, query, limit=10: [
+            Video(title="Hit", url="https://x.test/hit", uploader="Chan", duration=42)
+        ],
+    )
+    assert cli.main(["search", "hit", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["results"][0]["title"] == "Hit"
+    assert payload["query"] == "hit"
+
+
+def test_queue_lists_and_clears_the_saved_queue(tmp_path, monkeypatch, capsys):
+    from youmudow import cli
+    from youmudow.domain.models import Video
+    from youmudow.services.queue_store import video_to_dict
+
+    store = _seeded_store(tmp_path, monkeypatch)
+    store.replace_queue([json.dumps(video_to_dict(Video(title="Later", url="https://x.test/l")))])
+    store.close()
+
+    assert cli.main(["queue"]) == 0
+    assert "Later" in capsys.readouterr().out
+
+    assert cli.main(["queue", "--clear"]) == 0
+    assert "cleared" in capsys.readouterr().out.lower()
+
+    assert cli.main(["queue", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out) == {"queue": []}

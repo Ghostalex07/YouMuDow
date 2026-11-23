@@ -98,6 +98,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default=10,
         help="number of results (default: 10)",
     )
+    search.add_argument("--json", dest="as_json", action="store_true", help="print JSON")
     search.set_defaults(func=_cmd_search)
 
     serve = subparsers.add_parser("serve", help="run a headless HTTP download server")
@@ -125,6 +126,25 @@ def _build_parser() -> argparse.ArgumentParser:
 
     doctor = subparsers.add_parser("doctor", help="check the environment")
     doctor.set_defaults(func=_cmd_doctor)
+
+    history = subparsers.add_parser("history", help="list recent downloads")
+    history.add_argument(
+        "--limit",
+        type=_positive_int,
+        default=20,
+        help="how many entries to show (default: 20)",
+    )
+    history.add_argument("--json", dest="as_json", action="store_true", help="print JSON")
+    history.set_defaults(func=_cmd_history)
+
+    queue = subparsers.add_parser("queue", help="show or clear the saved queue")
+    queue.add_argument(
+        "--clear",
+        action="store_true",
+        help="drop every pending entry from the saved queue",
+    )
+    queue.add_argument("--json", dest="as_json", action="store_true", help="print JSON")
+    queue.set_defaults(func=_cmd_queue)
 
     return parser
 
@@ -282,13 +302,100 @@ def _download_playlist(
 
 def _cmd_search(args: argparse.Namespace, config: AppConfig) -> int:
     service = SearchService()
-    service.set_log_callback(print)
+    service.set_log_callback(lambda line: None if args.as_json else print(line))
     results = service.search(args.query, args.limit)
+
+    if args.as_json:
+        payload = [
+            {
+                "title": video.title,
+                "url": video.url,
+                "uploader": video.uploader,
+                "duration": video.duration,
+            }
+            for video in results
+        ]
+        print(json.dumps({"query": args.query, "results": payload}))
+        return 0
 
     for index, video in enumerate(results, start=1):
         print(f"{index:2}. {video.title}")
         print(f"    {video.url}")
     print(f"\n{len(results)} result(s) for {args.query!r}")
+    return 0
+
+
+def _cmd_history(args: argparse.Namespace, config: AppConfig) -> int:
+    from youmudow.domain.sizes import format_size
+
+    store = _open_cli_store()
+    if store is None:
+        print("The download history is not available", file=sys.stderr)
+        return 1
+    try:
+        entries = store.history(args.limit)
+    finally:
+        store.close()
+
+    if args.as_json:
+        payload = [
+            {
+                "title": entry.title,
+                "url": entry.url,
+                "format": entry.file_format,
+                "size_bytes": entry.file_size_bytes,
+                "downloaded_at": entry.downloaded_at,
+                "path": entry.output_path,
+            }
+            for entry in entries
+        ]
+        print(json.dumps({"entries": payload}))
+        return 0
+
+    if not entries:
+        print("No downloads yet.")
+        return 0
+    for entry in entries:
+        date = (entry.downloaded_at or "")[:10]
+        size = format_size(entry.file_size_bytes) if entry.file_size_bytes else "-"
+        print(f"{date}  {entry.file_format or '-':<5} {size:>9}  {entry.title}")
+    return 0
+
+
+def _cmd_queue(args: argparse.Namespace, config: AppConfig) -> int:
+    from youmudow.services.queue_store import video_from_dict
+
+    store = _open_cli_store()
+    if store is None:
+        print("The download queue is not available", file=sys.stderr)
+        return 1
+    try:
+        if args.clear:
+            store.replace_queue([])
+            if not args.as_json:
+                print("Queue cleared.")
+            return 0
+        videos = []
+        for payload in store.queue_payloads():
+            try:
+                video = video_from_dict(json.loads(payload))
+            except (ValueError, TypeError):
+                continue
+            if video is not None:
+                videos.append(video)
+    finally:
+        store.close()
+
+    if args.as_json:
+        payload = [{"title": video.title, "url": video.url} for video in videos]
+        print(json.dumps({"queue": payload}))
+        return 0
+    if not videos:
+        print("The queue is empty.")
+        return 0
+    for index, video in enumerate(videos, start=1):
+        print(f"{index:2}. {video.title}")
+        print(f"    {video.url}")
     return 0
 
 

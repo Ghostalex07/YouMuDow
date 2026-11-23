@@ -154,3 +154,36 @@ def test_batch_endpoint_rejects_a_missing_list(server):
     status, payload = call(base, "POST", "/api/downloads/batch", {"urls": "nope"})
     assert status == 400
     assert "urls" in payload["error"]
+
+
+def test_event_stream_pushes_download_events(server):
+    import http.client
+
+    base, _service = server
+    host_port = base.replace("http://", "").split(":")
+    connection = http.client.HTTPConnection(host_port[0], int(host_port[1]), timeout=5)
+    connection.request("GET", "/api/events", headers={"Authorization": "Bearer secret"})
+    response = connection.getresponse()
+    assert response.status == 200
+    assert response.getheader("Content-Type") == "text/event-stream"
+    assert response.fp.readline().startswith(b": ready")
+
+    call(base, "POST", "/api/downloads", {"url": "https://x.test/streamed"})
+
+    payload = None
+    for _ in range(20):
+        line = response.fp.readline()
+        if line.startswith(b"data: "):
+            payload = json.loads(line[len(b"data: ") :])
+            break
+    connection.close()
+
+    assert payload is not None
+    assert payload["url"] == "https://x.test/streamed"
+    assert payload["event"] == "QUEUED"
+
+
+def test_event_stream_requires_the_token(server):
+    base, _ = server
+    status, _payload = call(base, "GET", "/api/events", token=None)
+    assert status == 401

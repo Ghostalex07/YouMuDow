@@ -7,6 +7,8 @@ download started from a phone shows up in the window and vice versa.
 
 import json
 import logging
+import queue
+import threading
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -20,12 +22,23 @@ from youmudow.domain.validators import (
     SUPPORTED_QUALITIES,
     is_supported_url,
 )
+from youmudow.services.download_events import DownloadEvent
 from youmudow.services.download_service import DownloadService
 
 logger = logging.getLogger(__name__)
 
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 DEFAULT_PORT = 8765
+
+
+def _event_payload(event: DownloadEvent) -> dict[str, object]:
+    video = getattr(event, "video", None)
+    return {
+        "event": getattr(event.type, "name", str(getattr(event, "type", ""))),
+        "title": getattr(video, "title", ""),
+        "url": getattr(video, "url", ""),
+        "progress": round(float(getattr(video, "progress", 0.0) or 0.0), 1),
+    }
 
 
 def _video_summary(video: Video) -> dict[str, object]:
@@ -105,6 +118,10 @@ class _Handler(BaseHTTPRequestHandler):
             )
             return
 
+        if method == "GET" and path == "/api/events":
+            self._stream_events()
+            return
+
         if method == "GET" and path == "/api/downloads":
             self._respond(
                 HTTPStatus.OK,
@@ -138,6 +155,31 @@ class _Handler(BaseHTTPRequestHandler):
             return
 
         self._respond(HTTPStatus.NOT_FOUND, {"error": "unknown route"})
+
+    def _stream_events(self) -> None:
+        """Server-sent events: one JSON line per download event."""
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "keep-alive")
+        self.end_headers()
+        subscriber = self.server.subscribe()
+        try:
+            self.wfile.write(b": ready\n\n")
+            self.wfile.flush()
+            while not self.server.stopping.is_set():
+                try:
+                    payload = subscriber.get(timeout=1.0)
+                except queue.Empty:
+                    self.wfile.write(b": ping\n\n")
+                    self.wfile.flush()
+                    continue
+                self.wfile.write(f"data: {json.dumps(payload)}\n\n".encode())
+                self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            pass
+        finally:
+            self.server.unsubscribe(subscriber)
 
     def _enqueue(self) -> None:
         body = self._read_body()
@@ -224,6 +266,33 @@ class DownloadHTTPServer(ThreadingHTTPServer):
         super().__init__(address, _Handler)
         self.service = service
         self.token = token
+        self.stopping = threading.Event()
+        self._subscribers: set[queue.Queue] = set()
+        self._subscribers_lock = threading.Lock()
+
+    def subscribe(self) -> queue.Queue:
+        subscriber: queue.Queue = queue.Queue(maxsize=200)
+        with self._subscribers_lock:
+            self._subscribers.add(subscriber)
+        return subscriber
+
+    def unsubscribe(self, subscriber: queue.Queue) -> None:
+        with self._subscribers_lock:
+            self._subscribers.discard(subscriber)
+
+    def broadcast(self, payload: dict[str, object]) -> None:
+        with self._subscribers_lock:
+            subscribers = list(self._subscribers)
+        for subscriber in subscribers:
+            try:
+                subscriber.put_nowait(payload)
+            except queue.Full:
+                # A stalled client must not block the downloader.
+                pass
+
+    def shutdown(self) -> None:
+        self.stopping.set()
+        super().shutdown()
 
 
 def make_server(
@@ -239,7 +308,9 @@ def make_server(
     """
     if host not in LOOPBACK_HOSTS and not token:
         raise ValueError("a token is required when the server listens beyond localhost")
-    return DownloadHTTPServer((host, port), service, token)
+    httpd = DownloadHTTPServer((host, port), service, token)
+    service.on_event(lambda event: httpd.broadcast(_event_payload(event)))
+    return httpd
 
 
 def serve(

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "youmudow"
-version = "1.20.0"
+version = "1.21.0"
 description = "Music & Video Downloader - A modern desktop application"
 readme = "README.md"
 license = {text = "MIT"}
@@ -56,6 +56,7 @@ testpaths = ["tests"]
 addopts = "-q"
 markers = [
     "integration: full-stack UI tests, need a display (xvfb-run -a)",
+    "perf: timing guards with generous thresholds",
 ]
 
 [tool.coverage.run]
