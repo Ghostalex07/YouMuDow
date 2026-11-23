@@ -105,6 +105,7 @@ youmudow-cli download "https://www.youtube.com/watch?v=dQw4w9WgXcQ" --format mp3
 youmudow-cli download "bohemian rhapsody" --format mp3 --quality 320kbps
 youmudow-cli download "https://..." --output ~/Downloads --skip-metadata
 youmudow-cli search "lofi beats" --limit 10
+youmudow-cli doctor          # check ffmpeg, yt-dlp, folders and the database
 youmudow-cli download "https://www.youtube.com/playlist?list=..." --limit 25
 youmudow-cli download --from-file urls.txt --format mp3 --json
 ```
@@ -157,7 +158,7 @@ Settings live in the OS config directory as JSON:
 | `queue.json` | the pending queue, restored on the next start |
 | `history.json` | download history |
 | `youmudow.db` | SQLite library: history, pending queue, subscriptions |
-| `youmudow.log` | application log |
+| `youmudow.log` | application log (rotates at 5 MB, three backups) |
 
 On Linux that is `~/.config/youmudow`, on Windows `%APPDATA%\YouMuDow`, on
 macOS `~/Library/Application Support/youmudow`. Cookie paths and browser

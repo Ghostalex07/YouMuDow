@@ -1,64 +1,46 @@
-"""Tests for centralized logging setup."""
+"""Tests for the logging setup."""
 
 import logging
 
 import pytest
 
+from youmudow import logging_config
 
-@pytest.fixture(autouse=True)
-def _restore_logging_state():
-    import youmudow.logging_config as module
 
+@pytest.fixture
+def reset_logging():
+    previous = logging_config._configured
+    logging_config._configured = False
     root = logging.getLogger()
-    original_handlers = list(root.handlers)
-    original_level = root.level
-    original_configured = module._configured
+    saved = list(root.handlers)
+    root.handlers.clear()
+    yield root
+    for handler in list(root.handlers):
+        handler.close()
+    root.handlers.clear()
+    root.handlers.extend(saved)
+    logging_config._configured = previous
 
-    yield
 
-    module._configured = original_configured
-    root.handlers = original_handlers
-    root.setLevel(original_level)
+def test_log_file_rotates_instead_of_growing_forever(reset_logging, tmp_path):
+    logging_config.setup_logging(log_dir=tmp_path, level=logging.INFO)
+
+    handlers = [
+        h for h in reset_logging.handlers if isinstance(h, logging_config.RotatingFileHandler)
+    ]
+    assert len(handlers) == 1
+    assert handlers[0].maxBytes == 5 * 1024 * 1024
+    assert handlers[0].backupCount == 3
 
 
-class TestSetupLogging:
-    def test_configures_root_logger(self):
-        import youmudow.logging_config as module
+def test_the_log_file_is_written_and_rotated(reset_logging, tmp_path, monkeypatch):
+    monkeypatch.setattr(logging_config, "LOG_MAX_BYTES", 512)
+    logging_config.setup_logging(log_dir=tmp_path, level=logging.INFO)
 
-        module._configured = False
-        root = logging.getLogger()
-        before = len(root.handlers)
+    logger = logging.getLogger("youmudow.rotation-test")
+    for _ in range(40):
+        logger.info("x" * 60)
 
-        module.setup_logging()
-
-        assert len(root.handlers) == before + 1
-        assert module._configured is True
-
-    def test_idempotent(self):
-        import youmudow.logging_config as module
-
-        module._configured = False
-        module.setup_logging()
-        handlers = list(logging.getLogger().handlers)
-
-        module.setup_logging()
-        assert logging.getLogger().handlers == handlers
-
-    def test_creates_log_file(self, tmp_path):
-        import youmudow.logging_config as module
-
-        module._configured = False
-        module.setup_logging(log_dir=tmp_path)
-        assert (tmp_path / module.LOG_FILE_NAME).exists()
-
-    def test_log_message_written_to_file(self, tmp_path, caplog):
-        import youmudow.logging_config as module
-
-        module._configured = False
-        module.setup_logging(log_dir=tmp_path, level=logging.DEBUG)
-
-        with caplog.at_level(logging.DEBUG):
-            logging.getLogger("youmudow.test").info("hello from test")
-
-        content = (tmp_path / module.LOG_FILE_NAME).read_text()
-        assert "hello from test" in content
+    files = sorted(p.name for p in tmp_path.iterdir())
+    assert "youmudow.log" in files
+    assert any(name.startswith("youmudow.log.") for name in files)

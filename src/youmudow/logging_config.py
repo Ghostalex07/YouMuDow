@@ -1,11 +1,14 @@
 """Centralized logging configuration for YouMuDow."""
 
 import logging
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 LOG_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 LOG_FILE_NAME = "youmudow.log"
+LOG_MAX_BYTES = 5 * 1024 * 1024
+LOG_BACKUP_COUNT = 3
 
 _configured = False
 
@@ -36,7 +39,12 @@ def setup_logging(
     if log_dir is not None:
         try:
             log_dir.mkdir(parents=True, exist_ok=True)
-            file_handler = logging.FileHandler(log_dir / LOG_FILE_NAME, encoding="utf-8")
+            file_handler = RotatingFileHandler(
+                log_dir / LOG_FILE_NAME,
+                maxBytes=LOG_MAX_BYTES,
+                backupCount=LOG_BACKUP_COUNT,
+                encoding="utf-8",
+            )
             file_handler.setFormatter(formatter)
             root.addHandler(file_handler)
         except OSError:
