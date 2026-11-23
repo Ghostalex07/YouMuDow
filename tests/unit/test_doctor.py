@@ -57,10 +57,8 @@ def test_database_check_counts_downloads(tmp_path):
     assert "0 downloads" in result.detail
 
 
-def test_report_says_when_everything_is_fine(tmp_path):
-    report = doctor.format_report(
-        doctor.run_checks(output=tmp_path / "out", db_path=tmp_path / "l.db")
-    )
+def test_report_says_when_everything_is_fine():
+    report = doctor.format_report([doctor.CheckResult("YouMuDow", True, "1.20.0")])
     assert report.startswith("ok   YouMuDow")
     assert report.endswith("All checks passed.")
 
