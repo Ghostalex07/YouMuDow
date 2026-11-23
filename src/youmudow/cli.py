@@ -8,12 +8,13 @@ import argparse
 import json
 import sys
 from collections.abc import Callable
+from datetime import datetime, timezone
 from pathlib import Path
 
 from youmudow import __version__
 from youmudow.app.config import AppConfig
 from youmudow.domain.enums import DownloadStatus
-from youmudow.domain.models import DownloadOptions, Video
+from youmudow.domain.models import DownloadOptions, HistoryEntry, Video
 from youmudow.domain.url_batch import parse_url_list
 from youmudow.domain.validators import (
     AUDIO_FORMATS,
@@ -23,6 +24,7 @@ from youmudow.domain.validators import (
     is_supported_url,
 )
 from youmudow.services.download_service import DownloadService
+from youmudow.services.library_store import LibraryStore
 from youmudow.services.search_service import SearchService
 
 _FORMATS = SUPPORTED_FORMATS
@@ -72,6 +74,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help=_FORMAT_HELP,
     )
     download.add_argument("--quality", choices=sorted(_QUALITIES), help=_QUALITY_HELP)
+    download.add_argument(
+        "--split-chapters",
+        action="store_true",
+        help="write one file per chapter (album videos split into tracks)",
+    )
     download.add_argument(
         "--output",
         type=Path,
@@ -202,6 +209,8 @@ def _resolve_options(args: argparse.Namespace, config: AppConfig) -> DownloadOpt
         options.use_cookies = True
         options.cookies_from_browser = args.browser
         options.cookies_file = None
+    if getattr(args, "split_chapters", False):
+        options.split_chapters = True
     return options
 
 
@@ -263,6 +272,7 @@ def _cmd_download_batch(args: argparse.Namespace, config: AppConfig) -> int:
             print(f"[{index}/{len(urls)}] {url}")
         try:
             service.download_now(video, output_dir)
+            _record_download(store, video)
             downloaded += 1
             results.append({"url": url, "status": "downloaded"})
         except Exception as exc:  # noqa: BLE001 - one bad URL must not stop the batch
@@ -291,6 +301,32 @@ def _cmd_download_batch(args: argparse.Namespace, config: AppConfig) -> int:
         if blocked_by_cookies:
             print(summary["hint"], file=sys.stderr)
     return 0 if failed == 0 else 1
+
+
+def _record_download(store: LibraryStore | None, video: Video) -> None:
+    """Keep CLI downloads in the shared library so later runs skip them."""
+    if store is None or video.status is not DownloadStatus.DONE:
+        return
+    path = Path(str(video.path)) if video.path else None
+    size = 0
+    if path is not None:
+        try:
+            size = path.stat().st_size
+        except OSError:
+            size = 0
+    store.add_history(
+        HistoryEntry(
+            title=video.title,
+            url=video.url,
+            uploader=video.uploader,
+            file_format=video.options.file_format if video.options else "mp3",
+            output_path=str(path) if path is not None else "",
+            downloaded_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            duration=video.duration or 0,
+            thumbnail=video.thumbnail or "",
+            file_size_bytes=size,
+        )
+    )
 
 
 def _cmd_download(args: argparse.Namespace, config: AppConfig) -> int:
@@ -333,6 +369,12 @@ def _cmd_download(args: argparse.Namespace, config: AppConfig) -> int:
 
     if result.status == DownloadStatus.DONE:
         destination = result.path or output_dir
+        store = _open_cli_store()
+        if store is not None:
+            try:
+                _record_download(store, result)
+            finally:
+                store.close()
         print(f"Downloaded: {result.title} -> {destination}")
         return 0
     print(f"Download failed: {result.error_message or 'unknown error'}", file=sys.stderr)
@@ -357,17 +399,24 @@ def _download_playlist(
     if len(videos) >= min(args.limit, 500):
         print(f"(limited to {min(args.limit, 500)}; use --limit to change)")
     failures = 0
-    for index, video in enumerate(videos, start=1):
-        print(f"[{index}/{len(videos)}] {video.title}")
-        video.options = options
-        try:
-            result = service.download_now(video, output_dir, progress_callback=on_progress)
-        except KeyboardInterrupt:
-            print()  # close the in-place progress line
-            print("Cancelled", file=sys.stderr)
-            return 130
-        if result.status != DownloadStatus.DONE:
-            failures += 1
+    store = _open_cli_store()
+    try:
+        for index, video in enumerate(videos, start=1):
+            print(f"[{index}/{len(videos)}] {video.title}")
+            video.options = options
+            try:
+                result = service.download_now(video, output_dir, progress_callback=on_progress)
+            except KeyboardInterrupt:
+                print()  # close the in-place progress line
+                print("Cancelled", file=sys.stderr)
+                return 130
+            if result.status != DownloadStatus.DONE:
+                failures += 1
+            else:
+                _record_download(store, result)
+    finally:
+        if store is not None:
+            store.close()
     return 0 if failures == 0 else 1
 
 

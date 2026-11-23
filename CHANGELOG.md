@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.22.1] - 2026-11-23
+
+### Fixed
+
+- Downloads made with `youmudow-cli` are now recorded in the shared library, so
+  a later `--from-file` run skips what was already downloaded instead of
+  fetching it again. Applies to single URLs, batches and playlists.
+
 ## [1.22.0] - 2026-11-23
 
 ### Added
