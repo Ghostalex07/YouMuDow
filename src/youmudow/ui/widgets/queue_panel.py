@@ -56,6 +56,7 @@ class QueuePanel(tk.Frame):
         setattr_any(self, "_bg_key", "surface")
         self._mw = main_window
         self._visible = False
+        self._last_rows: list[tuple[str, tuple[str, str, str]]] | None = None
         self._empty_state: EmptyState | None = None
         self._empty_shown = False
         self.grid(
@@ -220,11 +221,17 @@ class QueuePanel(tk.Frame):
                 used_iids.add(iid)
                 desired.append((iid, _queue_row(v)))
 
+        if desired == self._last_rows:
+            # A progress event for one row does not touch the other 199; without
+            # this guard every repaint rebuilt the whole tree in Tcl.
+            return
+
         desired_iids = set(used_iids)
         existing_iids = set(self._queue_tree.get_children(""))
 
         for iid in existing_iids - desired_iids:
             self._queue_tree.delete(iid)
+            existing_iids.discard(iid)
 
         for iid, values in desired:
             if iid in existing_iids:
@@ -235,8 +242,13 @@ class QueuePanel(tk.Frame):
                 self._queue_tree.insert("", "end", iid=iid, values=values)
                 existing_iids.add(iid)
 
-        for i, (iid, _) in enumerate(desired):
-            self._queue_tree.move(iid, "", i)
+        current_order = list(self._queue_tree.get_children(""))
+        desired_order = [iid for iid, _ in desired]
+        if current_order != desired_order:
+            for index, iid in enumerate(desired_order):
+                if index >= len(current_order) or current_order[index] != iid:
+                    self._queue_tree.move(iid, "", index)
+        self._last_rows = desired
 
         total = sum(len(bucket) for bucket in buckets)
         self._queue_count_label.configure(text=f"{total} items")
