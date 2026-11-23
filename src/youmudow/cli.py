@@ -84,6 +84,32 @@ def _build_parser() -> argparse.ArgumentParser:
         help="maximum playlist or channel entries (default: 50)",
     )
     download.add_argument(
+        "--cookies",
+        type=Path,
+        help="Netscape cookie file to use for this run",
+    )
+    download.add_argument(
+        "--browser",
+        help="read cookies from this browser instead of the configured one",
+    )
+    download.add_argument(
+        "--rate-limit",
+        dest="rate_limit",
+        help='download speed limit, e.g. "1M" or "500K"',
+    )
+    download.add_argument(
+        "--sleep",
+        dest="sleep_requests",
+        type=float,
+        default=None,
+        help="seconds to wait between yt-dlp requests (default: none)",
+    )
+    download.add_argument(
+        "--polite",
+        action="store_true",
+        help="slow down (1M limit and 2s between requests) to avoid YouTube throttling",
+    )
+    download.add_argument(
         "--skip-metadata",
         action="store_true",
         help="download without resolving the title via metadata",
@@ -149,12 +175,33 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+POLITE_RATE_LIMIT = "1M"
+POLITE_SLEEP_SECONDS = 2.0
+
+
 def _resolve_options(args: argparse.Namespace, config: AppConfig) -> DownloadOptions:
     options = config.to_download_options()
     if args.file_format:
         options.file_format = args.file_format
     if args.quality:
         options.quality = args.quality
+    if args.polite:
+        if not options.rate_limit:
+            options.rate_limit = POLITE_RATE_LIMIT
+        if options.sleep_requests <= 0:
+            options.sleep_requests = POLITE_SLEEP_SECONDS
+    if getattr(args, "rate_limit", None):
+        options.rate_limit = args.rate_limit
+    if getattr(args, "sleep_requests", None) is not None:
+        options.sleep_requests = max(0.0, args.sleep_requests)
+    if getattr(args, "cookies", None):
+        options.use_cookies = True
+        options.cookies_file = str(args.cookies)
+        options.cookies_from_browser = None
+    elif getattr(args, "browser", None):
+        options.use_cookies = True
+        options.cookies_from_browser = args.browser
+        options.cookies_file = None
     return options
 
 
@@ -168,6 +215,19 @@ def _open_cli_store():
     except Exception:  # noqa: BLE001 - the CLI must work without the database
         print("(continuing without the download history)", file=sys.stderr)
         return None
+
+
+_BOT_CHECK_MARKERS = (
+    "sign in to confirm",
+    "not a bot",
+    "confirm your age",
+    "cookies",
+)
+
+
+def _looks_like_a_bot_check(message: str) -> bool:
+    lowered = message.lower()
+    return any(marker in lowered for marker in _BOT_CHECK_MARKERS)
 
 
 def _cmd_download_batch(args: argparse.Namespace, config: AppConfig) -> int:
@@ -192,6 +252,7 @@ def _cmd_download_batch(args: argparse.Namespace, config: AppConfig) -> int:
 
     results: list[dict[str, str]] = []
     downloaded = skipped = failed = 0
+    blocked_by_cookies = False
     for index, url in enumerate(urls, start=1):
         if store is not None and store.has_url(url):
             skipped += 1
@@ -206,19 +267,29 @@ def _cmd_download_batch(args: argparse.Namespace, config: AppConfig) -> int:
             results.append({"url": url, "status": "downloaded"})
         except Exception as exc:  # noqa: BLE001 - one bad URL must not stop the batch
             failed += 1
-            results.append({"url": url, "status": "failed", "reason": str(exc)})
+            reason = str(exc)
+            if _looks_like_a_bot_check(reason):
+                blocked_by_cookies = True
+            results.append({"url": url, "status": "failed", "reason": reason})
 
-    summary = {
+    summary: dict[str, object] = {
         "requested": len(urls),
         "downloaded": downloaded,
         "skipped": skipped,
         "failed": failed,
         "results": results,
     }
+    if blocked_by_cookies:
+        summary["hint"] = (
+            "YouTube asked to sign in: pass --cookies cookies.txt (or set cookies "
+            "in the app) and try again"
+        )
     if args.as_json:
         print(json.dumps(summary))
     else:
         print(f"Downloaded {downloaded}, skipped {skipped}, failed {failed} of {len(urls)}")
+        if blocked_by_cookies:
+            print(summary["hint"], file=sys.stderr)
     return 0 if failed == 0 else 1
 
 

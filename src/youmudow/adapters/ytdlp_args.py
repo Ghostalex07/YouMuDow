@@ -227,6 +227,8 @@ def build_download_args(
 
     if opts.rate_limit:
         args.extend(["--limit-rate", opts.rate_limit])
+    if opts.sleep_requests and opts.sleep_requests > 0:
+        args.extend(["--sleep-requests", str(opts.sleep_requests)])
 
     if retries is not None:
         args.extend(["--retries", str(retries)])

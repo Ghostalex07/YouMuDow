@@ -22,6 +22,7 @@ class DownloadOptions:
     cookies_profile: str | None = None
     cookies_file: str | None = None
     rate_limit: str | None = None  # e.g., "1M", "500K"
+    sleep_requests: float = 0.0  # seconds between yt-dlp requests, 0 = off
     split_chapters: bool = False
 
 

@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.22.0] - 2026-11-23
+
+### Added
+
+- `youmudow-cli download --cookies`, `--browser`, `--rate-limit`, `--sleep`
+  and `--polite`, so batches can slow down or authenticate without editing the
+  app configuration
+- Batch JSON output adds a `hint` when YouTube rejects a request with the bot
+  check, pointing at the cookie options
+
 ## [1.21.0] - 2026-11-23
 
 ### Added
