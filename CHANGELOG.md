@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.19.0] - 2026-11-23
+
+### Changed
+
+- The History and Library tabs are built the first time you open them instead
+  of at startup. Measured on the dev machine: the two panels cost ~25 ms of the
+  ~300 ms window build, and many sessions never open either tab.
+
 ## [1.18.0] - 2026-11-23
 
 ### Changed

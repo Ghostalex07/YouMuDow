@@ -15,9 +15,10 @@ def test_library_tab_summarises_the_database(stack):
             file_size_bytes=2048,
         )
     )
-    stack.window._library_panel.refresh()
-    assert "1" in stack.window._library_panel._summary.cget("text")
-    assert "Chan" in stack.window._library_panel._body.get("1.0", "end")
+    panel = stack.window._ensure_library_panel()
+    panel.refresh()
+    assert "1" in panel._summary.cget("text")
+    assert "Chan" in panel._body.get("1.0", "end")
 
 
 def test_check_library_reports_missing_files(stack):
@@ -31,9 +32,10 @@ def test_check_library_reports_missing_files(stack):
             downloaded_at=datetime.now().astimezone().isoformat(),
         )
     )
-    stack.window._library_panel._check()
-    assert stack.window._library_panel._missing == ["Gone"]
-    assert "1" in stack.window._library_panel._summary.cget("text")
+    panel = stack.window._ensure_library_panel()
+    panel._check()
+    assert panel._missing == ["Gone"]
+    assert "1" in panel._summary.cget("text")
 
 
 def test_requeue_missing_queues_the_lost_entries(stack):
@@ -86,7 +88,7 @@ def test_scanning_the_folder_finds_and_imports_stray_files(stack):
     output = stack.downloads.get_output_path()
     output.mkdir(parents=True, exist_ok=True)
     (output / "Stray Song.mp3").write_bytes(b"12345")
-    panel = stack.window._library_panel
+    panel = stack.window._ensure_library_panel()
 
     panel._scan()
     assert [item.path.name for item in panel._scanned] == ["Stray Song.mp3"]
