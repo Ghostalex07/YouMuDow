@@ -104,7 +104,10 @@ Advanced options: cookies, rate limiting, chapter splitting, and subtitles are a
 youmudow-cli download "https://www.youtube.com/watch?v=dQw4w9WgXcQ" --format mp3
 youmudow-cli download "bohemian rhapsody" --format mp3 --quality 320kbps
 youmudow-cli download "https://..." --output ~/Downloads --skip-metadata
-youmudow-cli search "lofi beats" --limit 10
+youmudow-cli search "lofi beats" --limit 10 --json
+youmudow-cli history --limit 20 --json
+youmudow-cli queue
+youmudow-cli queue --clear
 youmudow-cli doctor          # check ffmpeg, yt-dlp, folders and the database
 youmudow-cli download "https://www.youtube.com/playlist?list=..." --limit 25
 youmudow-cli download --from-file urls.txt --format mp3 --json
@@ -143,6 +146,15 @@ curl -s -H "Authorization: Bearer SECRET" -H "Content-Type: application/json" \
 | `POST /api/queue/pause` / `resume` | Pause or resume the queue |
 | `DELETE /api/queue/{id}` | Drop a queued entry |
 | `GET /api/health` | Version, queue size, active count |
+| `GET /api/events` | Server-sent events with live progress |
+
+Watch the queue live:
+
+```bash
+curl -N -H "Authorization: Bearer SECRET" http://127.0.0.1:8765/api/events
+# : ready
+# data: {"event": "QUEUED", "title": "...", "url": "...", "progress": 0.0}
+```
 
 It listens on `127.0.0.1` by default. Listening beyond localhost requires
 `--token`, otherwise it refuses to start. Ctrl-C cancels the download in
