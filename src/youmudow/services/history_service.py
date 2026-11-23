@@ -14,7 +14,7 @@ from youmudow.services.persistence import backup_corrupt, write_atomic
 logger = logging.getLogger(__name__)
 
 HISTORY_FILE: Path = config_dir() / "history.json"
-MAX_HISTORY = 500
+MAX_HISTORY = 2000
 
 
 class HistoryService:

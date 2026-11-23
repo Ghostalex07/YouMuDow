@@ -26,7 +26,7 @@ class LibraryStats(TypedDict):
     by_uploader: list[tuple[str, int, int]]
 
 
-MAX_HISTORY = 500
+MAX_HISTORY = 2000
 _RECENT_DUPLICATE_WINDOW = 50
 
 _SCHEMA = """

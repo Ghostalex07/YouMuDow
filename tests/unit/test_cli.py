@@ -530,3 +530,50 @@ def test_batch_flags_a_bot_check_failure(tmp_path, monkeypatch, capsys):
     assert code == 1
     assert payload["failed"] == 1
     assert "cookies" in payload["hint"].lower()
+
+
+def test_split_chapters_flag_reaches_the_options(monkeypatch, tmp_path):
+    from youmudow import cli
+
+    args = cli._build_parser().parse_args(["download", "https://x.test/a", "--split-chapters"])
+    options = cli._resolve_options(args, cli.AppConfig())
+    assert options.split_chapters is True
+
+
+class _FakeDoneService:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def set_log_callback(self, callback):
+        pass
+
+    def download_now(self, video, output_dir, progress_callback=None):
+        target = Path(output_dir) / "song.mp3"
+        target.write_bytes(b"audio")
+        video.path = target
+        video.status = DownloadStatus.DONE
+        return video
+
+
+def test_cli_downloads_are_recorded_in_the_history(tmp_path, monkeypatch):
+    from youmudow import cli
+    from youmudow.services.library_store import LibraryStore
+
+    database = tmp_path / "youmudow.db"
+    monkeypatch.setattr("youmudow.paths.database_file", lambda: database)
+    monkeypatch.setattr(cli, "DownloadService", _FakeDoneService)
+
+    listing = tmp_path / "urls.txt"
+    listing.write_text("https://x.test/a\n", encoding="utf-8")
+
+    code = cli.main(["download", "--from-file", str(listing), "--output", str(tmp_path)])
+    assert code == 0
+
+    store = LibraryStore(database)
+    try:
+        entries = store.history()
+    finally:
+        store.close()
+    assert [entry.url for entry in entries] == ["https://x.test/a"]
+    assert entries[0].file_size_bytes == 5
+    assert entries[0].output_path.endswith("song.mp3")
