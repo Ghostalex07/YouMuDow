@@ -63,7 +63,8 @@ class TestMainWindowBuild:
         assert window._results_cards is not None
         assert window._detail_panel is not None
         assert window._status_bar is not None
-        assert window._history_panel is not None
+        assert window._history_panel is None
+        assert window._ensure_history_panel() is not None
         window._root.update_idletasks()
 
     def test_controller_callbacks_registered(self, main_window):

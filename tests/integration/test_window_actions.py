@@ -25,7 +25,8 @@ def test_opening_a_result_in_the_browser_uses_the_default_browser(stack, monkeyp
 
 def test_staying_on_the_search_tab_does_not_refresh_history(stack, monkeypatch):
     refreshed = []
-    monkeypatch.setattr(stack.window._history_panel, "refresh", lambda: refreshed.append(True))
+    panel = stack.window._ensure_history_panel()
+    monkeypatch.setattr(panel, "refresh", lambda: refreshed.append(True))
     stack.window._notebook.select(0)
     stack.window._on_tab_changed()
     assert refreshed == []
@@ -33,7 +34,8 @@ def test_staying_on_the_search_tab_does_not_refresh_history(stack, monkeypatch):
 
 def test_switching_to_the_history_tab_refreshes_it(stack, monkeypatch):
     refreshed = []
-    monkeypatch.setattr(stack.window._history_panel, "refresh", lambda: refreshed.append(True))
+    panel = stack.window._ensure_history_panel()
+    monkeypatch.setattr(panel, "refresh", lambda: refreshed.append(True))
     stack.window._notebook.select(1)
     stack.window._on_tab_changed()
     assert refreshed
@@ -72,3 +74,25 @@ def test_download_now_stops_when_the_disk_is_full(stack, monkeypatch):
 
     assert "space" in stack.window._status_bar._status_var.get().lower()
     assert stack.controller.state.get_queue() == []
+
+
+def test_tabs_are_built_only_when_first_opened(stack):
+    window = stack.window
+    assert window._history_panel is None
+    assert window._library_panel is None
+
+    window._notebook.select(1)
+    window._on_tab_changed()
+    assert window._history_panel is not None
+    assert window._library_panel is None
+
+    window._notebook.select(2)
+    window._on_tab_changed()
+    assert window._library_panel is not None
+
+    first = window._library_panel
+    window._notebook.select(0)
+    window._on_tab_changed()
+    window._notebook.select(2)
+    window._on_tab_changed()
+    assert window._library_panel is first
