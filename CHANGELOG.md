@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.18.0] - 2026-11-23
+
+### Changed
+
+- The queue panel only touches the rows that changed instead of reordering the
+  whole tree on every progress event: 3.4 ms → 0.4 ms per repaint with 500
+  queued entries
+
 ## [1.17.0] - 2026-11-21
 
 ### Added
