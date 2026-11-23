@@ -123,6 +123,9 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     serve.set_defaults(func=_cmd_serve)
 
+    doctor = subparsers.add_parser("doctor", help="check the environment")
+    doctor.set_defaults(func=_cmd_doctor)
+
     return parser
 
 
@@ -299,6 +302,14 @@ def _cmd_serve(args: argparse.Namespace, config: AppConfig) -> int:
         output=args.output,
         config=config,
     )
+
+
+def _cmd_doctor(args: argparse.Namespace, config: AppConfig) -> int:
+    from youmudow.services.doctor import format_report, run_checks
+
+    results = run_checks(output=config.output_path)
+    print(format_report(results))
+    return 0 if all(result.ok for result in results) else 1
 
 
 def main(argv: list[str] | None = None) -> int:

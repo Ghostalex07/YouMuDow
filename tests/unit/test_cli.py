@@ -370,3 +370,25 @@ def test_download_from_file_without_json_prints_a_summary(tmp_path, monkeypatch,
     assert code == 0
     out = capsys.readouterr().out
     assert "Downloaded 1" in out
+
+
+def test_doctor_prints_the_report_and_exits_zero(monkeypatch, capsys):
+    from youmudow import cli
+    from youmudow.services import doctor
+
+    monkeypatch.setattr(
+        doctor, "run_checks", lambda output=None: [doctor.CheckResult("A", True, "fine")]
+    )
+    assert cli.main(["doctor"]) == 0
+    assert "ok   A: fine" in capsys.readouterr().out
+
+
+def test_doctor_exits_one_when_a_check_fails(monkeypatch, capsys):
+    from youmudow import cli
+    from youmudow.services import doctor
+
+    monkeypatch.setattr(
+        doctor, "run_checks", lambda output=None: [doctor.CheckResult("A", False, "broken")]
+    )
+    assert cli.main(["doctor"]) == 1
+    assert "FAIL A: broken" in capsys.readouterr().out

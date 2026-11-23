@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.20.0] - 2026-11-23
+
+### Added
+
+- `youmudow-cli doctor` checks Python, yt-dlp, ffmpeg, the output and config
+  folders and the library database, and prints a pass/fail report
+- The CI build starts the packaged binary under a virtual display for 25
+  seconds, so a broken PyInstaller bundle fails before a release
+
+### Changed
+
+- `youmudow.log` rotates at 5 MB with three backups instead of growing forever
+
 ## [1.19.0] - 2026-11-23
 
 ### Changed

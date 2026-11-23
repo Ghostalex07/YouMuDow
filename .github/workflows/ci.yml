@@ -118,6 +118,9 @@ jobs:
       - name: Build executable with PyInstaller
         run: python scripts/build.py
 
+      - name: Smoke-test the packaged binary
+        run: bash scripts/smoke_binary.sh dist/YouMuDow
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
