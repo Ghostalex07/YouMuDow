@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.24.1] - 2026-11-24
+
+### Changed
+
+- Failure classification now lives in the domain (`domain/errors.py`); the UI
+  only renders the summary, so the same rules serve the queue, the CLI and any
+  future consumer.
+
 ## [1.24.0] - 2026-11-24
 
 ### Changed
