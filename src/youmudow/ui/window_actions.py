@@ -7,7 +7,6 @@ stay readable. Every method mirrors a ``MainWindow`` handler of the same name.
 from __future__ import annotations
 
 import logging
-import threading
 from pathlib import Path
 from tkinter import filedialog
 from typing import TYPE_CHECKING
@@ -16,6 +15,7 @@ from youmudow.domain.playlist_export import playlist_to_m3u
 from youmudow.domain.url_batch import parse_url_list
 from youmudow.i18n import t
 from youmudow.services.folder_scan import ScannedFile
+from youmudow.ui.background import run_in_background
 
 if TYPE_CHECKING:
     from youmudow.ui.window import MainWindow
@@ -119,16 +119,16 @@ class WindowActions:
         destination = Path(path)
         window._set_status(t("Writing diagnostics..."))
 
-        def write() -> None:
+        def write() -> Path:
             # The report shells out to yt-dlp and ffmpeg: never on the Tk thread.
             from youmudow.services.diagnostics_service import export_diagnostics
 
-            try:
-                saved = export_diagnostics(destination, config=window._current_config())
-            except OSError as exc:
-                logger.exception("Could not export diagnostics")
-                window._schedule(window._set_status, f"Could not save diagnostics: {exc}")
-                return
-            window._schedule(window._set_status, t("Diagnostics saved to {path}", path=saved))
+            return export_diagnostics(destination, config=window._current_config())
 
-        threading.Thread(target=write, name="diagnostics-export", daemon=True).start()
+        def done(saved: Path) -> None:
+            window._set_status(t("Diagnostics saved to {path}", path=saved))
+
+        def failed(error: BaseException) -> None:
+            window._set_status(f"Could not save diagnostics: {error}")
+
+        run_in_background(window, write, done, on_error=failed, name="diagnostics-export")

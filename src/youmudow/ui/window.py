@@ -8,7 +8,6 @@ class composes them and wires the controller/state callbacks.
 
 import copy
 import logging
-import threading
 import tkinter as tk
 import webbrowser
 from collections.abc import Callable
@@ -32,6 +31,7 @@ from youmudow.services.thumbnail_cache import ThumbnailCache
 from youmudow.services.thumbnail_loader import ThumbnailLoader
 from youmudow.services.thumbnail_service import ThumbnailService
 from youmudow.ui.actions import choose_output_folder, export_logs, open_output_folder
+from youmudow.ui.background import run_in_background
 from youmudow.ui.dnd import create_root, register_drop_target
 from youmudow.ui.menubar import MenuCallbacks, create_menubar
 from youmudow.ui.protocols import (
@@ -339,12 +339,14 @@ class MainWindow(MainWindowProtocol):
         if self._config is None or not self._config.get("check_for_updates", True):
             return
 
-        def worker() -> None:
-            info = check_for_update(__version__)
-            if info is not None:
-                self._schedule(self._on_update_available, info)
+        def worker() -> Any:
+            return check_for_update(__version__)
 
-        threading.Thread(target=worker, name="update-check", daemon=True).start()
+        def done(info: Any) -> None:
+            if info is not None:
+                self._on_update_available(info)
+
+        run_in_background(self, worker, done, name="update-check")
 
     def _update_debug_visibility(self) -> None:
         paned_window = self._paned_window
@@ -775,15 +777,13 @@ class MainWindow(MainWindowProtocol):
         self._set_status("Loading more..." if start > 1 else "Fetching playlist...")
         self._update_button_states()
 
-        def do_fetch() -> None:
-            try:
-                videos = self._controller.search_playlist(url, limit=page_size, start=start)
-                self._schedule(self._on_playlist_page, start, videos)
-            except (tk.TclError, RuntimeError):
-                logger.debug("Window closed while fetching playlist for %s", url)
+        def do_fetch() -> list[Video]:
+            return self._controller.search_playlist(url, limit=page_size, start=start)
 
-        thread = threading.Thread(target=do_fetch, daemon=True)
-        thread.start()
+        def done(videos: list[Video]) -> None:
+            self._on_playlist_page(start, videos)
+
+        run_in_background(self, do_fetch, done, name="playlist-fetch")
 
     def _on_playlist_page(self, start: int, videos: list[Video]) -> None:
         if start <= 1:
