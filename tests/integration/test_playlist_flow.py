@@ -68,7 +68,7 @@ def test_exporting_a_playlist_writes_an_m3u(stack, tmp_path, monkeypatch):
 
     target = tmp_path / "list.m3u"
     monkeypatch.setattr(
-        "youmudow.ui.window.filedialog.asksaveasfilename", lambda **_kw: str(target)
+        "youmudow.ui.window_actions.filedialog.asksaveasfilename", lambda **_kw: str(target)
     )
     stack.window._export_playlist()
 
