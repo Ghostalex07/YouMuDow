@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.24.0] - 2026-11-24
+
+### Changed
+
+- The GUI, the CLI and the headless server now build their services through a
+  single composition root (`bootstrap.build_services`), so the wiring lives in
+  one place instead of three.
+
 ## [1.23.0] - 2026-11-24
 
 ### Added
