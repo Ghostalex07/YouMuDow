@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.23.0] - 2026-11-24
+
+### Added
+
+- The SQLite library now carries a schema version (`PRAGMA user_version`) and
+  runs numbered migrations inside a transaction, so a failed upgrade rolls back
+  instead of leaving a half-changed database
+- `PRAGMA quick_check` on startup: a corrupt database is reported and the app
+  falls back to the JSON history instead of crashing
+
 ## [1.22.1] - 2026-11-23
 
 ### Fixed

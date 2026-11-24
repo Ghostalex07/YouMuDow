@@ -8,7 +8,7 @@ from youmudow.app.config import CONFIG_DIR, AppConfig
 from youmudow.i18n import resolve_language, set_language
 from youmudow.logging_config import setup_logging
 from youmudow.paths import database_file, queue_file
-from youmudow.services.library_store import LibraryStore
+from youmudow.services.library_store import LibraryError, LibraryStore
 from youmudow.ui import MainWindow
 
 logger = logging.getLogger(__name__)
@@ -18,7 +18,7 @@ def _open_library_store() -> LibraryStore | None:
     """Open the SQLite library, falling back to JSON history if it cannot."""
     try:
         store = LibraryStore(database_file())
-    except (OSError, sqlite3.Error) as exc:
+    except (OSError, sqlite3.Error, LibraryError) as exc:
         logger.warning("Could not open the library database, using JSON history: %s", exc)
         return None
     store.import_history_json(CONFIG_DIR / "history.json")

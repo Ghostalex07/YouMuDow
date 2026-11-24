@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 from youmudow.domain.models import HistoryEntry
 from youmudow.services.library_store import MAX_HISTORY, LibraryStore
 
@@ -154,3 +156,91 @@ def test_has_url_reports_recorded_downloads(tmp_path):
     store.add_history(_entry(url="https://x.test/a"))
     assert store.has_url("https://x.test/a") is True
     store.close()
+
+
+def test_fresh_database_is_stamped_with_the_current_schema_version(tmp_path):
+    from youmudow.services import library_store
+
+    store = library_store.LibraryStore(tmp_path / "lib.db")
+    try:
+        version = store._conn.execute("PRAGMA user_version").fetchone()[0]
+    finally:
+        store.close()
+    assert version == library_store.SCHEMA_VERSION
+
+
+def test_existing_rows_survive_the_migration_from_version_zero(tmp_path):
+    import sqlite3
+
+    path = tmp_path / "lib.db"
+    legacy = sqlite3.connect(path)
+    legacy.executescript(
+        "CREATE TABLE downloads (id INTEGER PRIMARY KEY AUTOINCREMENT, url TEXT NOT NULL,"
+        " title TEXT NOT NULL, uploader TEXT NOT NULL DEFAULT '',"
+        " file_format TEXT NOT NULL DEFAULT '', output_path TEXT NOT NULL DEFAULT '',"
+        " file_size_bytes INTEGER NOT NULL DEFAULT 0, duration INTEGER NOT NULL DEFAULT 0,"
+        " thumbnail TEXT NOT NULL DEFAULT '', downloaded_at TEXT NOT NULL);"
+    )
+    legacy.execute(
+        "INSERT INTO downloads (url, title, downloaded_at) VALUES (?, ?, ?)",
+        ("https://x.test/old", "Old", "2026-01-01T00:00:00+00:00"),
+    )
+    legacy.commit()
+    legacy.close()
+
+    from youmudow.services import library_store
+
+    store = library_store.LibraryStore(path)
+    try:
+        assert store.count_history() == 1
+        version = store._conn.execute("PRAGMA user_version").fetchone()[0]
+    finally:
+        store.close()
+    assert version == library_store.SCHEMA_VERSION
+
+
+def test_a_failing_migration_leaves_the_database_untouched(tmp_path, monkeypatch):
+    import sqlite3
+
+    from youmudow.domain.models import HistoryEntry
+    from youmudow.services import library_store
+
+    path = tmp_path / "lib.db"
+    store = library_store.LibraryStore(path)
+    store.add_history(
+        HistoryEntry(
+            title="Kept",
+            url="https://x.test/kept",
+            uploader="",
+            file_format="mp3",
+            output_path="",
+            downloaded_at="2026-01-01T00:00:00+00:00",
+        )
+    )
+    store.close()
+
+    def broken(_conn):
+        raise sqlite3.OperationalError("boom")
+
+    monkeypatch.setattr(library_store, "MIGRATIONS", [*library_store.MIGRATIONS, broken])
+    monkeypatch.setattr(library_store, "SCHEMA_VERSION", 2)
+
+    with pytest.raises(library_store.LibraryError):
+        library_store.LibraryStore(path)
+
+    reopened = sqlite3.connect(path)
+    try:
+        assert reopened.execute("PRAGMA user_version").fetchone()[0] == 1
+        assert reopened.execute("SELECT COUNT(*) FROM downloads").fetchone()[0] == 1
+    finally:
+        reopened.close()
+
+
+def test_a_corrupt_database_raises_library_error(tmp_path):
+    from youmudow.services import library_store
+
+    path = tmp_path / "lib.db"
+    path.write_bytes(b"this is not a database" * 100)
+
+    with pytest.raises(library_store.LibraryError):
+        library_store.LibraryStore(path)

@@ -13,7 +13,7 @@ from pathlib import Path
 
 from youmudow import __version__
 from youmudow.paths import config_dir, database_file
-from youmudow.services.library_store import LibraryStore
+from youmudow.services.library_store import LibraryError, LibraryStore
 from youmudow.services.updater_service import get_ytdlp_version
 
 MIN_PYTHON = (3, 10)
@@ -87,7 +87,7 @@ def check_database(path: Path) -> CheckResult:
         store = LibraryStore(path)
         count = store.count_history()
         store.close()
-    except (OSError, sqlite3.Error) as exc:
+    except (OSError, sqlite3.Error, LibraryError) as exc:
         return CheckResult("Library database", False, f"{path} ({exc})")
     return CheckResult("Library database", True, f"{path} ({count} downloads)")
 
