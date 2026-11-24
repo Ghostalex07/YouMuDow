@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.26.0] - 2026-11-24
+
+### Changed
+
+- The repetitive "run this in a thread, deliver the result on the Tk loop"
+  pattern now lives in `ui/background.py`. Diagnostics export, the update check
+  and playlist paging all go through it, so a worker can no longer touch Tk by
+  accident and a failure has one place to be handled.
+
 ## [1.25.0] - 2026-11-24
 
 ### Changed
