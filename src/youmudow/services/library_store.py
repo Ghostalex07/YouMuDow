@@ -9,6 +9,7 @@ import json
 import logging
 import sqlite3
 import threading
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import TypedDict
@@ -16,6 +17,10 @@ from typing import TypedDict
 from youmudow.domain.models import HistoryEntry
 
 logger = logging.getLogger(__name__)
+
+
+class LibraryError(RuntimeError):
+    """The database could not be opened, checked or migrated safely."""
 
 
 class LibraryStats(TypedDict):
@@ -62,6 +67,40 @@ CREATE TABLE IF NOT EXISTS subscriptions (
 );
 """
 
+SCHEMA_VERSION = 1
+
+
+def _migration_1(conn: sqlite3.Connection) -> None:
+    conn.executescript(_SCHEMA)
+
+
+# Index i migrates from version i to i + 1. Never edit a shipped migration:
+# append a new one instead, so databases already at that version keep working.
+MIGRATIONS: list[Callable[[sqlite3.Connection], None]] = [_migration_1]
+
+
+def _check_integrity(conn: sqlite3.Connection) -> None:
+    row = conn.execute("PRAGMA quick_check").fetchone()
+    if row is not None and row[0] != "ok":
+        raise LibraryError(f"database is corrupt: {row[0]}")
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Bring the schema up to date, one committed step at a time."""
+    current = conn.execute("PRAGMA user_version").fetchone()[0]
+    if current > SCHEMA_VERSION:
+        raise LibraryError(
+            f"database schema v{current} is newer than this version supports (v{SCHEMA_VERSION})"
+        )
+    for version in range(current, SCHEMA_VERSION):
+        try:
+            with conn:
+                MIGRATIONS[version](conn)
+                conn.execute(f"PRAGMA user_version = {version + 1}")
+        except sqlite3.Error as exc:
+            raise LibraryError(f"migration v{version} -> v{version + 1} failed: {exc}") from exc
+
+
 _COLUMNS = (
     "url, title, uploader, file_format, output_path, "
     "file_size_bytes, duration, thumbnail, downloaded_at"
@@ -75,12 +114,24 @@ class LibraryStore:
         self.path = path
         path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
-        self._conn = sqlite3.connect(str(path), check_same_thread=False)
-        self._conn.row_factory = sqlite3.Row
-        with self._lock:
-            self._conn.executescript(_SCHEMA)
-            self._conn.execute("PRAGMA journal_mode=WAL")
-            self._conn.commit()
+        try:
+            conn = sqlite3.connect(str(path), check_same_thread=False)
+        except sqlite3.Error as exc:
+            raise LibraryError(f"could not open the library: {exc}") from exc
+        self._conn = conn
+        conn.row_factory = sqlite3.Row
+        try:
+            with self._lock:
+                conn.execute("PRAGMA journal_mode=WAL")
+                _check_integrity(conn)
+                _migrate(conn)
+                conn.commit()
+        except sqlite3.Error as exc:
+            conn.close()
+            raise LibraryError(f"could not open the library: {exc}") from exc
+        except LibraryError:
+            conn.close()
+            raise
 
     def close(self) -> None:
         with self._lock:
