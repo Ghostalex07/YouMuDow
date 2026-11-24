@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.24.2] - 2026-11-24
+
+### Changed
+
+- `MainWindow` no longer carries library, import, tray and shutdown logic:
+  those live in `ui/window_actions.py` and `ui/window_lifecycle.py`, with the
+  window keeping one-line delegates so callers and tests are unchanged. No
+  behavior change.
+
 ## [1.24.1] - 2026-11-24
 
 ### Changed

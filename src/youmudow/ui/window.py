@@ -13,16 +13,14 @@ import tkinter as tk
 import webbrowser
 from collections.abc import Callable
 from pathlib import Path
-from tkinter import filedialog, ttk
+from tkinter import ttk
 from typing import TYPE_CHECKING, Any
 
 from youmudow import __version__
-from youmudow.app.config import AppConfig
 from youmudow.app.events import EventBus, EventType, get_event_bus
 from youmudow.app.state import AppMode, AppState, AppStateData
 from youmudow.domain.enums import DownloadStatus
 from youmudow.domain.models import Video
-from youmudow.domain.playlist_export import playlist_to_m3u
 from youmudow.domain.sizes import format_size
 from youmudow.domain.storage import free_bytes, has_room_for
 from youmudow.domain.validators import is_playlist_url, is_supported_url
@@ -67,7 +65,9 @@ from youmudow.ui.widgets.log_terminal import LogTerminal
 from youmudow.ui.widgets.results_cards import ResultsCards
 from youmudow.ui.widgets.search_bar import SearchBar
 from youmudow.ui.widgets.status_bar import StatusBar
-from youmudow.ui.window_settings import apply_settings, save_settings
+from youmudow.ui.window_actions import WindowActions
+from youmudow.ui.window_lifecycle import WindowLifecycle
+from youmudow.ui.window_settings import apply_settings
 
 if TYPE_CHECKING:
     from youmudow.app.controller import AppController
@@ -85,6 +85,8 @@ class MainWindow(MainWindowProtocol):
         restored_count: int = 0,
     ) -> None:
         self._config = config
+        self._actions = WindowActions(self)
+        self._lifecycle = WindowLifecycle(self)
         self._controller_impl: AppControllerProtocol = controller
         self._tk_root = create_root()
         self._tk_root.title(f"YouMuDow v{__version__}")
@@ -586,24 +588,7 @@ class MainWindow(MainWindowProtocol):
         self._update_button_states()
 
     def _export_playlist(self) -> None:
-        cards = self._results_cards
-        videos = list(cards.playlist_videos) if cards is not None else []
-        if not videos:
-            return
-        path = filedialog.asksaveasfilename(
-            title=t("Export list..."),
-            defaultextension=".m3u",
-            initialfile="playlist.m3u",
-            filetypes=[(t("M3U playlist"), "*.m3u"), ("*.*", "*.*")],
-        )
-        if not path:
-            return
-        try:
-            Path(path).write_text(playlist_to_m3u(videos), encoding="utf-8")
-        except OSError as exc:
-            self._set_status(t("Could not save the file: {error}", error=exc))
-            return
-        self._set_status(t("Playlist saved to {path}", path=path))
+        self._actions.export_playlist()
 
     def _paste_from_clipboard(self) -> None:
         try:
@@ -632,49 +617,22 @@ class MainWindow(MainWindowProtocol):
         self._on_search()
 
     def _on_scan_folder(self) -> list[ScannedFile]:
-        return self._controller.scan_library_folder()
+        return self._actions.scan_folder()
 
     def _on_import_files(self, files: list[ScannedFile]) -> int:
-        imported = self._controller.import_scanned_files(files)
-        self._set_status(t("Imported {count} files", count=imported))
-        return imported
+        return self._actions.import_files(files)
 
     def _on_check_library(self) -> list[str]:
-        missing = self._controller.missing_downloads()
-        self._set_status(t("Missing files: {count}", count=len(missing)))
-        return [entry.title for entry in missing]
+        return self._actions.check_library()
 
     def _on_requeue_missing(self) -> int:
-        added = self._controller.requeue_missing()
-        self._set_status(t("Queued {count} missing download(s)", count=added))
-        self._update_button_states()
-        return added
+        return self._actions.requeue_missing()
 
     def _import_urls_text(self, text: str) -> int:
-        from youmudow.domain.url_batch import parse_url_list
-
-        urls = parse_url_list(text)
-        added = self._controller.enqueue_urls(urls)
-        self._set_status(t("Added {count} link(s) to the queue", count=added))
-        self._update_button_states()
-        return added
+        return self._actions.import_urls_text(text)
 
     def _on_import_urls(self) -> None:
-        from tkinter import filedialog
-
-        path = filedialog.askopenfilename(
-            title=t("Import URLs"),
-            filetypes=[(t("Text files"), "*.txt *.csv"), (t("All files"), "*.*")],
-        )
-        if not path:
-            return
-        try:
-            with open(path, encoding="utf-8") as handle:
-                text = handle.read()
-        except OSError as exc:
-            self._set_status(t("Could not read the list: {message}", message=exc))
-            return
-        self._import_urls_text(text)
+        self._actions.import_urls()
 
     def _on_open_in_browser(self, url: str) -> None:
         webbrowser.open(url)
@@ -1038,92 +996,34 @@ class MainWindow(MainWindowProtocol):
         apply_settings(self._config, detail_panel.options, self._tk_root)
 
     def _on_export_diagnostics(self) -> None:
-        from tkinter import filedialog
-
-        from youmudow.services.diagnostics_service import export_diagnostics
-
-        path = filedialog.asksaveasfilename(
-            defaultextension=".txt",
-            initialfile="youmudow-diagnostics.txt",
-            filetypes=[("Text", "*.txt"), ("All files", "*.*")],
-        )
-        if not path:
-            return
-        destination = Path(path)
-        self._set_status(t("Writing diagnostics..."))
-
-        def write() -> None:
-            # The report shells out to yt-dlp and ffmpeg: never on the Tk thread.
-            try:
-                saved = export_diagnostics(destination, config=self._current_config())
-            except OSError as e:
-                logger.exception("Could not export diagnostics")
-                self._schedule(self._set_status, f"Could not save diagnostics: {e}")
-                return
-            self._schedule(self._set_status, t("Diagnostics saved to {path}", path=saved))
-
-        threading.Thread(target=write, name="diagnostics-export", daemon=True).start()
+        self._actions.export_diagnostics()
 
     def _on_close(self) -> None:
-        self._save_settings()
-        if self._should_use_tray():
-            self._tk_root.withdraw()
-            return
-        self._shutdown()
+        self._lifecycle.close()
 
     def _save_settings(self) -> None:
-        detail_panel = self._detail_panel_widget
-        if self._config and detail_panel is not None:
-            try:
-                output_path = self._controller.get_output_path()
-            except (tk.TclError, KeyError, TypeError, ValueError) as e:
-                logger.debug("Could not read output path: %s", e)
-                output_path = None
-            save_settings(self._config, detail_panel.options, self._tk_root, output_path)
+        self._lifecycle.save_settings()
 
     def _should_use_tray(self) -> bool:
-        """True when closing must only hide the window and keep the queue alive."""
-        if not self._config or not self._config.get("minimize_to_tray", False):
-            return False
-        if self._tray is None:
-            self._tray = TrayIcon(
-                on_show=self._show_from_tray,
-                on_quit=self._quit_from_tray,
-                on_start_queue=lambda: self._schedule(self._on_start_queue),
-            )
-        return self._tray.start()
+        return self._lifecycle.should_use_tray()
 
     def _shutdown(self) -> None:
-        self._save_settings()
-        self._controller.stop_downloads()
-        self.destroy()
+        self._lifecycle.shutdown()
 
     def _on_quit(self) -> None:
-        """File > Exit: always leaves the application, tray or not."""
-        self._shutdown()
+        self._lifecycle.quit()
 
     def _quit_from_tray(self) -> None:
-        self._schedule(self._shutdown)
+        self._lifecycle.quit_from_tray()
 
     def _show_from_tray(self) -> None:
-        self._schedule(self._tk_root.deiconify)
+        self._lifecycle.show_from_tray()
 
     def _on_toggle_tray(self) -> None:
-        if self._config is None:
-            return
-        enabled = bool(self._tray_var.get())
-        self._config.set("minimize_to_tray", enabled)
-        self._config.save()
-        if enabled:
-            # Show the icon now: waiting until the first close leaves the user
-            # with no clue the option did anything.
-            self._should_use_tray()
+        self._lifecycle.toggle_tray()
 
     def _current_config(self) -> dict[str, Any]:
-        config = self._config
-        if not isinstance(config, AppConfig):
-            return {}
-        return dict(config.snapshot())
+        return self._lifecycle.current_config()
 
     def run(self) -> None:
         self._tk_root.protocol("WM_DELETE_WINDOW", self._on_close)

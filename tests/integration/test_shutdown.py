@@ -37,10 +37,10 @@ class FakeTray:
 
 
 def test_close_with_tray_enabled_hides_the_window_and_keeps_downloading(stack, monkeypatch):
-    from youmudow.ui import window as window_module
+    from youmudow.ui import window_lifecycle as lifecycle_module
 
     FakeTray.instances.clear()
-    monkeypatch.setattr(window_module, "TrayIcon", FakeTray)
+    monkeypatch.setattr(lifecycle_module, "TrayIcon", FakeTray)
     stack.config.set("minimize_to_tray", True)
     stack.controller.enqueue(Video(title="Song", url="https://example.com/song"))
     stack.controller.start_downloads()
@@ -51,10 +51,10 @@ def test_close_with_tray_enabled_hides_the_window_and_keeps_downloading(stack, m
 
 
 def test_quit_from_tray_uses_the_real_shutdown_path(stack, monkeypatch):
-    from youmudow.ui import window as window_module
+    from youmudow.ui import window_lifecycle as lifecycle_module
 
     FakeTray.instances.clear()
-    monkeypatch.setattr(window_module, "TrayIcon", FakeTray)
+    monkeypatch.setattr(lifecycle_module, "TrayIcon", FakeTray)
     # Tray callbacks arrive on a worker thread; here we are already on the UI
     # thread, so run the marshalled call inline instead of waiting for a loop.
     monkeypatch.setattr(stack.window, "_schedule", lambda callback, *args: callback(*args))
@@ -73,6 +73,8 @@ def test_exit_menu_quits_even_when_the_tray_is_enabled(stack, monkeypatch):
 
 
 def test_shutdown_saves_the_settings_before_destroying(stack, monkeypatch):
+    from youmudow.ui import window_lifecycle as lifecycle_module
+
     order = []
     real_destroy = type(stack.window).destroy
 
@@ -80,14 +82,16 @@ def test_shutdown_saves_the_settings_before_destroying(stack, monkeypatch):
         order.append("destroy")
         real_destroy(self)
 
-    monkeypatch.setattr(type(stack.window), "_save_settings", lambda self: order.append("save"))
+    monkeypatch.setattr(
+        lifecycle_module.WindowLifecycle, "save_settings", lambda self: order.append("save")
+    )
     monkeypatch.setattr(type(stack.window), "destroy", destroy)
     stack.window._shutdown()
     assert order == ["save", "destroy"]
 
 
 def test_enabling_the_tray_option_starts_the_icon_immediately(stack, monkeypatch):
-    from youmudow.ui import window as window_module
+    from youmudow.ui import window_lifecycle as window_module
 
     started: list[str] = []
 
