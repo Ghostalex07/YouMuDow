@@ -216,14 +216,12 @@ def _resolve_options(args: argparse.Namespace, config: AppConfig) -> DownloadOpt
 
 def _open_cli_store():
     """Open the shared library database, or None when it is unavailable."""
-    try:
-        from youmudow.paths import database_file
-        from youmudow.services.library_store import LibraryStore
+    from youmudow.bootstrap import open_library_store
 
-        return LibraryStore(database_file())
-    except Exception:  # noqa: BLE001 - the CLI must work without the database
+    store = open_library_store(quiet=True)
+    if store is None:
         print("(continuing without the download history)", file=sys.stderr)
-        return None
+    return store
 
 
 _BOT_CHECK_MARKERS = (

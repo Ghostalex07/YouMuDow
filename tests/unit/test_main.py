@@ -15,11 +15,13 @@ class TestMain:
         config.output_path = tmp_path / "downloads"
         controller = Mock()
         window = Mock()
+        services = Mock()
+        services.controller = controller
 
         with (
             patch.object(main_module, "AppConfig", return_value=config),
             patch.object(main_module, "setup_logging") as setup_logging,
-            patch.object(main_module, "AppController", return_value=controller),
+            patch.object(main_module, "build_services", return_value=services),
             patch.object(main_module, "MainWindow", return_value=window) as window_cls,
         ):
             main_module.main()
@@ -43,7 +45,7 @@ class TestMain:
         with (
             patch.object(main_module, "AppConfig", return_value=config),
             patch.object(main_module, "setup_logging") as setup_logging,
-            patch.object(main_module, "AppController"),
+            patch.object(main_module, "build_services"),
             patch.object(main_module, "MainWindow"),
         ):
             main_module.main()
