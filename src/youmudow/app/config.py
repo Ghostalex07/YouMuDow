@@ -1,10 +1,10 @@
 import copy
 import json
 import logging
-import platform
 from pathlib import Path
 from typing import Any
 
+from youmudow.app.settings import DEFAULT_SETTINGS, coerce_setting, normalize_settings
 from youmudow.domain.models import DownloadOptions
 from youmudow.paths import config_dir
 from youmudow.services.persistence import backup_corrupt, write_atomic
@@ -16,36 +16,7 @@ CONFIG_DIR: Path = config_dir()
 CONFIG_FILE: Path = CONFIG_DIR / "config.json"
 
 
-DEFAULT_CONFIG: dict[str, Any] = {
-    "window_geometry": "",
-    "output_path": str(
-        Path.home() / "Music" / "YouMuDow"
-        if platform.system() != "Windows"
-        else Path.home() / "Desktop" / "YouMuDow"
-    ),
-    "format": "mp3",
-    "quality": "best",
-    "subtitles": False,
-    "subtitle_lang": "en",
-    "embed_subtitles": False,
-    "use_cookies": False,
-    "cookies_source": "browser",
-    "cookies_file": "",
-    "browser": "chrome",
-    "profile": "Default",
-    "rate_limit": "",
-    "split_chapters": False,
-    "debug_mode": False,
-    "options_panel_open": False,
-    "theme": "dark",
-    "minimize_to_tray": False,
-    "concurrent_downloads": 1,
-    "max_retries": 2,
-    "language": "auto",
-    "check_for_updates": True,
-    "playlist_limit": 50,
-    "search_history": [],
-}
+DEFAULT_CONFIG: dict[str, Any] = dict(DEFAULT_SETTINGS)
 
 
 class AppConfig:
@@ -60,7 +31,7 @@ class AppConfig:
                     stored = json.load(f)
                 if not isinstance(stored, dict):
                     raise ValueError(f"expected a JSON object, got {type(stored).__name__}")
-                self._data = {**copy.deepcopy(DEFAULT_CONFIG), **stored}
+                self._data = normalize_settings(stored)
         except ValueError as e:
             backup = backup_corrupt(CONFIG_FILE)
             logger.warning(
@@ -86,7 +57,7 @@ class AppConfig:
         return default if value is None else str(value)
 
     def set(self, key: str, value: Any) -> None:
-        self._data[key] = value
+        self._data[key] = coerce_setting(key, value)
 
     def snapshot(self) -> dict[str, Any]:
         """A copy of every stored setting, safe to hand to other services."""

@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.25.0] - 2026-11-24
+
+### Changed
+
+- Settings now go through a typed schema: every key has a declared default and
+  a coercer, so a hand-edited `config.json` with `"max_retries": "3"` or
+  `"subtitles": "yes"` loads as `3` and `True` instead of breaking at use time.
+  Unknown keys are preserved.
+
 ## [1.24.2] - 2026-11-24
 
 ### Changed
