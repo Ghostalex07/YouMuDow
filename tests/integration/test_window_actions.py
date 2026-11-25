@@ -96,3 +96,12 @@ def test_tabs_are_built_only_when_first_opened(stack):
     window._notebook.select(2)
     window._on_tab_changed()
     assert window._library_panel is first
+
+
+def test_state_snapshots_are_coalesced_before_rendering(stack, monkeypatch):
+    applied: list[int] = []
+    monkeypatch.setattr(stack.window, "_update_from_snapshot", lambda snapshot: applied.append(1))
+    for _ in range(6):
+        stack.controller.state.set_state(stack.controller.state.state)
+    pump(stack.window, lambda: bool(applied), timeout=2.0)
+    assert len(applied) < 6

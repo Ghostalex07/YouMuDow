@@ -120,10 +120,16 @@ class ResultsCards(tk.Frame):
         self.bind("<Up>", lambda _: self._on_up())
         self.bind("<Down>", lambda _: self._on_down())
         self.bind("<Return>", lambda _: self._on_enter())
+        self._canvas.bind("<FocusIn>", lambda _: self._set_focus_ring(True))
+        self._canvas.bind("<FocusOut>", lambda _: self._set_focus_ring(False))
 
     # ------------------------------------------------------------------
     # Public surface
     # ------------------------------------------------------------------
+
+    def _set_focus_ring(self, visible: bool) -> None:
+        """Draw a visible border while the results have keyboard focus."""
+        self._canvas.configure(highlightthickness=2 if visible else 0)
 
     def update_results(self, videos: list[Video]) -> None:
         self._source_videos = list(videos)

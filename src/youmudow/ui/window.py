@@ -412,6 +412,8 @@ class MainWindow(MainWindowProtocol):
             lambda _: self._log_terminal.clear() if self._log_terminal else None,
         )
         self._tk_root.bind("<Control-t>", lambda _: self._on_toggle_theme())
+        for digit in ("1", "2", "3"):
+            self._tk_root.bind(f"<Alt-Key-{digit}>", self._tab_shortcut(digit))
         self._tk_root.bind("<Control-Shift-s>", lambda _: self._on_start_queue())
 
     def _setup_controller_callbacks(self) -> None:
@@ -517,10 +519,28 @@ class MainWindow(MainWindowProtocol):
         self._update_button_states()
 
     def _setup_state_observer(self) -> None:
+        self._pending_snapshot: AppStateData | None = None
+        self._refresh_scheduled = False
+
         def on_state_change(snapshot: AppStateData) -> None:
-            self._schedule(self._update_from_snapshot, snapshot)
+            # Coalesce bursts: the service emits several events per download and
+            # applying every snapshot costs a full queue repaint each time.
+            self._pending_snapshot = snapshot
+            if self._refresh_scheduled:
+                return
+            self._refresh_scheduled = True
+            try:
+                self._tk_root.after(16, self._flush_state_refresh)
+            except (tk.TclError, RuntimeError):
+                self._refresh_scheduled = False
 
         self._controller.state.on_change(on_state_change)
+
+    def _flush_state_refresh(self) -> None:
+        snapshot, self._pending_snapshot = self._pending_snapshot, None
+        self._refresh_scheduled = False
+        if snapshot is not None:
+            self._update_from_snapshot(snapshot)
 
     def _update_from_snapshot(self, snapshot: AppStateData) -> None:
         try:
@@ -809,6 +829,24 @@ class MainWindow(MainWindowProtocol):
         self._is_downloading = False
         self._set_status(t("Downloads stopped"))
         self._update_button_states()
+
+    def _tab_shortcut(self, key: str):
+        def handler(_event: tk.Event) -> None:
+            self._select_tab(key)
+
+        return handler
+
+    def _select_tab(self, key: str) -> None:
+        from youmudow.ui.shortcuts import tab_index_for
+
+        index = tab_index_for(key)
+        if index is None:
+            return
+        notebook = self._notebook
+        if notebook is None:
+            return
+        notebook.select(index)
+        self._on_tab_changed()
 
     def _on_escape(self) -> None:
         if self._controller.shutdown_armed:
