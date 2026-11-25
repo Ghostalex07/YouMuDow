@@ -4,6 +4,7 @@ import io
 import os
 import signal
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -129,7 +130,11 @@ class TestBuildArgs:
             ),
         ],
     )
-    def test_cookies_from_browser(self, adapter, options, expected):
+    def test_cookies_from_browser(self, adapter, options, expected, monkeypatch):
+        monkeypatch.setattr(
+            "youmudow.adapters.ytdlp_args.check_browser_profile",
+            lambda browser: (True, ""),
+        )
         args = build_base_args(adapter.config, make_video(**options))
         assert "--cookies-from-browser" in args
         assert expected in args
@@ -1458,6 +1463,7 @@ class TestInactivityTimeout:
         assert fake.terminated
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX process groups only")
 class TestProcessGroupSignalling:
     """Cancel and timeout must reach the ffmpeg helpers, not just the yt-dlp child."""
 
@@ -1537,6 +1543,7 @@ class TestFormatsLookup:
         from youmudow.adapters import ytdlp_args
 
         monkeypatch.setattr(ytdlp_args, "_has_explicit_profile", lambda profile: False)
+        monkeypatch.setattr(ytdlp_args, "check_browser_profile", lambda browser: (True, ""))
         args = ytdlp_args.build_formats_args(
             YtdlpConfig(output_template="{title}"), "https://x.test/v"
         )
@@ -1579,6 +1586,7 @@ def test_build_formats_args_carries_the_video_cookie_flags(monkeypatch):
     from youmudow.domain.models import DownloadOptions, Video
 
     monkeypatch.setattr(ytdlp_args, "_has_explicit_profile", lambda profile: False)
+    monkeypatch.setattr(ytdlp_args, "check_browser_profile", lambda browser: (True, ""))
     video = Video(
         title="T",
         url="https://x.test/v",

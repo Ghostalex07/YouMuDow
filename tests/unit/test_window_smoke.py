@@ -96,7 +96,11 @@ class TestMainWindowBuild:
         search_bar.search_entry.open_history()
         assert search_bar.search_entry.history_is_open()
 
-        window._root.event_generate("<Control-n>")
+        window._root.deiconify()
+        window._root.update()
+        search_bar.search_entry.focus_force()
+        window._root.update()
+        window._root.event_generate("<Control-n>", when="now")
         window._root.update()
 
         assert not search_bar.search_entry.history_is_open()

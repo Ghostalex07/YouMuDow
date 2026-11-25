@@ -30,7 +30,11 @@ def test_failing_download_reports_error_without_hanging(stack, monkeypatch):
     stack.controller.enqueue(Video(title="Bad", url="https://example.com/bad"))
     stack.controller.start_downloads()
     pump(stack.window, lambda: _settled(stack), timeout=5.0)
-    pump(stack.window, lambda: bool(messages), timeout=2.0)
+    pump(
+        stack.window,
+        lambda: any("error" in str(message).lower() for message in messages),
+        timeout=2.0,
+    )
     assert stack.download_adapter.downloaded == []
     assert stack.controller.state.get_snapshot().active_downloads == []
     assert any("error" in str(message).lower() for message in messages)

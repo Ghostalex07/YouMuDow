@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.28.0] - 2026-11-25
+
+### Added
+
+- `Alt+1`, `Alt+2` and `Alt+3` switch between the Search, History and Library tabs
+- A visible focus ring around the results while they hold keyboard focus
+- A Spanish quick-start guide at `docs/README.es.md`
+- Unit tests now also run on macOS and Windows in CI
+
+### Changed
+
+- Secondary text now meets WCAG AA contrast on both themes (the dark palette
+  was at 2.7:1)
+- State snapshots are coalesced into one repaint per frame instead of one per
+  download event
+
 ## [1.27.0] - 2026-11-25
 
 ### Added
