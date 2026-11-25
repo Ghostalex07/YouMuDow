@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.27.0] - 2026-11-25
+
+### Added
+
+- Search inside the library by title, channel or file path from the Library tab
+- `Queue > Shut down when finished`: powers the machine off when the queue
+  drains, with a 60-second countdown cancelled by Escape. It refuses to shut
+  down when anything failed during the session
+- `Find duplicates` in the Library: groups files sharing size and duration,
+  keeps the newest copy and asks before deleting the rest
+- Portable mode: `YMD_PORTABLE=1` or a `youmudow.portable` file beside the
+  executable keeps config, database, cache and logs in a `data` folder there
+
 ## [1.26.0] - 2026-11-24
 
 ### Changed

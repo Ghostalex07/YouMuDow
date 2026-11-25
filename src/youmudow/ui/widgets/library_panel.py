@@ -21,6 +21,8 @@ class LibraryPanel(tk.Frame):
         on_open_folder: Callable[[], None],
         on_scan: Callable[[], list] | None = None,
         on_import: Callable[[list], int] | None = None,
+        on_search: Callable[[str], list] | None = None,
+        on_dedup: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(parent, bg=_c("bg"))
         self._stats_provider = stats_provider
@@ -30,6 +32,8 @@ class LibraryPanel(tk.Frame):
         self._on_scan = on_scan
         self._on_import = on_import
         self._scanned: list = []
+        self._on_search = on_search
+        self._on_dedup = on_dedup
         self._build(on_open_folder)
 
     def _build(self, on_open_folder: Callable[[], None]) -> None:
@@ -52,11 +56,17 @@ class LibraryPanel(tk.Frame):
         )
         self._summary.pack(side="left", padx=SPACING["md"])
 
+        self._search_var = tk.StringVar()
+        search = tk.Entry(header, textvariable=self._search_var, width=22)
+        search.pack(side="left", padx=SPACING["sm"])
+        search.bind("<Return>", lambda _event: self._search())
+
         buttons = tk.Frame(header, bg=_c("bg"))
         buttons.pack(side="right")
         for label, command in (
             (t("Refresh"), self.refresh),
             (t("Check library"), self._check),
+            (t("Find duplicates"), self._dedup),
             (t("Re-download missing"), self._requeue),
             (t("Open folder"), on_open_folder),
             (t("Scan folder"), self._scan),
@@ -91,6 +101,31 @@ class LibraryPanel(tk.Frame):
         )
         self._body.pack(fill="both", expand=True, padx=SPACING["md"], pady=(0, SPACING["md"]))
         self._body.configure(state="disabled")
+
+    def _search(self) -> None:
+        term = self._search_var.get().strip()
+        if not term or self._on_search is None:
+            self.refresh()
+            return
+        self._render_search(self._on_search(term), term)
+
+    def _render_search(self, entries: list, term: str) -> None:
+        lines = [
+            f"{entry.title}  ·  {entry.uploader or '-'}  ·  {entry.file_format}  ·  "
+            f"{format_size(entry.file_size_bytes)}"
+            for entry in entries[:200]
+        ]
+        self._summary.configure(
+            text=t("{count} match(es) for {term}", count=len(entries), term=term)
+        )
+        self._body.configure(state="normal")
+        self._body.delete("1.0", "end")
+        self._body.insert("1.0", "\n".join(lines) or t("Nothing downloaded yet."))
+        self._body.configure(state="disabled")
+
+    def _dedup(self) -> None:
+        if self._on_dedup is not None:
+            self._on_dedup()
 
     def _scan(self) -> None:
         self._scanned = list(self._on_scan()) if self._on_scan is not None else []

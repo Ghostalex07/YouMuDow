@@ -183,6 +183,23 @@ class LibraryStore:
             ).fetchall()
         return [self._row_to_entry(row) for row in rows]
 
+    def search_history(self, term: str, limit: int = 200) -> list[HistoryEntry]:
+        """Case-insensitive search over title, channel and file path."""
+        needle = f"%{term.strip().lower()}%"
+        with self._lock:
+            rows = self._conn.execute(
+                """
+                SELECT * FROM downloads
+                WHERE lower(title) LIKE ?
+                   OR lower(coalesce(uploader, '')) LIKE ?
+                   OR lower(coalesce(output_path, '')) LIKE ?
+                ORDER BY downloaded_at DESC
+                LIMIT ?
+                """,
+                (needle, needle, needle, limit),
+            ).fetchall()
+        return [self._row_to_entry(row) for row in rows]
+
     def count_history(self) -> int:
         with self._lock:
             row = self._conn.execute("SELECT COUNT(*) AS n FROM downloads").fetchone()

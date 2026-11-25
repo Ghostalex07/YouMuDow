@@ -244,3 +244,35 @@ def test_a_corrupt_database_raises_library_error(tmp_path):
 
     with pytest.raises(library_store.LibraryError):
         library_store.LibraryStore(path)
+
+
+def test_search_history_matches_title_channel_and_path(tmp_path):
+    from youmudow.domain.models import HistoryEntry
+
+    store = LibraryStore(tmp_path / "lib.db")
+    store.add_history(
+        HistoryEntry(
+            title="Lofi Rain",
+            url="https://x.test/1",
+            uploader="ChillHop",
+            file_format="mp3",
+            output_path="/music/lofi.mp3",
+            downloaded_at="2026-01-01T00:00:00+00:00",
+            file_size_bytes=1,
+        )
+    )
+    store.add_history(
+        HistoryEntry(
+            title="Other",
+            url="https://x.test/2",
+            uploader="Someone",
+            file_format="mp3",
+            output_path="/music/other.mp3",
+            downloaded_at="2026-01-02T00:00:00+00:00",
+            file_size_bytes=1,
+        )
+    )
+
+    assert [e.title for e in store.search_history("lofi")] == ["Lofi Rain"]
+    assert [e.title for e in store.search_history("CHILLHOP")] == ["Lofi Rain"]
+    assert [e.title for e in store.search_history("other.mp3")] == ["Other"]

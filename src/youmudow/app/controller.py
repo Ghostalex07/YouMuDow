@@ -88,6 +88,8 @@ class AppController:
         self._state_manager = state_manager or StateManager()
         self._history = history_service or HistoryService(store=library_store)
 
+        self._shutdown_armed = False
+        self._failures_at_arm = 0
         self._search_thread: threading.Thread | None = None
         self._url_search_thread: threading.Thread | None = None
         self._search_epoch = 0
@@ -404,6 +406,58 @@ class AppController:
     @property
     def downloads_paused(self) -> bool:
         return self._download_service.is_paused
+
+    def search_library(self, term: str) -> list[HistoryEntry]:
+        """Search the download history by title, channel or path."""
+        if self._library_store is None:
+            return []
+        entries: list[HistoryEntry] = self._library_store.search_history(term)
+        return entries
+
+    @property
+    def shutdown_armed(self) -> bool:
+        return self._shutdown_armed
+
+    def arm_shutdown(self) -> None:
+        """Ask the app to power the machine off once the queue drains."""
+        self._shutdown_armed = True
+        self._failures_at_arm = len(self._state_manager.get_failed_downloads())
+
+    def disarm_shutdown(self) -> None:
+        self._shutdown_armed = False
+
+    def should_auto_shutdown(self) -> bool:
+        """True when the queue finished cleanly since shutdown was armed."""
+        if not self._shutdown_armed:
+            return False
+        if self._download_service.queue_size or self._download_service.active_count:
+            return False
+        return len(self._state_manager.get_failed_downloads()) <= self._failures_at_arm
+
+    def find_duplicates(self):
+        """Return groups of downloads that share size and duration."""
+        from youmudow.domain.duplicates import find_duplicate_groups
+
+        if self._library_store is None:
+            return []
+        return find_duplicate_groups(self._library_store.history())
+
+    def delete_duplicates(self, groups) -> tuple[int, int]:
+        """Delete the extra copies of each group; returns (deleted, bytes)."""
+        deleted = 0
+        freed = 0
+        for group in groups:
+            for entry in group.extras:
+                try:
+                    Path(entry.output_path).unlink(missing_ok=True)
+                except OSError as exc:
+                    logger.warning("Could not delete %s: %s", entry.output_path, exc)
+                    continue
+                if self._library_store is not None:
+                    self._library_store.remove_history(entry)
+                deleted += 1
+                freed += entry.file_size_bytes
+        return deleted, freed
 
     def requeue_failed(self) -> int:
         """Send every failed download back to the queue, fresh and unmarked."""

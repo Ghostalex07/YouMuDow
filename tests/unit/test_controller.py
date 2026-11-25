@@ -662,3 +662,33 @@ def test_enqueue_new_without_a_library_queues_everything():
     controller = AppController(search_service=Mock())
     queued, skipped = controller.enqueue_new([Video(title="A", url="https://x.test/a")])
     assert (queued, skipped) == (1, 0)
+
+
+def test_auto_shutdown_needs_an_armed_flag_and_an_empty_queue():
+    downloads = Mock()
+    downloads.queue_size = 0
+    downloads.active_count = 0
+    state = Mock()
+    state.get_failed_downloads.return_value = []
+    controller = AppController(
+        search_service=Mock(), download_service=downloads, state_manager=state, config=None
+    )
+
+    assert controller.should_auto_shutdown() is False
+    controller.arm_shutdown()
+    assert controller.should_auto_shutdown() is True
+
+    downloads.queue_size = 1
+    assert controller.should_auto_shutdown() is False
+    downloads.queue_size = 0
+    state.get_failed_downloads.return_value = [Mock()]
+    assert controller.should_auto_shutdown() is False
+
+
+def test_disarming_cancels_the_pending_shutdown():
+    state = Mock()
+    state.get_failed_downloads.return_value = []
+    controller = AppController(search_service=Mock(), state_manager=state, config=None)
+    controller.arm_shutdown()
+    controller.disarm_shutdown()
+    assert controller.should_auto_shutdown() is False
