@@ -28,6 +28,7 @@ class MenuCallbacks:
     quit: Callable[[], None]
     start_queue: Callable[[], None]
     clear_queue: Callable[[], None]
+    toggle_shutdown: Callable[[], None]
     toggle_debug: Callable[[], None]
     open_guide: Callable[[], None]
     toggle_theme: Callable[[], None]
@@ -81,6 +82,7 @@ def build_menubar(
     menubar.add_cascade(label=t("Queue"), menu=queue_menu)
     queue_menu.add_command(label=t("Start Downloads"), command=callbacks.start_queue)
     queue_menu.add_command(label=t("Clear Queue"), command=callbacks.clear_queue)
+    queue_menu.add_command(label=t("Shut down when finished"), command=callbacks.toggle_shutdown)
 
     view_menu = _submenu(menubar)
     menubar.add_cascade(label=t("View"), menu=view_menu)

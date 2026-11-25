@@ -8,11 +8,12 @@ class composes them and wires the controller/state callbacks.
 
 import copy
 import logging
+import subprocess
 import tkinter as tk
 import webbrowser
 from collections.abc import Callable
 from pathlib import Path
-from tkinter import ttk
+from tkinter import messagebox, ttk
 from typing import TYPE_CHECKING, Any
 
 from youmudow import __version__
@@ -20,6 +21,7 @@ from youmudow.app.events import EventBus, EventType, get_event_bus
 from youmudow.app.state import AppMode, AppState, AppStateData
 from youmudow.domain.enums import DownloadStatus
 from youmudow.domain.models import Video
+from youmudow.domain.power import poweroff_command
 from youmudow.domain.sizes import format_size
 from youmudow.domain.storage import free_bytes, has_room_for
 from youmudow.domain.validators import is_playlist_url, is_supported_url
@@ -86,6 +88,7 @@ class MainWindow(MainWindowProtocol):
     ) -> None:
         self._config = config
         self._actions = WindowActions(self)
+        self._shutdown_after_id: str | None = None
         self._lifecycle = WindowLifecycle(self)
         self._controller_impl: AppControllerProtocol = controller
         self._tk_root = create_root()
@@ -303,6 +306,7 @@ class MainWindow(MainWindowProtocol):
             quit=self._on_quit,
             start_queue=self._on_start_queue,
             clear_queue=self._on_clear_queue,
+            toggle_shutdown=self._on_toggle_shutdown,
             toggle_debug=self._on_toggle_debug,
             open_guide=self._open_guide_tab,
             toggle_theme=self._on_toggle_theme,
@@ -401,7 +405,7 @@ class MainWindow(MainWindowProtocol):
         self._tk_root.bind(
             "<Control-n>", lambda _: search_bar.search_entry.clear() if search_bar else None
         )
-        self._tk_root.bind("<Escape>", lambda _: self._on_cancel_search())
+        self._tk_root.bind("<Escape>", lambda _event: self._on_escape())
         self._tk_root.bind("<Control-o>", lambda _: self._on_open_folder())
         self._tk_root.bind(
             "<Control-Shift-C>",
@@ -467,6 +471,42 @@ class MainWindow(MainWindowProtocol):
         detail_panel = self._detail_panel_widget
         if detail_panel is not None:
             detail_panel.set_estimate(size_bytes)
+
+    def _on_toggle_shutdown(self) -> None:
+        if self._controller.shutdown_armed:
+            self._cancel_shutdown(t("Auto-shutdown cancelled"))
+            return
+        self._controller.arm_shutdown()
+        self._set_status(t("The computer will shut down when the queue finishes"))
+
+    def _cancel_shutdown(self, message: str) -> None:
+        self._controller.disarm_shutdown()
+        pending = self._shutdown_after_id
+        if pending is not None:
+            try:
+                self._tk_root.after_cancel(pending)
+            except tk.TclError:
+                pass
+            self._shutdown_after_id = None
+        self._set_status(message)
+
+    def _check_auto_shutdown(self) -> None:
+        if not self._controller.should_auto_shutdown():
+            return
+        if self._shutdown_after_id is not None:
+            return
+        self._shutdown_after_id = self._tk_root.after(60_000, self._run_shutdown)
+        self._set_status(t("Shutting down in 60 seconds — press Escape to cancel"))
+
+    def _run_shutdown(self) -> None:
+        self._shutdown_after_id = None
+        try:
+            subprocess.Popen(poweroff_command())
+        except OSError as exc:
+            logger.warning("Could not power off: %s", exc)
+            self._set_status(t("Could not shut down the computer"))
+            return
+        self._on_quit()
 
     def _on_download_complete(self, video: Video) -> None:
         if video.status is DownloadStatus.ERROR:
@@ -627,6 +667,27 @@ class MainWindow(MainWindowProtocol):
     def _on_check_library(self) -> list[str]:
         return self._actions.check_library()
 
+    def _on_find_duplicates(self) -> None:
+        groups = self._controller.find_duplicates()
+        if not groups:
+            self._set_status(t("No duplicates found"))
+            return
+        total = sum(group.reclaim_bytes for group in groups)
+        extras = sum(len(group.extras) for group in groups)
+        if not messagebox.askyesno(
+            t("Find duplicates"),
+            t(
+                "Delete {count} duplicate file(s) to free {size}?",
+                count=extras,
+                size=format_size(total),
+            ),
+        ):
+            return
+        deleted, freed = self._controller.delete_duplicates(groups)
+        self._set_status(
+            t("Deleted {count} file(s), freed {size}", count=deleted, size=format_size(freed))
+        )
+
     def _on_requeue_missing(self) -> int:
         return self._actions.requeue_missing()
 
@@ -696,6 +757,8 @@ class MainWindow(MainWindowProtocol):
                 on_open_folder=self._on_open_folder,
                 on_scan=self._on_scan_folder,
                 on_import=self._on_import_files,
+                on_search=self._controller.search_library,
+                on_dedup=self._on_find_duplicates,
             )
             self._library_panel_impl.pack(fill="both", expand=True)
         return self._library_panel_impl
@@ -746,6 +809,12 @@ class MainWindow(MainWindowProtocol):
         self._is_downloading = False
         self._set_status(t("Downloads stopped"))
         self._update_button_states()
+
+    def _on_escape(self) -> None:
+        if self._controller.shutdown_armed:
+            self._cancel_shutdown(t("Auto-shutdown cancelled"))
+            return
+        self._on_cancel_search()
 
     def _on_cancel_search(self) -> None:
         self._controller.cancel_search()

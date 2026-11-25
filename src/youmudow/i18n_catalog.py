@@ -114,6 +114,22 @@ _ES: dict[str, str] = {
     "Close": "Cerrar",
     "User Guide": "Guía de uso",
     "Library": "Biblioteca",
+    "Find duplicates": "Buscar duplicados",
+    "No duplicates found": "No hay duplicados",
+    "Delete {count} duplicate file(s) to free {size}?": (
+        "¿Borrar {count} archivo(s) duplicado(s) para liberar {size}?"
+    ),
+    "Deleted {count} file(s), freed {size}": "Borrados {count} archivo(s), {size} liberados",
+    "Shut down when finished": "Apagar al terminar",
+    "The computer will shut down when the queue finishes": (
+        "El equipo se apagará cuando termine la cola"
+    ),
+    "Auto-shutdown cancelled": "Apagado cancelado",
+    "Shutting down in 60 seconds — press Escape to cancel": (
+        "Apagando en 60 segundos; pulsa Escape para cancelar"
+    ),
+    "Could not shut down the computer": "No se pudo apagar el equipo",
+    "{count} match(es) for {term}": "{count} coincidencia(s) para {term}",
     "Refresh": "Actualizar",
     "Check library": "Comprobar biblioteca",
     "Re-download missing": "Re-descargar faltantes",
