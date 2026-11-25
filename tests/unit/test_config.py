@@ -45,7 +45,7 @@ class TestAppConfig:
     def test_output_path_property(self):
         cfg = AppConfig()
         cfg.output_path = "/tmp/test"
-        assert str(cfg.output_path) == "/tmp/test"
+        assert Path(cfg.output_path) == Path("/tmp/test")
 
     def test_to_download_options(self):
         cfg = AppConfig()

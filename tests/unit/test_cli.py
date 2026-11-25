@@ -314,7 +314,7 @@ def test_serve_command_forwards_its_options(monkeypatch):
     assert cli.main(["serve", "--port", "9100", "--token", "tok", "--output", "/tmp/out"]) == 0
     assert seen["port"] == 9100
     assert seen["token"] == "tok"
-    assert str(seen["output"]) == "/tmp/out"
+    assert Path(seen["output"]) == Path("/tmp/out")
     assert args.func is cli._cmd_serve
 
 
@@ -478,7 +478,7 @@ def test_cookies_flag_switches_the_options_to_a_cookie_file(tmp_path):
         ["download", "https://x.test/a", "--cookies", "/tmp/c.txt"]
     )
     options = cli._resolve_options(args, AppConfig())
-    assert options.cookies_file == "/tmp/c.txt"
+    assert Path(options.cookies_file) == Path("/tmp/c.txt")
     assert options.use_cookies is True
 
 

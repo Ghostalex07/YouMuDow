@@ -51,12 +51,15 @@ def signal_process_group(process: subprocess.Popen, sig: int) -> None:
     signalling yt-dlp itself when the group cannot be targeted (the group
     may already be gone, or the platform has no process groups).
     """
-    try:
-        os.killpg(os.getpgid(process.pid), sig)
-        return
-    except (AttributeError, ProcessLookupError, PermissionError):
-        logger.debug("Process group unavailable, signalling yt-dlp directly")
-    if sig == signal.SIGKILL:
+    killpg = getattr(os, "killpg", None)
+    getpgid = getattr(os, "getpgid", None)
+    if killpg is not None and getpgid is not None:
+        try:
+            killpg(getpgid(process.pid), sig)
+            return
+        except (ProcessLookupError, PermissionError, OSError):
+            logger.debug("Process group unavailable, signalling yt-dlp directly")
+    if sig == getattr(signal, "SIGKILL", None):
         process.kill()
     else:
         process.terminate()
@@ -68,7 +71,7 @@ def terminate_process_group(process: subprocess.Popen) -> None:
     try:
         process.wait(timeout=2)
     except subprocess.TimeoutExpired:
-        signal_process_group(process, signal.SIGKILL)
+        signal_process_group(process, getattr(signal, "SIGKILL", signal.SIGTERM))
 
 
 def run_capture(args: list[str], timeout: int) -> subprocess.CompletedProcess[str]:
@@ -187,7 +190,7 @@ def run_process(
                     break
     except subprocess.TimeoutExpired:
         _emit(log, "[ERROR] Download timed out")
-        signal_process_group(process, signal.SIGKILL)
+        signal_process_group(process, getattr(signal, "SIGKILL", signal.SIGTERM))
         timeout_reached = True
     finally:
         if process.poll() is None:
